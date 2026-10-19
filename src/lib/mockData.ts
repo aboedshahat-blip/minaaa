@@ -8,7 +8,7 @@ export const initialSettings: SystemSettings = {
   default_trailer_axles: 30,
   default_trailer_weight: 11.5,
   supabase_url: 'https://jfhmarmaebrzdnsvkqzv.supabase.co',
-  supabase_anon_key: '',
+  supabase_anon_key: 'sb_publishable_8PP8MB6X56rGXiSzKFlP4g_n9MM-8gm',
   admin_pin: '1234',
 };
 
