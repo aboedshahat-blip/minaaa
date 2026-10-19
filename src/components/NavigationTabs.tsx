@@ -17,7 +17,8 @@ export type TabType =
   | 'accounts'
   | 'reports'
   | 'berths'
-  | 'settings';
+  | 'settings'
+  | 'admin_control';
 
 interface NavigationTabsProps {
   activeTab: TabType;
@@ -30,7 +31,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
   onSelectTab,
   movementCount,
 }) => {
-  const { canViewFinancials, canManageSettings, canManageBerths } = useAuth();
+  const { canViewFinancials, canEditCommissions, canManageBerths, isAdmin } = useAuth();
 
   const tabs: {
     id: TabType;
@@ -78,9 +79,15 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
     },
     {
       id: 'settings',
-      label: 'إعدادات المنظومة والربط',
+      label: 'إعدادات العمولات',
       icon: <Settings className="w-4 h-4" />,
-      visible: canManageSettings,
+      visible: canEditCommissions || isAdmin,
+    },
+    {
+      id: 'admin_control',
+      label: 'لوحة تحكم الأدمن والصلاحيات',
+      icon: <span className="text-rose-500 font-bold">🛡️</span>,
+      visible: true,
     },
   ];
 

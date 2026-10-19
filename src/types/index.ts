@@ -1,10 +1,29 @@
 export type UserRole = 'admin' | 'accountant' | 'data_entry';
 
-export interface UserProfile {
+export interface RolePermissions {
+  can_view_financials: boolean;       // رؤية فواتير الكاشير ومجاميع التكاليف
+  can_view_system_revenue: boolean;   // رؤية حساب أرباح وعمولات المنظومة
+  can_add_movements: boolean;         // تسجيل حركات جديدة
+  can_edit_movements: boolean;        // تعديل حركات سابقة
+  can_delete_movements: boolean;      // حذف حركات
+  can_upload_sheets: boolean;         // رفع وتصفية شيتات إكسيل
+  can_export_excel: boolean;          // تصدير كشوفات الإكسيل
+  can_manage_customers: boolean;      // إضافة وتعديل العملاء وعربياتهم
+  can_delete_customers: boolean;      // حذف العملاء
+  can_manage_payments: boolean;       // تسجيل سندات القبض والتحصيل
+  can_manage_berths: boolean;         // إضافة وتعديل أرصفة الميناء
+  can_edit_commissions: boolean;      // تعديل عمولات المنظومة ونافذ
+}
+
+export interface ManagedUser {
   id: string;
+  username: string;
   name: string;
-  email: string;
   role: UserRole;
+  pin_code: string; // رمز دخول الحساب
+  is_active: boolean;
+  permissions: RolePermissions;
+  created_at: string;
 }
 
 export interface CustomerTruck {
@@ -56,7 +75,7 @@ export interface Movement {
   container_desc: string; // وصف الحاوية
   container_path: string; // مسار الحاوية
 
-  // Financial fields (accessible only to Admin & Accountant)
+  // Financial fields
   cashier_invoice: number; // قيمة فاتورة كاشير
   system_commission: number; // عمولة المنظومة (default 200 or dynamic)
   nafez_commission: number; // عمولة نافذ (إن وجدت)
@@ -92,4 +111,5 @@ export interface SystemSettings {
   default_trailer_weight: number; // 11.5
   supabase_url: string;
   supabase_anon_key: string;
+  admin_pin: string; // رمز حماية لوحة تحكم الأدمن
 }

@@ -18,6 +18,14 @@ import {
   saveMovements,
   savePayments,
   saveSettings,
+  fetchAllFromSupabase,
+  syncMovementToSupabase,
+  syncCustomerToSupabase,
+  syncBerthToSupabase,
+  syncPaymentToSupabase,
+  deleteMovementFromSupabase,
+  deleteCustomerFromSupabase,
+  deleteBerthFromSupabase,
 } from './lib/storage';
 import { exportTemplateToExcel } from './lib/excelUtils';
 import { Navbar } from './components/Navbar';
@@ -29,6 +37,7 @@ import { AccountsPage } from './pages/AccountsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { BerthsPage } from './pages/BerthsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { AdminControlPage } from './pages/AdminControlPage';
 import { MovementModal } from './components/MovementModal';
 import { SheetUploadModal } from './components/SheetUploadModal';
 import { CustomerModal } from './components/CustomerModal';
@@ -36,7 +45,18 @@ import { BerthModal } from './components/BerthModal';
 import { PaymentModal } from './components/PaymentModal';
 
 const AppContent: React.FC = () => {
-  const { canViewFinancials } = useAuth();
+  const {
+    canViewFinancials,
+    canAddMovements,
+    canEditMovements,
+    canDeleteMovements,
+    canManageCustomers,
+    canDeleteCustomers,
+    canManageBerths,
+    canManagePayments,
+    canEditCommissions,
+    isAdmin,
+  } = useAuth();
 
   // State
   const [activeTab, setActiveTab] = useState<TabType>('movements');
@@ -45,6 +65,37 @@ const AppContent: React.FC = () => {
   const [berths, setBerths] = useState<Berth[]>(getStoredBerths);
   const [payments, setPayments] = useState<PaymentReceipt[]>(getStoredPayments);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
+
+  // Initial cloud fetch from Supabase on mount
+  const refreshDataFromCloud = async () => {
+    try {
+      const cloudData = await fetchAllFromSupabase();
+      if (cloudData) {
+        if (cloudData.movements && cloudData.movements.length > 0) {
+          setMovements(cloudData.movements);
+          saveMovements(cloudData.movements);
+        }
+        if (cloudData.customers && cloudData.customers.length > 0) {
+          setCustomers(cloudData.customers);
+          saveCustomers(cloudData.customers);
+        }
+        if (cloudData.berths && cloudData.berths.length > 0) {
+          setBerths(cloudData.berths);
+          saveBerths(cloudData.berths);
+        }
+        if (cloudData.payments && cloudData.payments.length > 0) {
+          setPayments(cloudData.payments);
+          savePayments(cloudData.payments);
+        }
+      }
+    } catch (e) {
+      console.warn('Cloud sync error:', e);
+    }
+  };
+
+  useEffect(() => {
+    refreshDataFromCloud();
+  }, []);
 
   // Modals state
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
@@ -61,7 +112,7 @@ const AppContent: React.FC = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentCustomerId, setPaymentCustomerId] = useState<string | undefined>(undefined);
 
-  // Auto-switch away from restricted tabs if role changes to data_entry
+  // Auto-switch away from restricted tabs
   useEffect(() => {
     if (!canViewFinancials && (activeTab === 'accounts' || activeTab === 'reports')) {
       setActiveTab('movements');
@@ -74,12 +125,22 @@ const AppContent: React.FC = () => {
   // Movement Handlers
   const handleSaveMovement = (movementData: Partial<Movement>) => {
     if (editingMovement) {
+      if (!canEditMovements) {
+        alert('ليس لديك صلاحية لتعديل الحركات المسجلة');
+        return;
+      }
+      const updatedMovement = { ...editingMovement, ...movementData } as Movement;
       const updated = movements.map((m) =>
-        m.id === editingMovement.id ? ({ ...m, ...movementData } as Movement) : m
+        m.id === editingMovement.id ? updatedMovement : m
       );
       setMovements(updated);
       saveMovements(updated);
+      syncMovementToSupabase(updatedMovement);
     } else {
+      if (!canAddMovements) {
+        alert('ليس لديك صلاحية لتسجيل حركات جديدة');
+        return;
+      }
       const newMovement: Movement = {
         ...movementData,
         id: `m-${Date.now()}`,
@@ -89,15 +150,21 @@ const AppContent: React.FC = () => {
       const updated = [newMovement, ...movements];
       setMovements(updated);
       saveMovements(updated);
+      syncMovementToSupabase(newMovement);
     }
     setEditingMovement(null);
   };
 
   const handleDeleteMovement = (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذه الحركة من السيستم؟')) {
+    if (!canDeleteMovements) {
+      alert('ليس لديك صلاحية لحذف الحركات');
+      return;
+    }
+    if (window.confirm('هل أنت متأكد من حذف هذه الحركة من السيستم وقاعدة البيانات؟')) {
       const updated = movements.filter((m) => m.id !== id);
       setMovements(updated);
       saveMovements(updated);
+      deleteMovementFromSupabase(id);
     }
   };
 
@@ -107,82 +174,114 @@ const AppContent: React.FC = () => {
     const newPaid = isNowPaid ? 0 : movement.total_amount;
     const newRemaining = isNowPaid ? movement.total_amount : 0;
 
+    const updatedMovement = {
+      ...movement,
+      payment_status: newStatus as any,
+      paid_amount: newPaid,
+      remaining_amount: newRemaining,
+    };
+
     const updated = movements.map((m) =>
-      m.id === movement.id
-        ? {
-            ...m,
-            payment_status: newStatus as any,
-            paid_amount: newPaid,
-            remaining_amount: newRemaining,
-          }
-        : m
+      m.id === movement.id ? updatedMovement : m
     );
     setMovements(updated);
     saveMovements(updated);
+    syncMovementToSupabase(updatedMovement);
   };
 
   const handleImportMovements = (importedMovements: Movement[]) => {
     const updated = [...importedMovements, ...movements];
     setMovements(updated);
     saveMovements(updated);
+    // Sync all to Supabase
+    importedMovements.forEach((m) => syncMovementToSupabase(m));
   };
 
   // Customer Handlers
   const handleSaveCustomer = (customerData: Customer) => {
+    if (!canManageCustomers) {
+      alert('ليس لديك صلاحية لإدارة وتكويد العملاء');
+      return;
+    }
     if (editingCustomer) {
       const updated = customers.map((c) =>
         c.id === editingCustomer.id ? customerData : c
       );
       setCustomers(updated);
       saveCustomers(updated);
+      syncCustomerToSupabase(customerData);
     } else {
       const updated = [customerData, ...customers];
       setCustomers(updated);
       saveCustomers(updated);
+      syncCustomerToSupabase(customerData);
     }
     setEditingCustomer(null);
   };
 
   const handleDeleteCustomer = (id: string) => {
+    if (!canDeleteCustomers) {
+      alert('ليس لديك صلاحية لحذف العملاء');
+      return;
+    }
     if (window.confirm('هل أنت متأكد من حذف هذا العميل من المنظومة؟')) {
       const updated = customers.filter((c) => c.id !== id);
       setCustomers(updated);
       saveCustomers(updated);
+      deleteCustomerFromSupabase(id);
     }
   };
 
   // Berth Handlers
   const handleSaveBerth = (berthData: Berth) => {
+    if (!canManageBerths) {
+      alert('ليس لديك صلاحية لإدارة أرصفة الميناء');
+      return;
+    }
     if (editingBerth) {
       const updated = berths.map((b) =>
         b.id === editingBerth.id ? berthData : b
       );
       setBerths(updated);
       saveBerths(updated);
+      syncBerthToSupabase(berthData);
     } else {
       const updated = [...berths, berthData];
       setBerths(updated);
       saveBerths(updated);
+      syncBerthToSupabase(berthData);
     }
     setEditingBerth(null);
   };
 
   const handleDeleteBerth = (id: string) => {
+    if (!canManageBerths) {
+      alert('ليس لديك صلاحية لحذف الأرصفة');
+      return;
+    }
     if (window.confirm('هل أنت متأكد من حذف هذا الرصيف؟')) {
       const updated = berths.filter((b) => b.id !== id);
       setBerths(updated);
       saveBerths(updated);
+      deleteBerthFromSupabase(id);
     }
   };
 
   // Payment Handlers
   const handleSavePayment = (payment: PaymentReceipt, updatedMovements: Movement[]) => {
+    if (!canManagePayments) {
+      alert('ليس لديك صلاحية لتسجيل سندات القبض');
+      return;
+    }
     const newPayments = [payment, ...payments];
     setPayments(newPayments);
     savePayments(newPayments);
+    syncPaymentToSupabase(payment);
 
     setMovements(updatedMovements);
     saveMovements(updatedMovements);
+    // sync updated movements to Supabase
+    updatedMovements.forEach((m) => syncMovementToSupabase(m));
   };
 
   // Settings Handlers
@@ -301,6 +400,18 @@ const AppContent: React.FC = () => {
           <SettingsPage
             settings={settings}
             onSaveSettings={handleSaveSettings}
+          />
+        )}
+
+        {activeTab === 'admin_control' && (
+          <AdminControlPage
+            settings={settings}
+            onSaveSettings={handleSaveSettings}
+            movementCount={movements.length}
+            customerCount={customers.length}
+            berthCount={berths.length}
+            paymentCount={payments.length}
+            onRefreshDataFromCloud={refreshDataFromCloud}
           />
         )}
       </main>

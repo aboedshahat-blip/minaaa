@@ -1,6 +1,5 @@
 import React from 'react';
-import { useAuth, USERS } from '../contexts/AuthContext';
-import { UserRole } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import { Anchor, ShieldCheck, UserCheck, FileSpreadsheet, Lock } from 'lucide-react';
 
 interface NavbarProps {
@@ -14,10 +13,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUpload,
   onExportTemplate,
 }) => {
-  const { currentUser, setRole, canViewFinancials } = useAuth();
+  const { currentUser, users, setCurrentUserId, canViewFinancials } = useAuth();
 
-  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setRole(e.target.value as UserRole);
+  const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setCurrentUserId(e.target.value);
   };
 
   return (
@@ -82,13 +81,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             <select
-              value={currentUser.role}
-              onChange={handleRoleChange}
+              value={currentUser.id}
+              onChange={handleUserChange}
               className="bg-slate-900 text-white text-xs font-semibold py-1 px-2 rounded border border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <option value="admin">1. أدمن (صلاحيات كاملة)</option>
-              <option value="accountant">2. حسابات (مالية ومستحقات)</option>
-              <option value="data_entry">3. مدخل بيانات (حجب الحسابات)</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role === 'admin' ? 'أدمن' : u.role === 'accountant' ? 'حسابات' : 'مدخل بيانات'})
+                </option>
+              ))}
             </select>
           </div>
         </div>
