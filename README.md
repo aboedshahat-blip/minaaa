@@ -1,32 +1,77 @@
-# React + TypeScript + Vite
+# منظومة إدارة النقل والميناء وحركات الشاحنات والحسابات 🚢🚛
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+نظام ويب متكامل مصمم خصيصاً لإدارة عمليات الموانئ، تسجيل حركات الشاحنات والمقطورات والحاويات، مطابقة الشيت الرسمي المعتمد، استيراد وتصفية الشيتات آلياً، حساب فواتير الكاشير والعمولات، وإدارة مديونيات العملاء مع نظام صلاحيات مستخدمين ثلاثي (أدمن - حسابات - مدخل بيانات).
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🌟 الميزات الرئيسية للنظام
 
-## React Compiler
+### 1. كشف الحركات والاسطمبة الرسمية المعتمدة
+- جدول مطابق بنسبة 100% لاسطمبة الشيت المطلوبة:
+  - `مسار الحاوية` | `وصف الحاوية` | `رقم الحاوية` | `رقم الاقرار` | `اسم السائق` | `محاور المقطورة (30)` | `وزن المقطورة من واقع الرخصة (11.5)` | `رقم المقطورة` | `محاور الشاحنة (20)` | `وزن الشاحنة من واقع الرخصة (7.5)` | `رقم الشاحنة` | `م`
+- تسجيل يدوي سريع أو استيراد جماعي.
+- تصدير فوري إلى ملف Excel بالاسطمبة الرسمية.
+- طباعة الكشف بجودة عالية A4.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 2. محرك رفع وتصفية الشيتات الذكي (Smart Sheet Filter)
+- إمكانية رفع أي شيت إكسيل أو CSV بأي ترتيب للأعمدة.
+- استخلاص الحقول وتصفيتها وملؤها آلياً في الاسطمبة الرسمية.
+- إمكانية ربط الصفوف المصفاة بعميل معين أو رصيف معين بضغطة زر.
+- معاينة حية وتعديل مباشر على الخلايا قبل التثبيت.
 
-## Expanding the Oxlint configuration
+### 3. تكويد العملاء وإدارة أسطول الشاحنات
+- تكويد فريد لكل عميل (`C-101`, `C-102`, ...).
+- ربط أكثر من شاحنة ومقطورة وسائق لكل عميل.
+- متابعة المديونية الإجمالية لكل عميل: `إجمالي المستحق` - `دفع كام` - `ناقص كام`.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+### 4. طريقة الحساب والعمولات المتغيرة
+- لكل سيارة/حركة: **فاتورة الكاشير + عمولة المنظومة (افتراضي 200 ج.م متغيرة) + عمولة نافذ (إن وجدت)**.
+- إمكانية تعديل وتحديد العمولات من لوحة الإعدادات أو لكل حركة منفصلة.
+- **حساب إضافة المنظومة مستقل**: إيرادات صاحب السيستم من العمولات معزولة بالكامل.
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+### 5. نظام تسوية المديونيات وسندات القبض
+- تسجيل سندات قبض مع إمكانية تحديد سيارات معينة لتسويتها وخصمها من الحساب فوراً.
+- تتبع دقيق للمبالغ المدفوعة والمتبقية وحالة السداد (خالص / جزئي / متبقي).
+
+### 6. إدارة أرصفة الميناء (Berths)
+- إمكانية إضافة وتعديل أرصفة الميناء وتوزيع الحركات والشغل عليها.
+
+### 7. نظام الصلاحيات الثلاثي (RBAC):
+1. **أدمن (Admin)**: صلاحيات كاملة لكل شيء (إعدادات العمولات، إدارة الأرصفة، الحسابات، التقارير).
+2. **حسابات (Accountant)**: فواتير الكاشير، كشوف حسابات العملاء، سندات القبض، والتقارير المالية.
+3. **مدخل بيانات (Data Entry)**: تسجيل الحركات ورفع الشيتات فقط، مع **حجب التكاليف، فواتير الكاشير، العمولات، ومجاميع الحسابات نهائياً**.
+
+---
+
+## 🗄️ ربط قاعدة بيانات Supabase (مشروعك: `jfhmarmaebrzdnsvkqzv`)
+
+1. افتح صفحة مشروعك على Supabase SQL Editor:
+   `https://supabase.com/dashboard/project/jfhmarmaebrzdnsvkqzv/sql`
+2. انسخ محتوى الملف `supabase/schema.sql` والصقه ثم اضغط **Run**.
+3. احصل على مفتاح الـ **Anon Public Key** من الرابط:
+   `https://supabase.com/dashboard/project/jfhmarmaebrzdnsvkqzv/settings/api`
+4. ادخل على صفحة "إعدادات المنظومة والربط" داخل البرنامج والصق المفتاح لاختبار الاتصال.
+
+---
+
+## 🚀 النشر على Vercel و GitHub
+
+1. اربط المستودع بحسابك على GitHub:
+   ```bash
+   git remote add origin https://github.com/<YOUR_USER>/<YOUR_REPO>.git
+   git branch -M main
+   git push -u origin main
+   ```
+2. ادخل على رابط Vercel:
+   `https://vercel.com/new?teamSlug=program24`
+3. اختر المستودع وسيقوم Vercel ببنائه ونشره مباشرة بدون أي إعدادات إضافية (مرفق ملف `vercel.json`).
+
+---
+
+## 💻 التشغيل المحلي (Local Development)
+
+```bash
+cd port-logistics-system
+npm run dev
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+ثم افتح المتصفح على: `http://localhost:5173`
