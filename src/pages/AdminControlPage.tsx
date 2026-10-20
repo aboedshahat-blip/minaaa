@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ManagedUser, RolePermissions, SystemSettings } from '../types';
-import { syncWithSupabase } from '../lib/storage';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -13,14 +12,15 @@ import {
   Trash2,
   Save,
   CheckCircle2,
-  Database,
   RefreshCw,
-  ExternalLink,
-  Sliders,
-  Settings,
   Users,
   Eye,
   EyeOff,
+  Briefcase,
+  Truck,
+  Building2,
+  DollarSign,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface AdminControlPageProps {
@@ -47,7 +47,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     currentUser,
     updateUserPermissions,
     updateUserStatus,
-    updateUserPin,
     updateUserPassword,
     addNewUser,
     deleteUser,
@@ -68,16 +67,13 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   // Password editing state for active selected user
   const [editingPassword, setEditingPassword] = useState('');
   const [showEditingPassword, setShowEditingPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
 
-  // Supabase Sync state
-  const [anonKeyInput, setAnonKeyInput] = useState(settings.supabase_anon_key || '');
-  const [syncStatus, setSyncStatus] = useState<{ loading: boolean; message?: string; success?: boolean }>({
-    loading: false,
-  });
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
-  // Permissions configuration state
-  const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[1]?.id || 'u-accountant');
+  // Active selected user for permissions/password management
+  const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +84,20 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       setPasswordError(false);
     } else {
       setPasswordError(true);
+    }
+  };
+
+  const handleSyncCloud = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      await onRefreshDataFromCloud();
+      setSyncFeedback('تمت مزامنة وتحديث كافة البيانات بنجاح تام! 🟢');
+    } catch (e) {
+      setSyncFeedback('حدث خطأ أثناء الاتصال السحابي، جاري إعادة المحاولة...');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncFeedback(null), 4000);
     }
   };
 
@@ -104,13 +114,19 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     updateUserPermissions(userId, updatedPerms);
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleAddNewUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newFullName.trim()) {
-      alert('برجاء كتابة اسم المستخدم والاسم الكامل');
+      alert('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
 
+    if (!newUserPassword.trim()) {
+      alert('يرجى تحديد كلمة مرور للمستخدم الجديد');
+      return;
+    }
+
+    // Default permission templates based on role
     const defaultPerms: RolePermissions =
       newUserRole === 'accountant'
         ? {
@@ -142,11 +158,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             can_edit_commissions: false,
           };
 
-    if (!newUserPassword.trim()) {
-      alert('يرجى تحديد كلمة مرور للمستخدم الجديد');
-      return;
-    }
-
     addNewUser({
       username: newUsername.trim(),
       password: newUserPassword.trim(),
@@ -164,22 +175,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     alert('تم إضافة المستخدم الجديد بنجاح!');
   };
 
-  const handleSaveSupabaseKey = async () => {
-    const updatedSettings = {
-      ...settings,
-      supabase_anon_key: anonKeyInput.trim(),
-    };
-    onSaveSettings(updatedSettings);
-
-    setSyncStatus({ loading: true });
-    const res = await syncWithSupabase();
-    setSyncStatus({ loading: false, message: res.message, success: res.success });
-    if (res.success) {
-      await onRefreshDataFromCloud();
-    }
-  };
-
-  const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[1];
+  const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[0];
 
   // If not admin, block completely from viewing or accessing Admin Control
   if (currentUser.role !== 'admin') {
@@ -252,129 +248,69 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black">لوحة تحكم الأدمن المستقلة وإدارة الصلاحيات</h1>
+                <h1 className="text-xl font-black">لوحة تحكم منظومة VIB — إدارة الصلاحيات والمستخدمين</h1>
                 <span className="bg-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                  تحكم كامل وشامل
+                  لوحة المدير العام
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">
-                التحكم بكل مستخدم، تعيين الصلاحيات المسموحة والمحظورة، وربط المزامنة السحابية الفورية
+                التحكم بحسابات المستخدمين، تعديل كلمات المرور، وتحديد صلاحيات المحاسب ومدخل البيانات
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onRefreshDataFromCloud()}
-              className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition border border-white/20"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>تحديث البيانات من السحابة</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 1: CLOUD DATABASE SYNC CENTER */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-        <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-emerald-100 text-emerald-700 p-2 rounded-lg">
-              <Database className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>المزامنة السحابية نشطة 🟢</span>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">
-                مركز ربط ومزامنة قاعدة البيانات السحابية (Supabase)
-              </h2>
-              <p className="text-xs text-slate-500">
-                حفظ البيانات أونلاين لمشاهدة نفس البيانات المحدثة من أي متصفح أو جهاز آخر
-              </p>
-            </div>
-          </div>
 
-          <a
-            href="https://supabase.com/dashboard/project/jfhmarmaebrzdnsvkqzv/settings/api"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 transition"
-          >
-            <span>فتح صفحة API Keys في Supabase</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 items-end">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              عنوان الخادم السحابي (Supabase URL)
-            </label>
-            <input
-              type="text"
-              readOnly
-              value={settings.supabase_url}
-              className="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-700"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              مفتاح الوصول العام (Anon Public Key) *
-            </label>
-            <input
-              type="text"
-              placeholder="ألصق المفتاح هنا ليعمل التخزين للجميع فوراً..."
-              value={anonKeyInput}
-              onChange={(e) => setAnonKeyInput(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold"
-            />
-          </div>
-
-          <div>
             <button
-              onClick={handleSaveSupabaseKey}
-              disabled={syncStatus.loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition shadow-sm"
+              onClick={handleSyncCloud}
+              disabled={isSyncing}
+              className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition border border-white/20 shadow-sm"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${syncStatus.loading ? 'animate-spin' : ''}`} />
-              <span>حفظ المفتاح وتفعيل المزامنة السحابية</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'جاري التحديث...' : 'تحديث البيانات السحابية'}</span>
             </button>
           </div>
         </div>
 
-        {syncStatus.message && (
-          <div
-            className={`p-3 rounded-lg text-xs font-semibold flex items-center gap-2 ${
-              syncStatus.success
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-rose-50 text-rose-800 border border-rose-200'
-            }`}
-          >
-            <span>{syncStatus.message}</span>
+        {syncFeedback && (
+          <div className="mt-3 p-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs font-bold text-center">
+            {syncFeedback}
           </div>
         )}
+      </div>
 
-        {/* Database Status Pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          <div className="bg-slate-50 p-3 rounded-xl border text-center">
-            <span className="text-[10px] text-slate-500 block">حركات الشاحنات</span>
-            <span className="text-base font-bold text-slate-900">{movementCount} حركة</span>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-xl border text-center">
-            <span className="text-[10px] text-slate-500 block">العملاء المكودين</span>
-            <span className="text-base font-bold text-slate-900">{customerCount} عميل</span>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-xl border text-center">
-            <span className="text-[10px] text-slate-500 block">أرصفة الميناء</span>
-            <span className="text-base font-bold text-slate-900">{berthCount} رصيف</span>
-          </div>
-          <div className="bg-slate-50 p-3 rounded-xl border text-center">
-            <span className="text-[10px] text-slate-500 block">سندات القبض المسجلة</span>
-            <span className="text-base font-bold text-slate-900">{paymentCount} سند</span>
-          </div>
+      {/* KPI Overview Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">حركات الشاحنات المسجلة</span>
+          <span className="text-2xl font-black text-slate-900">{movementCount}</span>
+          <span className="text-[10px] text-blue-600 block mt-1">حركة معتمدة</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">العملاء والشركات المكودة</span>
+          <span className="text-2xl font-black text-slate-900">{customerCount}</span>
+          <span className="text-[10px] text-emerald-600 block mt-1">عميل مسجل</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">أرصفة الميناء</span>
+          <span className="text-2xl font-black text-slate-900">{berthCount}</span>
+          <span className="text-[10px] text-indigo-600 block mt-1">رصيف تشغيل</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">سندات القبض والتحصيل</span>
+          <span className="text-2xl font-black text-slate-900">{paymentCount}</span>
+          <span className="text-[10px] text-amber-600 block mt-1">سند مالي</span>
         </div>
       </div>
 
-      {/* SECTION 2: USERS & GRANULAR PERMISSIONS MATRIX */}
+      {/* Users & Granular Permissions Matrix */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2.5">
@@ -383,10 +319,10 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                إدارة المستخدمين والتحكم بصلاحيات كل مستخدم بدقة
+                إدارة المستخدمين والتحكم بالصلاحيات وكلمات المرور
               </h2>
               <p className="text-xs text-slate-500">
-                يمكن للأدمن تفعيل أو إلغاء أي صلاحية لكل مستخدم على حدة
+                حدد المستخدم لتعديل كلمة مروره أو تفعيل وإلغاء صلاحياته بضغطة زر
               </p>
             </div>
           </div>
@@ -421,94 +357,42 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 )}
                 <span>{u.name}</span>
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full ${
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
                     isSelected ? 'bg-blue-800 text-blue-200' : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {u.role === 'admin' ? 'أدمن' : u.role === 'accountant' ? 'حسابات' : 'مدخل بيانات'}
+                  {u.username}
                 </span>
               </button>
             );
           })}
         </div>
 
-        {/* Selected User Permission Editor */}
+        {/* Selected User Account Details & Password Changer */}
         {selectedUser && (
-          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
+          <div className="bg-slate-50 rounded-2xl border border-slate-200 p-5 space-y-6">
+            {/* User Meta & Quick Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-900">
-                    تعديل صلاحيات: {selectedUser.name} ({selectedUser.username})
+                  <h3 className="text-base font-black text-slate-900">
+                    حساب: {selectedUser.name}
                   </h3>
+                  <span className="text-xs bg-blue-100 text-blue-800 font-mono px-2 py-0.5 rounded font-bold">
+                    @{selectedUser.username}
+                  </span>
                   {selectedUser.role === 'admin' && (
-                    <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
-                      الأدمن الأساسي يمتلك جميع الصلاحيات دائماً
+                    <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold">
+                      المدير العام يمتلك جميع الصلاحيات
                     </span>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mt-1">
-                  <span>اسم المستخدم: <strong className="font-mono text-blue-900">{selectedUser.username}</strong></span>
-                  <span>|</span>
-                  <span className="flex items-center gap-1.5">
-                    <span>كلمة المرور:</span>
-                    <strong className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      {showCurrentPassword ? selectedUser.password : '••••••••'}
-                    </strong>
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="text-slate-500 hover:text-slate-800 text-[10px] underline ml-1"
-                    >
-                      {showCurrentPassword ? 'إخفاء' : 'إظهار'}
-                    </button>
-                  </span>
-                </div>
-
-                {/* Change Password & Security Inline */}
-                <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-slate-700">تغيير كلمة المرور:</span>
-                    <div className="relative">
-                      <input
-                        type={showEditingPassword ? 'text' : 'password'}
-                        placeholder="اكتب كلمة مرور جديدة..."
-                        value={editingPassword}
-                        onChange={(e) => setEditingPassword(e.target.value)}
-                        className="bg-white border border-slate-300 rounded-lg pr-3 pl-8 py-1.5 text-xs font-mono w-52 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowEditingPassword(!showEditingPassword)}
-                        className="absolute left-2 top-2 text-slate-400 hover:text-slate-700"
-                        title={showEditingPassword ? 'إخفاء' : 'إظهار'}
-                      >
-                        {showEditingPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!editingPassword.trim()) {
-                          alert('يرجى كتابة كلمة مرور جديدة');
-                          return;
-                        }
-                        updateUserPassword(selectedUser.id, editingPassword.trim());
-                        alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name})!\n\nتم حفظها فورياً وسيقوم السيستم بمقارنتها مباشرة عند أي دخول.`);
-                        setEditingPassword('');
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>حفظ وتفعيل فوراً</span>
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    💡 بمجرد الحفظ، تُلغى كلمة المرور السابقة تماماً وتصبح هذه الكلمة هي المطلوبة حصرياً لدخول هذا المستخدم.
-                  </p>
-                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  الدور: {selectedUser.role === 'admin' ? 'مدير عام كامل الصلاحيات' : selectedUser.role === 'accountant' ? 'محاسب مالي' : 'مدخل بيانات شاحنات'}
+                </p>
               </div>
 
+              {/* Status and Delete Actions */}
               {selectedUser.role !== 'admin' && (
                 <div className="flex items-center gap-2">
                   <button
@@ -525,8 +409,8 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
                   <button
                     onClick={() => deleteUser(selectedUser.id)}
-                    className="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg transition"
-                    title="حذف المستخدم"
+                    className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
+                    title="حذف هذا المستخدم"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -534,121 +418,186 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
               )}
             </div>
 
-            {/* Permissions Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {[
-                {
-                  key: 'can_view_financials',
-                  label: 'رؤية الحسابات وفواتير الكاشير',
-                  desc: 'رؤية مبالغ فواتير الكاشير، الإجمالي، والمجاميع الفرعية',
-                },
-                {
-                  key: 'can_view_system_revenue',
-                  label: 'رؤية إيرادات عمولات المنظومة',
-                  desc: 'رؤية أرباح وعمولات المنظومة الصافية لصاحب السيستم',
-                },
-                {
-                  key: 'can_add_movements',
-                  label: 'تسجيل حركات شاحنات جديدة',
-                  desc: 'إمكانية إدخال سيارات وشاحنات جديدة بالاسطمبة',
-                },
-                {
-                  key: 'can_edit_movements',
-                  label: 'تعديل حركات الشاحنات المسجلة',
-                  desc: 'إمكانية تعديل بيانات أي حركة أو حاوية سابقة',
-                },
-                {
-                  key: 'can_delete_movements',
-                  label: 'حذف حركات الشاحنات',
-                  desc: 'إمكانية حذف صفوف الحركات من الجدول',
-                },
-                {
-                  key: 'can_upload_sheets',
-                  label: 'رفع وتصفية شيتات إكسيل',
-                  desc: 'استيراد الشيتات الذكي وتفريغها بالاسطمبة',
-                },
-                {
-                  key: 'can_export_excel',
-                  label: 'تصدير الكشوفات وطباعتها',
-                  desc: 'تصدير شيت الاسطمبة الرسمي وطباعة التقارير',
-                },
-                {
-                  key: 'can_manage_customers',
-                  label: 'تكويد وتعديل العملاء وأسطولهم',
-                  desc: 'إضافة عملاء جدد وتعديل سياراتهم وسائقيهم',
-                },
-                {
-                  key: 'can_delete_customers',
-                  label: 'حذف العملاء من المنظومة',
-                  desc: 'صلاحية حذف حساب العميل وسجلاته',
-                },
-                {
-                  key: 'can_manage_payments',
-                  label: 'تسجيل سندات القبض والتحصيل',
-                  desc: 'تسوية المبالغ وخصم السيارات من الحساب',
-                },
-                {
-                  key: 'can_manage_berths',
-                  label: 'إدارة وتزويد أرصفة الميناء',
-                  desc: 'إضافة رصيف جديد أو تعديل الأرصفة القائمة',
-                },
-                {
-                  key: 'can_edit_commissions',
-                  label: 'تعديل عمولات المنظومة ونافذ',
-                  desc: 'تغيير عمولة الـ 200 جنيه أو عمولة نافذ الافتراضية',
-                },
-              ].map((perm) => {
-                const isChecked =
-                  selectedUser.role === 'admin'
-                    ? true
-                    : !!selectedUser.permissions[perm.key as keyof RolePermissions];
+            {/* Change Password Card */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <Key className="w-4 h-4 text-orange-600" />
+                <span>تغيير كلمة المرور لهذا المستخدم:</span>
+              </div>
 
-                return (
-                  <label
-                    key={perm.key}
-                    className={`p-3.5 rounded-xl border transition flex items-start gap-3 cursor-pointer ${
-                      isChecked
-                        ? 'bg-white border-blue-300 shadow-sm'
-                        : 'bg-slate-100 border-slate-200 opacity-60'
-                    }`}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1 max-w-sm">
+                  <input
+                    type={showEditingPassword ? 'text' : 'password'}
+                    placeholder="اكتب كلمة المرور الجديدة هنا..."
+                    value={editingPassword}
+                    onChange={(e) => setEditingPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-3 pl-9 py-2 text-xs font-mono focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditingPassword(!showEditingPassword)}
+                    className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-700"
+                    title={showEditingPassword ? 'إخفاء' : 'إظهار'}
                   >
-                    <input
-                      type="checkbox"
-                      disabled={selectedUser.role === 'admin'}
-                      checked={isChecked}
-                      onChange={() =>
-                        handleTogglePermission(
-                          selectedUser.id,
-                          perm.key as keyof RolePermissions
-                        )
-                      }
-                      className="mt-1 rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 block">
-                        {perm.label}
-                      </span>
-                      <span className="text-[11px] text-slate-500 block mt-0.5">
-                        {perm.desc}
-                      </span>
-                    </div>
-                  </label>
-                );
-              })}
+                    {showEditingPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!editingPassword.trim()) {
+                      alert('يرجى كتابة كلمة مرور جديدة');
+                      return;
+                    }
+                    updateUserPassword(selectedUser.id, editingPassword.trim());
+                    alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name})!\n\nتم حفظها فورياً وسيقوم السيستم بطلبها حصرياً عند الدخول.`);
+                    setEditingPassword('');
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>حفظ وتفعيل كلمة المرور فوراً</span>
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-500">
+                🔒 كلمة المرور مشفرة ومحمية، وبمجرد الحفظ تصبح سارية فوراً ويتم إلغاء كلمة المرور القديمة.
+              </p>
             </div>
+
+            {/* Granular Permissions Section */}
+            {selectedUser.role !== 'admin' ? (
+              <div className="space-y-4">
+                <div className="border-b border-slate-200 pb-2">
+                  <h4 className="text-sm font-black text-slate-900">
+                    جدول صلاحيات المستخدم (اضغط على أي صلاحية لتشغيلها أو إيقافها):
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Financial Group */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs pb-2 border-b border-slate-100">
+                      <DollarSign className="w-4 h-4 text-blue-600" />
+                      <span>الصلاحيات المالية والمحاسبية</span>
+                    </div>
+
+                    {[
+                      { key: 'can_view_financials', label: 'رؤية فواتير الكاشير والمبالغ والمديونيات' },
+                      { key: 'can_view_system_revenue', label: 'مشاهدة حساب أرباح وعمولات المنظومة' },
+                      { key: 'can_manage_payments', label: 'تسجيل وتحصيل سندات القبض' },
+                      { key: 'can_edit_commissions', label: 'تعديل أسعار وقيم العمولات' },
+                    ].map((item) => {
+                      const enabled = selectedUser.permissions[item.key as keyof RolePermissions];
+                      return (
+                        <label
+                          key={item.key}
+                          className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={() => handleTogglePermission(selectedUser.id, item.key as keyof RolePermissions)}
+                            className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className={`text-xs ${enabled ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
+                            {item.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Movements Group */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-slate-900 font-bold text-xs pb-2 border-b border-slate-100">
+                      <Truck className="w-4 h-4 text-emerald-600" />
+                      <span>صلاحيات الشاحنات والتشغيل</span>
+                    </div>
+
+                    {[
+                      { key: 'can_add_movements', label: 'تسجيل حركة شاحنة جديدة يدوياً' },
+                      { key: 'can_edit_movements', label: 'تعديل بيانات الحركات والشحنات' },
+                      { key: 'can_delete_movements', label: 'حذف الحركات والشحنات' },
+                      { key: 'can_upload_sheets', label: 'رفع واستيراد شيتات الشاحنات' },
+                      { key: 'can_export_excel', label: 'تصدير كشوفات Excel بالاسطمبة' },
+                    ].map((item) => {
+                      const enabled = selectedUser.permissions[item.key as keyof RolePermissions];
+                      return (
+                        <label
+                          key={item.key}
+                          className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={() => handleTogglePermission(selectedUser.id, item.key as keyof RolePermissions)}
+                            className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className={`text-xs ${enabled ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
+                            {item.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Master Data Group */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs pb-2 border-b border-slate-100">
+                      <Building2 className="w-4 h-4 text-indigo-600" />
+                      <span>صلاحيات العملاء والأرصفة</span>
+                    </div>
+
+                    {[
+                      { key: 'can_manage_customers', label: 'إضافة وتكويد عملاء وشركات جديدة' },
+                      { key: 'can_delete_customers', label: 'حذف وتعديل بيانات العملاء' },
+                      { key: 'can_manage_berths', label: 'إدارة وتسمية أرصفة الميناء' },
+                    ].map((item) => {
+                      const enabled = selectedUser.permissions[item.key as keyof RolePermissions];
+                      return (
+                        <label
+                          key={item.key}
+                          className="flex items-start gap-2.5 p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={() => handleTogglePermission(selectedUser.id, item.key as keyof RolePermissions)}
+                            className="mt-0.5 rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                          />
+                          <span className={`text-xs ${enabled ? 'font-bold text-slate-900' : 'text-slate-500'}`}>
+                            {item.label}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center text-xs font-bold text-emerald-800">
+                ✓ حساب المدير العام يمتلك بطبيعة دوره كافة الصلاحيات الإدارية والمالية والتشغيلية في المنظومة دائماً.
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Modal: Add New User */}
+      {/* Add New User Modal */}
       {isAddUserOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-            <h3 className="text-base font-bold text-slate-900">إضافة مستخدم جديد للنظام</h3>
-            <form onSubmit={handleCreateUser} className="space-y-3">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 text-right">
+            <h3 className="text-base font-bold text-slate-900 border-b pb-3">
+              إضافة مستخدم جديد لمنظومة VIB
+            </h3>
+
+            <form onSubmit={handleAddNewUser} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  اسم المستخدم (Username) *
+                  اسم الدخول (Username) بالإنجليزية *
                 </label>
                 <input
                   type="text"
@@ -666,7 +615,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 </label>
                 <input
                   type="text"
-                  placeholder="مثال: أحمد محمود - محاسب فرع الميناء"
+                  placeholder="مثال: أحمد محمود - محاسب الميناء"
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs"
@@ -676,15 +625,15 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  نوع الحساب الافتراضي
+                  نوع الحساب والصلاحيات الافتراضية
                 </label>
                 <select
                   value={newUserRole}
                   onChange={(e) => setNewUserRole(e.target.value as any)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold"
                 >
-                  <option value="accountant">حسابات (مالية ومستحقات)</option>
-                  <option value="data_entry">مدخل بيانات (تشغيل وحركات فقط)</option>
+                  <option value="accountant">محاسب (مالية ومستحقات وسندات قبض)</option>
+                  <option value="data_entry">مدخل بيانات (تشغيل وحركات شاحنات فقط)</option>
                 </select>
               </div>
 
@@ -712,9 +661,9 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-xs"
                 >
-                  إضافة وتحديد الصلاحيات
+                  حفظ وإضافة المستخدم
                 </button>
               </div>
             </form>

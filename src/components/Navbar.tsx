@@ -29,9 +29,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-lg text-white">منظومة الميناء اللوجستية</span>
-              <span className="text-xs bg-blue-900/60 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full font-mono">
-                Port Operations
+              <span className="font-bold text-lg text-white">منظومة VIB اللوجستية</span>
+              <span className="text-xs bg-blue-900/60 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full font-mono font-bold">
+                VIB Operations
               </span>
             </div>
             <p className="text-xs text-slate-400">إدارة حركات الشاحنات والحاويات والحسابات</p>

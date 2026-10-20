@@ -54,14 +54,14 @@ export const LoginPage: React.FC = () => {
             <Anchor className="w-8 h-8" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            منظومة الميناء اللوجستية
+            منظومة VIB اللوجستية
           </h1>
           <p className="text-xs sm:text-sm text-slate-400">
             إدارة تسجيل حركات الشاحنات والحسابات والعمولات
           </p>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mt-1">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>متصل سحابياً بقاعدة بيانات Supabase</span>
+            <span>نظام سحابي آمن ومحمي ومحدث دائماً</span>
           </div>
         </div>
 
@@ -162,7 +162,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer info */}
         <div className="text-center text-xs text-slate-500">
-          منظومة إدارة الموانئ والشاحنات © {new Date().getFullYear()} - جميع الحقوق محفوظة
+          منظومة VIB لإدارة الموانئ والشاحنات © {new Date().getFullYear()} - جميع الحقوق محفوظة
         </div>
       </div>
     </div>

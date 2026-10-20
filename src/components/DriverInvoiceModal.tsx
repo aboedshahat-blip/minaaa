@@ -332,7 +332,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             </div>
 
             <div className="footer-note text-center text-[10px] text-slate-400 mt-6 pt-3 border-t border-slate-100">
-              منظومة الميناء اللوجستية لإدارة الشاحنات والحاويات • فاتورة رسمية صادرة بتاريخ {invoiceDate}
+              منظومة VIB اللوجستية لإدارة الشاحنات والحاويات • فاتورة رسمية صادرة بتاريخ {invoiceDate}
             </div>
           </div>
         </div>
