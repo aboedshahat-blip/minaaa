@@ -16,6 +16,7 @@ export const initialUsers: ManagedUser[] = [
   {
     id: 'u-admin',
     username: 'admin',
+    password: 'admin123',
     name: 'المدير العام (أدمن المنظومة)',
     role: 'admin',
     pin_code: '1234',
@@ -39,6 +40,7 @@ export const initialUsers: ManagedUser[] = [
   {
     id: 'u-accountant',
     username: 'accountant',
+    password: 'acc123',
     name: 'المحاسب المالي',
     role: 'accountant',
     pin_code: '2233',
@@ -62,6 +64,7 @@ export const initialUsers: ManagedUser[] = [
   {
     id: 'u-dataentry',
     username: 'dataentry',
+    password: 'entry123',
     name: 'مدخل بيانات الشاحنات',
     role: 'data_entry',
     pin_code: '1122',

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Anchor, ShieldCheck, UserCheck, FileSpreadsheet, Lock } from 'lucide-react';
+import { Anchor, ShieldCheck, UserCheck, FileSpreadsheet, Lock, LogOut } from 'lucide-react';
 
 interface NavbarProps {
   onOpenQuickAdd: () => void;
@@ -13,7 +13,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenUpload,
   onExportTemplate,
 }) => {
-  const { currentUser, users, setCurrentUserId, canViewFinancials } = useAuth();
+  const { currentUser, users, setCurrentUserId, canViewFinancials, logout } = useAuth();
 
   const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setCurrentUserId(e.target.value);
@@ -38,7 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Quick action buttons */}
+        {/* Quick action buttons & User Profile */}
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenQuickAdd}
@@ -63,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>تصدير الاسطمبة</span>
           </button>
 
-          {/* User Role Switcher */}
+          {/* Current Logged in User & Switcher */}
           <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-lg p-1.5 pr-2">
             <div className="flex items-center gap-1.5">
               {currentUser.role === 'admin' && (
@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Lock className="w-4 h-4 text-rose-400" />
               )}
               <span className="text-xs text-slate-300 font-medium hidden md:inline">
-                المستخدم الحالي:
+                المستخدم:
               </span>
             </div>
 
@@ -91,6 +91,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </option>
               ))}
             </select>
+
+            {/* Logout Button */}
+            <button
+              onClick={logout}
+              title="تسجيل الخروج"
+              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-700/50 rounded transition flex items-center gap-1 text-xs"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[11px]">خروج</span>
+            </button>
           </div>
         </div>
       </div>

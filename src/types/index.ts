@@ -18,6 +18,7 @@ export interface RolePermissions {
 export interface ManagedUser {
   id: string;
   username: string;
+  password: string; // كلمة المرور
   name: string;
   role: UserRole;
   pin_code: string; // رمز دخول الحساب

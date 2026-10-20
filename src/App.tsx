@@ -38,6 +38,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { BerthsPage } from './pages/BerthsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminControlPage } from './pages/AdminControlPage';
+import { LoginPage } from './components/LoginPage';
 import { MovementModal } from './components/MovementModal';
 import { SheetUploadModal } from './components/SheetUploadModal';
 import { CustomerModal } from './components/CustomerModal';
@@ -46,6 +47,7 @@ import { PaymentModal } from './components/PaymentModal';
 
 const AppContent: React.FC = () => {
   const {
+    isAuthenticated,
     canViewFinancials,
     canAddMovements,
     canEditMovements,
@@ -289,6 +291,10 @@ const AppContent: React.FC = () => {
     setSettings(newSettings);
     saveSettings(newSettings);
   };
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
