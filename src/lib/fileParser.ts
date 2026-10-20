@@ -11,7 +11,6 @@ if (typeof window !== 'undefined') {
       import.meta.url
     ).toString();
   } catch (e) {
-    // Fallback CDN if worker bundling fails in certain environments
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
   }
 }
@@ -23,22 +22,208 @@ export interface ParsedDocumentResult {
   fileType: 'excel' | 'word' | 'pdf';
 }
 
+// Common Arabic names in logistics manifests
+const COMMON_ARABIC_NAMES = [
+  'احمد', 'أحمد', 'محمد', 'محمود', 'علي', 'حسن', 'حسين', 'سعيد',
+  'حمد', 'عبد', 'الحسيب', 'ابراهيم', 'إبراهيم', 'مصطفى', 'عمر',
+  'خالد', 'طارق', 'ياسر', 'شريف', 'رمضان', 'عادل', 'سامح', 'سيد',
+  'صلاح', 'عاطف', 'فتحي', 'مجدي', 'جمال', 'اشرف', 'أشرف', 'كمال'
+];
+
+// Header & noise keywords that indicate a table title / header row
+const HEADER_KEYWORDS = [
+  'مسار', 'الحاوية', 'الحاويه', 'المقطورة', 'المقطوره', 'الشاحنة', 'الشاحنه',
+  'السائق', 'الرخصة', 'الرخصه', 'واقع', 'محاور', 'وزن', 'رقم', 'وصف',
+  'إقرار', 'اقرار', 'كشف', 'بيان', 'جمارك', 'صفحة', 'مسلسل', 'ملاحظات'
+];
+
 /**
- * Intelligent field matcher for Arabic synonyms
+ * Checks if a row is a header row, table title, or page break divider
  */
-const findField = (row: Record<string, any>, keywords: string[]): any => {
-  const keys = Object.keys(row);
-  for (const key of keys) {
-    const cleanKey = key.trim().toLowerCase();
-    if (keywords.some((k) => cleanKey.includes(k.toLowerCase()))) {
-      return row[key];
-    }
-  }
-  return undefined;
+export const isHeaderOrTitleRow = (cells: string[]): boolean => {
+  const rowText = cells.join(' ');
+  let keywordHits = 0;
+  HEADER_KEYWORDS.forEach((kw) => {
+    if (rowText.includes(kw)) keywordHits++;
+  });
+
+  // If row contains 2 or more header keywords, it is definitely a header row
+  if (keywordHits >= 2) return true;
+
+  // Check if mostly noise or dashes
+  const validCells = cells.filter((c) => {
+    const s = c.trim();
+    return s.length > 0 && s !== '-' && s !== '—' && s !== '_' && s !== '.';
+  });
+  if (validCells.length < 2) return true;
+
+  return false;
 };
 
 /**
- * Converts a 2D array of string cells (from Word/PDF/CSV) into Movement objects
+ * Extracts ISO 6346 container number (e.g., CRXU9281484, TGBU4839349, GCXU5633149)
+ */
+export const extractContainerNumber = (text: string): string | null => {
+  const m = text.match(/\b([A-Z]{3,4}\s*[UJZ]?\s*\d{6,7})\b/i);
+  if (m) {
+    return m[1].replace(/\s+/g, '').toUpperCase();
+  }
+  return null;
+};
+
+/**
+ * Extracts Customs Declaration number (usually 5 to 7 digits, e.g. 510552, 527133, 52226)
+ */
+export const extractDeclarationNumber = (text: string): string | null => {
+  const m = text.match(/\b(5\d{5}|4\d{5}|6\d{5}|5\d{4}|52\d{3}|51\d{3}|50\d{3})\b/);
+  if (m) return m[1];
+
+  const generic = text.match(/\b(\d{5,7})\b/);
+  if (generic) return generic[1];
+
+  return null;
+};
+
+/**
+ * Extracts driver name (multi-word Arabic name)
+ */
+export const extractDriverName = (text: string): string | null => {
+  const s = text.trim();
+  if (/\d/.test(s) || /[a-zA-Z]/.test(s)) return null;
+  if (['وارد', 'صادر', 'ترانزيت', 'فارغ', 'مشحون', 'رصيف', 'بوابة'].includes(s)) return null;
+
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    const hasKnownName = words.some((w) =>
+      COMMON_ARABIC_NAMES.some((cn) => w.includes(cn))
+    );
+    if (hasKnownName || words.length >= 3) {
+      return words.join(' ');
+    }
+  }
+  return null;
+};
+
+/**
+ * Parses a collection of raw text tokens from a row into a Movement object
+ */
+export const extractMovementFromTokens = (
+  tokens: string[],
+  seq: number
+): Partial<Movement> => {
+  let container_no = '';
+  let declaration_no = '';
+  let driver_name = '';
+  let truck_no = '';
+  let trailer_no = '';
+  let container_path = 'وارد';
+  let container_desc = 'وارد';
+  let truck_weight = 7.5;
+  let truck_axles = 20;
+  let trailer_weight = 11.5;
+  let trailer_axles = 30;
+  let cashier_invoice = 0;
+
+  const plateLetters: string[] = [];
+  const plateNumbers: string[] = [];
+  const unclassifiedTokens: string[] = [];
+
+  tokens.forEach((tok) => {
+    const s = String(tok || '').trim();
+    if (!s || s === '-' || s === '—' || s === '.') return;
+
+    // 1. Container
+    const cCode = extractContainerNumber(s);
+    if (cCode && !container_no) {
+      container_no = cCode;
+      return;
+    }
+
+    // 2. Declaration
+    const dCode = extractDeclarationNumber(s);
+    if (dCode && !declaration_no) {
+      declaration_no = dCode;
+      return;
+    }
+
+    // 3. Driver
+    const dName = extractDriverName(s);
+    if (dName && !driver_name) {
+      driver_name = dName;
+      return;
+    }
+
+    // 4. Path / Desc
+    if (['وارد', 'صادر', 'ترانزيت'].includes(s)) {
+      container_path = s;
+      container_desc = s;
+      return;
+    }
+
+    // 5. Plate letters
+    if (
+      /^[أ-ي\s]{2,8}$/.test(s) &&
+      !['وارد', 'صادر', 'ترانزيت', 'الشاحنة', 'المقطورة', 'الرخصة', 'من', 'واقع', 'وزن'].includes(s)
+    ) {
+      plateLetters.push(s);
+      return;
+    }
+
+    // 6. Plate numbers
+    if (/^\d{3,4}$/.test(s)) {
+      plateNumbers.push(s);
+      return;
+    }
+
+    // 7. Weights and Axles
+    if (s === '7.5' || s === '7,5') truck_weight = 7.5;
+    else if (s === '11.5' || s === '11,5') trailer_weight = 11.5;
+    else if (s === '20') truck_axles = 20;
+    else if (s === '30') trailer_axles = 30;
+    else {
+      unclassifiedTokens.push(s);
+    }
+  });
+
+  if (plateNumbers.length > 0 && plateLetters.length > 0) {
+    truck_no = `${plateNumbers[0]} ${plateLetters[0]}`;
+    if (plateNumbers.length > 1) {
+      trailer_no = plateNumbers[1] + (plateLetters[1] ? ` ${plateLetters[1]}` : '');
+    }
+  } else if (plateNumbers.length > 0) {
+    truck_no = plateNumbers[0];
+    if (plateNumbers.length > 1) {
+      trailer_no = plateNumbers[1];
+    }
+  } else if (plateLetters.length > 0) {
+    truck_no = plateLetters[0];
+  }
+
+  if (!truck_no && unclassifiedTokens.length > 0) {
+    const candidate = unclassifiedTokens.find((t) => /\d/.test(t) && t.length >= 3);
+    if (candidate) truck_no = candidate;
+  }
+
+  return {
+    seq,
+    container_path,
+    container_desc,
+    container_no,
+    declaration_no,
+    driver_name,
+    trailer_axles,
+    trailer_weight,
+    trailer_no,
+    truck_axles,
+    truck_weight,
+    truck_no,
+    cashier_invoice,
+  };
+};
+
+/**
+ * Universal Intelligent Matrix to Movements Processor:
+ * Applies entity recognition, filters headers, and merges multi-line split rows!
  */
 export const matrixToMovements = (matrix: string[][]): {
   rows: Partial<Movement>[];
@@ -49,184 +234,78 @@ export const matrixToMovements = (matrix: string[][]): {
     return { rows: [], headers: [], rawRowCount: 0 };
   }
 
-  // Filter out rows that are entirely empty
-  const nonEmptyRows = matrix.filter((r) => r.some((c) => c && c.trim().length > 0));
-  if (nonEmptyRows.length === 0) {
+  // 1. Filter out all header, title, and page break rows
+  const cleanRows = matrix.filter((row) => !isHeaderOrTitleRow(row));
+
+  if (cleanRows.length === 0) {
     return { rows: [], headers: [], rawRowCount: 0 };
   }
 
-  // Check if first row contains column headers
-  const firstRow = nonEmptyRows[0];
-  const headerKeywords = ['شاحن', 'مقطور', 'حاوي', 'اقرار', 'سائق', 'كاشير', 'مسار', 'وزن', 'محاور', 'truck', 'driver', 'trailer'];
-  const isHeaderRow = firstRow.some((cell) =>
-    headerKeywords.some((kw) => cell.toLowerCase().includes(kw))
-  );
+  // 2. Parse each row individually with semantic entity recognition
+  const initialMovements = cleanRows.map((r, i) => extractMovementFromTokens(r, i + 1));
 
-  let headers: string[] = [];
-  let dataRows: string[][] = [];
+  // 3. Smart Multi-line Stitching:
+  const consolidatedMovements: Partial<Movement>[] = [];
 
-  if (isHeaderRow) {
-    headers = firstRow.map((c, i) => c.trim() || `عمود ${i + 1}`);
-    dataRows = nonEmptyRows.slice(1);
-  } else {
-    // Check if first row has 12 columns with standard template structure
-    headers = [
-      'مسار الحاوية',
-      'وصف الحاوية',
-      'رقم الحاوية',
-      'رقم الاقرار',
-      'اسم السائق',
-      'محاور المقطورة',
-      'وزن المقطورة',
-      'رقم المقطورة',
-      'محاور الشاحنة',
-      'وزن الشاحنة',
-      'رقم الشاحنة',
-      'م',
-    ];
-    dataRows = nonEmptyRows;
+  for (let i = 0; i < initialMovements.length; i++) {
+    const cur = initialMovements[i];
+    const nxt = initialMovements[i + 1];
+
+    const curNeedsTruck = !cur.truck_no || cur.truck_no.length < 2;
+    const nxtHasTruck = Boolean(nxt && nxt.truck_no && nxt.truck_no.length >= 2);
+    const nxtNeedsContainer = Boolean(nxt && !nxt.container_no);
+
+    if (nxt && curNeedsTruck && nxtHasTruck && nxtNeedsContainer) {
+      consolidatedMovements.push({
+        container_path: cur.container_path || nxt.container_path || 'وارد',
+        container_desc: cur.container_desc || nxt.container_desc || 'وارد',
+        container_no: cur.container_no || nxt.container_no || '',
+        declaration_no: cur.declaration_no || nxt.declaration_no || '',
+        driver_name: cur.driver_name || nxt.driver_name || '',
+        truck_no: nxt.truck_no || cur.truck_no || '',
+        trailer_no: cur.trailer_no || nxt.trailer_no || '',
+        truck_weight: cur.truck_weight || 7.5,
+        truck_axles: cur.truck_axles || 20,
+        trailer_weight: cur.trailer_weight || 11.5,
+        trailer_axles: cur.trailer_axles || 30,
+        cashier_invoice: cur.cashier_invoice || nxt.cashier_invoice || 0,
+      });
+      i++; // Skip merged next row
+    } else {
+      consolidatedMovements.push(cur);
+    }
   }
 
-  // Map data rows to Movement objects
-  const parsedMovements: Partial<Movement>[] = dataRows.map((rowArr, rowIndex) => {
-    // If we have recognized header mapping:
-    if (isHeaderRow) {
-      const rowObj: Record<string, any> = {};
-      headers.forEach((h, i) => {
-        rowObj[h] = rowArr[i] || '';
-      });
-
-      const truck_no = String(findField(rowObj, ['رقم الشاحنة', 'الشاحنة', 'السيارة', 'truck', 'car_no']) || '').trim();
-      const trailer_no = String(findField(rowObj, ['رقم المقطورة', 'المقطورة', 'trailer']) || '').trim();
-      const driver_name = String(findField(rowObj, ['اسم السائق', 'السائق', 'driver']) || '').trim();
-      const declaration_no = String(findField(rowObj, ['رقم الاقرار', 'الاقرار', 'declaration', 'dec']) || '').trim();
-      const container_no = String(findField(rowObj, ['رقم الحاوية', 'الحاوية', 'container']) || '').trim();
-      const container_desc = String(findField(rowObj, ['وصف الحاوية', 'الوصف', 'desc', 'description']) || '').trim();
-      const container_path = String(findField(rowObj, ['مسار الحاوية', 'مسار', 'path', 'gate', 'بوابة']) || '').trim();
-      const cashier_invoice = Number(findField(rowObj, ['فاتورة كاشير', 'كاشير', 'فاتورة', 'cashier', 'invoice']) || 0);
-
-      const truck_weight = Number(findField(rowObj, ['وزن الشاحنة', 'وزن السيارة']) || 7.5);
-      const truck_axles = Number(findField(rowObj, ['محاور الشاحنة', 'محاور السيارة']) || 20);
-      const trailer_weight = Number(findField(rowObj, ['وزن المقطورة']) || 11.5);
-      const trailer_axles = Number(findField(rowObj, ['محاور المقطورة']) || 30);
-      const seq = Number(findField(rowObj, ['م', 'مسلسل', 'seq', 'no', 'id']) || (rowIndex + 1));
-
-      return {
-        seq: isNaN(seq) ? rowIndex + 1 : seq,
-        truck_no,
-        truck_weight: isNaN(truck_weight) ? 7.5 : truck_weight,
-        truck_axles: isNaN(truck_axles) ? 20 : truck_axles,
-        trailer_no,
-        trailer_weight: isNaN(trailer_weight) ? 11.5 : trailer_weight,
-        trailer_axles: isNaN(trailer_axles) ? 30 : trailer_axles,
-        driver_name,
-        declaration_no,
-        container_no,
-        container_desc,
-        container_path,
-        cashier_invoice: isNaN(cashier_invoice) ? 0 : cashier_invoice,
-      };
-    }
-
-    // Positional mapping for 10-12 columns (Official Port Template)
-    // Check if col 11 is sequence (RTL: مسار الحاوية in 0, seq in 11)
-    // Or col 0 is sequence (LTR: seq in 0, truck in 1)
-    const isCol11Seq = !isNaN(Number(rowArr[11])) && Number(rowArr[11]) > 0;
-    const isCol0Seq = !isNaN(Number(rowArr[0])) && Number(rowArr[0]) > 0 && isNaN(Number(rowArr[11]));
-
-    if (isCol11Seq || rowArr.length >= 10) {
-      // RTL Standard Template:
-      // 0: مسار الحاوية, 1: وصف الحاوية, 2: رقم الحاوية, 3: رقم الاقرار, 4: اسم السائق,
-      // 5: محاور المقطورة, 6: وزن المقطورة, 7: رقم المقطورة, 8: محاور الشاحنة,
-      // 9: وزن الشاحنة, 10: رقم الشاحنة, 11: م
-      const container_path = (rowArr[0] || '').trim();
-      const container_desc = (rowArr[1] || '').trim();
-      const container_no = (rowArr[2] || '').trim();
-      const declaration_no = (rowArr[3] || '').trim();
-      const driver_name = (rowArr[4] || '').trim();
-      const trailer_axles = Number(rowArr[5]) || 30;
-      const trailer_weight = Number(rowArr[6]) || 11.5;
-      const trailer_no = (rowArr[7] || '').trim();
-      const truck_axles = Number(rowArr[8]) || 20;
-      const truck_weight = Number(rowArr[9]) || 7.5;
-      const truck_no = (rowArr[10] || '').trim();
-      const seq = Number(rowArr[11]) || (rowIndex + 1);
-
-      return {
-        seq,
-        truck_no,
-        truck_weight,
-        truck_axles,
-        trailer_no,
-        trailer_weight,
-        trailer_axles,
-        driver_name,
-        declaration_no,
-        container_no,
-        container_desc,
-        container_path,
-        cashier_invoice: 0,
-      };
-    } else if (isCol0Seq) {
-      // LTR Template:
-      // 0: م, 1: رقم الشاحنة, 2: وزن الشاحنة, 3: محاور الشاحنة, 4: رقم المقطورة,
-      // 5: وزن المقطورة, 6: محاور المقطورة, 7: اسم السائق, 8: رقم الاقرار,
-      // 9: رقم الحاوية, 10: وصف الحاوية, 11: مسار الحاوية
-      const seq = Number(rowArr[0]) || (rowIndex + 1);
-      const truck_no = (rowArr[1] || '').trim();
-      const truck_weight = Number(rowArr[2]) || 7.5;
-      const truck_axles = Number(rowArr[3]) || 20;
-      const trailer_no = (rowArr[4] || '').trim();
-      const trailer_weight = Number(rowArr[5]) || 11.5;
-      const trailer_axles = Number(rowArr[6]) || 30;
-      const driver_name = (rowArr[7] || '').trim();
-      const declaration_no = (rowArr[8] || '').trim();
-      const container_no = (rowArr[9] || '').trim();
-      const container_desc = (rowArr[10] || '').trim();
-      const container_path = (rowArr[11] || '').trim();
-
-      return {
-        seq,
-        truck_no,
-        truck_weight,
-        truck_axles,
-        trailer_no,
-        trailer_weight,
-        trailer_axles,
-        driver_name,
-        declaration_no,
-        container_no,
-        container_desc,
-        container_path,
-        cashier_invoice: 0,
-      };
-    }
-
-    // Generic fallback mapping
-    return {
-      seq: rowIndex + 1,
-      truck_no: rowArr[0] || '',
-      trailer_no: rowArr[1] || '',
-      driver_name: rowArr[2] || '',
-      container_no: rowArr[3] || '',
-      declaration_no: rowArr[4] || '',
-      truck_weight: 7.5,
-      truck_axles: 20,
-      trailer_weight: 11.5,
-      trailer_axles: 30,
-      cashier_invoice: 0,
-    };
-  });
-
-  // Filter out rows that are completely empty
-  const cleanedRows = parsedMovements.filter(
-    (r) => r.truck_no || r.container_no || r.driver_name || r.declaration_no || (r.seq && r.seq > 0)
+  // 4. Final filter: Keep rows that have at least a container, truck, driver, or declaration
+  const validMovements = consolidatedMovements.filter(
+    (m) => m.container_no || m.truck_no || m.driver_name || m.declaration_no
   );
 
+  // 5. Re-sequence consecutively (1, 2, 3...)
+  const finalMovements = validMovements.map((m, idx) => ({
+    ...m,
+    seq: idx + 1,
+  }));
+
+  const standardHeaders = [
+    'مسار الحاوية',
+    'وصف الحاوية',
+    'رقم الحاوية',
+    'رقم الاقرار',
+    'اسم السائق',
+    'محاور المقطورة',
+    'وزن المقطورة',
+    'رقم المقطورة',
+    'محاور الشاحنة',
+    'وزن الشاحنة',
+    'رقم الشاحنة',
+    'م',
+  ];
+
   return {
-    rows: cleanedRows.length > 0 ? cleanedRows : parsedMovements,
-    headers,
-    rawRowCount: dataRows.length,
+    rows: finalMovements,
+    headers: standardHeaders,
+    rawRowCount: matrix.length,
   };
 };
 
@@ -273,7 +352,6 @@ export const parseWordDocument = async (file: File): Promise<ParsedDocumentResul
     pElements.forEach((p) => {
       const text = (p.textContent || '').trim();
       if (text) {
-        // Check for tab or comma separated values
         const cells = text.includes('\t')
           ? text.split('\t').map((c) => c.trim())
           : text.includes(',')
@@ -316,18 +394,18 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     content.items.forEach((item: any) => {
       if ('str' in item && item.str.trim().length > 0) {
         allLines.push({
-          y: Math.round(item.transform[5]), // Vertical coordinate
-          x: Math.round(item.transform[4]), // Horizontal coordinate
+          y: Math.round(item.transform[5]),
+          x: Math.round(item.transform[4]),
           text: item.str.trim(),
         });
       }
     });
   }
 
-  // Group items by vertical proximity (lines with y within 5px)
+  // Group items by vertical proximity (lines with y within 6px)
   const groupedByY: { y: number; items: { x: number; text: string }[] }[] = [];
 
-  // Sort descending by Y (PDF coordinates usually have (0,0) at bottom-left)
+  // Sort descending by Y (top of page to bottom)
   allLines.sort((a, b) => b.y - a.y);
 
   allLines.forEach((item) => {
@@ -341,7 +419,6 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
 
   // Construct matrix from lines
   const matrix: string[][] = groupedByY.map((group) => {
-    // Sort items left-to-right (ascending x)
     group.items.sort((a, b) => a.x - b.x);
     return group.items.map((i) => i.text);
   });
@@ -364,7 +441,6 @@ export const parseExcelDocument = async (file: File): Promise<ParsedDocumentResu
   const firstSheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[firstSheetName];
 
-  // Convert sheet to 2D array of string cells to handle irregular or standard templates identically
   const matrix = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, defval: '' });
   const { rows, headers, rawRowCount } = matrixToMovements(matrix as string[][]);
 
@@ -390,7 +466,6 @@ export const parseAnyDocument = async (file: File): Promise<ParsedDocumentResult
   } else if (['pdf'].includes(ext)) {
     return parsePdfDocument(file);
   } else {
-    // Attempt Excel reader as fallback
     try {
       return await parseExcelDocument(file);
     } catch {
