@@ -123,13 +123,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanUser = username.trim().toLowerCase();
     const cleanPass = passwordOrPin.trim();
 
-    // Default fail-safes for core accounts
-    const defaults: Record<string, string[]> = {
-      admin: ['admin123', '1234', 'admin'],
-      accountant: ['acc123', '2233', '1234', 'accountant'],
-      dataentry: ['entry123', '1122', '1234', 'dataentry'],
-    };
-
     const matched = users.find((u) => {
       const matchUser =
         u.username.toLowerCase() === cleanUser ||
@@ -141,21 +134,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!matchUser) return false;
 
       const userPass = (u.password || '').trim();
-      const userPin = (u.pin_code || '').trim();
 
-      // If user has a set password, STRICTLY check against current password or PIN
+      // STRICTLY check against password ONLY (no PIN code allowed for login)
       if (userPass) {
-        return cleanPass === userPass || (Boolean(userPin) && cleanPass === userPin);
+        return cleanPass === userPass;
       }
 
       // Initial default fallback only if password field is completely empty
-      const defaults: Record<string, string[]> = {
-        admin: ['admin123', '1234'],
-        accountant: ['acc123', '2233'],
-        dataentry: ['entry123', '1122'],
+      const defaultPasses: Record<string, string> = {
+        admin: 'admin123',
+        accountant: 'acc123',
+        dataentry: 'entry123',
       };
-      const fallbackList = defaults[u.username.toLowerCase()] || [];
-      return fallbackList.includes(cleanPass);
+      return defaultPasses[u.username.toLowerCase()] === cleanPass;
     });
 
     if (!matched) {

@@ -87,7 +87,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
       id: 'admin_control',
       label: 'لوحة تحكم الأدمن والصلاحيات',
       icon: <span className="text-rose-500 font-bold">🛡️</span>,
-      visible: true,
+      visible: isAdmin,
     },
   ];
 

@@ -100,6 +100,13 @@ const AppContent: React.FC = () => {
     refreshDataFromCloud();
   }, []);
 
+  // Security guard: If non-admin user lands on admin_control, redirect to movements
+  useEffect(() => {
+    if (activeTab === 'admin_control' && !isAdmin) {
+      setActiveTab('movements');
+    }
+  }, [activeTab, isAdmin]);
+
   // Modals state
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [editingMovement, setEditingMovement] = useState<Movement | null>(null);
@@ -424,7 +431,7 @@ const AppContent: React.FC = () => {
           />
         )}
 
-        {activeTab === 'admin_control' && (
+        {activeTab === 'admin_control' && isAdmin && (
           <AdminControlPage
             settings={settings}
             onSaveSettings={handleSaveSettings}

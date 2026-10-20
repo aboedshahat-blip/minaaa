@@ -19,6 +19,8 @@ import {
   Sliders,
   Settings,
   Users,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface AdminControlPageProps {
@@ -51,22 +53,21 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     deleteUser,
   } = useAuth();
 
-  // Admin PIN Unlock Gate
+  // Admin Password Unlock Gate (Secure password verification, NOT PIN)
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
 
   // New User Form State
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newUserRole, setNewUserRole] = useState<'accountant' | 'data_entry'>('accountant');
-  const [newUserPassword, setNewUserPassword] = useState('123456');
-  const [newUserPin, setNewUserPin] = useState('1111');
+  const [newUserPassword, setNewUserPassword] = useState('');
 
   // Password editing state for active selected user
   const [editingPassword, setEditingPassword] = useState('');
-  const [isChangingPass, setIsChangingPass] = useState(false);
+  const [showEditingPassword, setShowEditingPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
 
   // Supabase Sync state
@@ -80,11 +81,13 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput === settings.admin_pin || pinInput === '1234') {
+    const adminUser = users.find((u) => u.role === 'admin') || currentUser;
+    const adminPassword = (adminUser?.password || 'admin123').trim();
+    if (passwordInput.trim() === adminPassword) {
       setIsUnlocked(true);
-      setPinError(false);
+      setPasswordError(false);
     } else {
-      setPinError(true);
+      setPasswordError(true);
     }
   };
 
@@ -139,18 +142,24 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             can_edit_commissions: false,
           };
 
+    if (!newUserPassword.trim()) {
+      alert('يرجى تحديد كلمة مرور للمستخدم الجديد');
+      return;
+    }
+
     addNewUser({
       username: newUsername.trim(),
-      password: newUserPassword.trim() || '123456',
+      password: newUserPassword.trim(),
       name: newFullName.trim(),
       role: newUserRole,
-      pin_code: newUserPin || '1234',
+      pin_code: '1234',
       is_active: true,
       permissions: defaultPerms,
     });
 
     setNewUsername('');
     setNewFullName('');
+    setNewUserPassword('');
     setIsAddUserOpen(false);
     alert('تم إضافة المستخدم الجديد بنجاح!');
   };
@@ -172,36 +181,51 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
   const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[1];
 
-  // If locked, show security PIN gate
-  if (!isUnlocked && currentUser.role !== 'admin') {
+  // If not admin, block completely from viewing or accessing Admin Control
+  if (currentUser.role !== 'admin') {
+    return (
+      <div className="max-w-md mx-auto my-16 bg-white rounded-2xl shadow-xl border border-slate-200 p-8 text-center space-y-4">
+        <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-black text-slate-900">غير مصرح بالدخول</h2>
+        <p className="text-xs text-slate-600 leading-relaxed">
+          هذه الصفحة مخصصة فقط وحصرياً للمدير العام (الأدمن). حسابك الحالي لا يمتلك صلاحية الوصول لهذه اللوحة.
+        </p>
+      </div>
+    );
+  }
+
+  // If locked, require Admin Password verification (Strict Password, NOT PIN)
+  if (!isUnlocked) {
     return (
       <div className="max-w-md mx-auto my-12 bg-white rounded-2xl shadow-xl border border-slate-200 p-8 text-center space-y-5">
-        <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
           <Lock className="w-8 h-8" />
         </div>
         <div>
-          <h2 className="text-xl font-black text-slate-900">لوحة تحكم الإدارة العامة (محمية)</h2>
+          <h2 className="text-xl font-black text-slate-900">تأكيد كلمة سر المدير العام</h2>
           <p className="text-xs text-slate-500 mt-1">
-            هذه اللوحة خاصة بالأدمن الرئيسي للتحكم بالصلاحيات وقاعدة البيانات والمستخدمين
+            أدخل كلمة سر الأدمن لفتح لوحة التحكم بالصلاحيات والمستخدمين
           </p>
         </div>
 
         <form onSubmit={handleUnlock} className="space-y-4 pt-2">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              أدخل رمز المرور السري للأدمن (PIN)
+              كلمة سر الأدمن (Password)
             </label>
             <input
               type="password"
-              placeholder="الرمز الافتراضي: 1234"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              className="w-full text-center tracking-widest text-lg font-mono py-2.5 px-3 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600"
+              placeholder="••••••••"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              className="w-full text-center text-lg font-mono py-2.5 px-3 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-none"
               autoFocus
             />
-            {pinError && (
+            {passwordError && (
               <span className="text-xs text-rose-600 font-bold block mt-1">
-                رمز المرور غير صحيح! الرمز الافتراضي هو 1234
+                كلمة المرور غير صحيحة! يرجى إعادة المحاولة.
               </span>
             )}
           </div>
@@ -210,7 +234,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-md"
           >
-            فتح لوحة التحكم
+            تأكيد وفتح لوحة التحكم
           </button>
         </form>
       </div>
@@ -429,7 +453,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   <span className="flex items-center gap-1.5">
                     <span>كلمة المرور:</span>
                     <strong className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      {showCurrentPassword ? (selectedUser.password || selectedUser.pin_code) : '••••••••'}
+                      {showCurrentPassword ? selectedUser.password : '••••••••'}
                     </strong>
                     <button
                       type="button"
@@ -439,21 +463,29 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                       {showCurrentPassword ? 'إخفاء' : 'إظهار'}
                     </button>
                   </span>
-                  <span>|</span>
-                  <span>رمز PIN: <strong className="font-mono text-slate-700">{showCurrentPassword ? selectedUser.pin_code : '••••'}</strong></span>
                 </div>
 
                 {/* Change Password & Security Inline */}
                 <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-slate-700">تغيير كلمة المرور فوراً:</span>
-                    <input
-                      type="text"
-                      placeholder="اكتب كلمة مرور جديدة..."
-                      value={editingPassword}
-                      onChange={(e) => setEditingPassword(e.target.value)}
-                      className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-mono w-48 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
+                    <span className="text-xs font-bold text-slate-700">تغيير كلمة المرور:</span>
+                    <div className="relative">
+                      <input
+                        type={showEditingPassword ? 'text' : 'password'}
+                        placeholder="اكتب كلمة مرور جديدة..."
+                        value={editingPassword}
+                        onChange={(e) => setEditingPassword(e.target.value)}
+                        className="bg-white border border-slate-300 rounded-lg pr-3 pl-8 py-1.5 text-xs font-mono w-52 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEditingPassword(!showEditingPassword)}
+                        className="absolute left-2 top-2 text-slate-400 hover:text-slate-700"
+                        title={showEditingPassword ? 'إخفاء' : 'إظهار'}
+                      >
+                        {showEditingPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -462,7 +494,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                           return;
                         }
                         updateUserPassword(selectedUser.id, editingPassword.trim());
-                        alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name}) إلى [ ${editingPassword.trim()} ]!\n\nتم حفظها فورياً في قاعدة البيانات وسيقوم السيستم بمقارنتها مباشرة عند أي دخول أو تحديث للصفحة (Refresh).`);
+                        alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name})!\n\nتم حفظها فورياً وسيقوم السيستم بمقارنتها مباشرة عند أي دخول.`);
                         setEditingPassword('');
                       }}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5"
@@ -472,7 +504,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                     </button>
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    💡 بمجرد الحفظ، تُلغى كلمة المرور السابقة تماماً وتصبح هذه الكلمة هي المطلوبة حصرياً لهذا المستخدم.
+                    💡 بمجرد الحفظ، تُلغى كلمة المرور السابقة تماماً وتصبح هذه الكلمة هي المطلوبة حصرياً لدخول هذا المستخدم.
                   </p>
                 </div>
               </div>
@@ -661,25 +693,12 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   كلمة المرور (Password) *
                 </label>
                 <input
-                  type="text"
-                  placeholder="كلمة مرور الدخول"
+                  type="password"
+                  placeholder="أدخل كلمة مرور تسجيل الدخول..."
                   value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono"
                   required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  رمز المرور السريع للدخول (PIN)
-                </label>
-                <input
-                  type="text"
-                  placeholder="4 أرقام"
-                  value={newUserPin}
-                  onChange={(e) => setNewUserPin(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-center font-bold"
                 />
               </div>
 
