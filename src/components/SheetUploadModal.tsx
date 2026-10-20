@@ -57,9 +57,9 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       const result = await parseUploadedSheet(file);
       setParsedRows(result.rows);
       setOriginalHeaders(result.headers);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('حدث خطأ أثناء قراءة ملف الإكسيل. تأكد من صيغة الملف (.xlsx أو .xls أو .csv)');
+      alert(`حدث خطأ أثناء قراءة الملف: ${err?.message || 'تأكد من صيغة الملف (.xlsx, .docx, .pdf, .csv)'}`);
     } finally {
       setIsLoading(false);
     }
@@ -192,7 +192,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx, .xls, .csv"
+              accept=".xlsx, .xls, .csv, .docx, .doc, .pdf"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -201,10 +201,10 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
             </div>
             <div>
               <p className="text-sm font-bold text-slate-800">
-                اضغط هنا لاختيار شيت الإكسيل أو اسحب الملف وأفلته هنا
+                اضغط هنا لاختيار الملف (Excel أو Word أو PDF) أو اسحب الملف وأفلته هنا
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                يدعم ملفات Excel (.xlsx, .xls) وملفات (.csv) بأي ترتيب للأعمدة
+                يدعم تفريغ البيانات من ملفات Excel، مستندات Word (.docx)، وملفات PDF (.pdf) آلياً
               </p>
             </div>
 
