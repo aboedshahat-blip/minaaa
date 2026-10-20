@@ -350,7 +350,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-right border-collapse">
+          <table className="w-full min-w-[1100px] text-xs text-right border-collapse">
             {/* Table Header exactly ordered as requested:
                 مسارالحاوية | وصفالحاوية | رقمالحاوية | رقمالاقرار | اسمالسائق | محاور المقطورة | وزنالمقطورة من واقع الرخصة | رقمالمقطورة | محاور الشاحنة | وزنالشاحنة من واقع الرخصة | رقمالشاحنة | م
             */}

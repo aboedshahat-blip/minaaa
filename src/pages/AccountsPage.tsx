@@ -331,7 +331,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-right border-collapse">
+            <table className="w-full min-w-[900px] text-xs text-right border-collapse">
               <thead className="bg-slate-900 text-white font-bold">
                 <tr>
                   <th className="p-2.5 border border-slate-700 text-center w-10">م</th>
@@ -644,7 +644,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
 
                 {/* Movements Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-right border-collapse">
+                  <table className="w-full min-w-[850px] text-xs text-right border-collapse">
                     <thead className="bg-slate-800 text-white font-bold">
                       <tr>
                         <th className="p-2 border border-slate-700 text-center w-8">م</th>
