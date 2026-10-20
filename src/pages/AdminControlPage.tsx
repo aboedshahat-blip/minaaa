@@ -67,6 +67,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   // Password editing state for active selected user
   const [editingPassword, setEditingPassword] = useState('');
   const [isChangingPass, setIsChangingPass] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
 
   // Supabase Sync state
   const [anonKeyInput, setAnonKeyInput] = useState(settings.supabase_anon_key || '');
@@ -425,9 +426,21 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mt-1">
                   <span>اسم المستخدم: <strong className="font-mono text-blue-900">{selectedUser.username}</strong></span>
                   <span>|</span>
-                  <span>كلمة المرور الحالية: <strong className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{selectedUser.password || selectedUser.pin_code}</strong></span>
+                  <span className="flex items-center gap-1.5">
+                    <span>كلمة المرور:</span>
+                    <strong className="font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      {showCurrentPassword ? (selectedUser.password || selectedUser.pin_code) : '••••••••'}
+                    </strong>
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                      className="text-slate-500 hover:text-slate-800 text-[10px] underline ml-1"
+                    >
+                      {showCurrentPassword ? 'إخفاء' : 'إظهار'}
+                    </button>
+                  </span>
                   <span>|</span>
-                  <span>رمز PIN: <strong className="font-mono text-slate-700">{selectedUser.pin_code}</strong></span>
+                  <span>رمز PIN: <strong className="font-mono text-slate-700">{showCurrentPassword ? selectedUser.pin_code : '••••'}</strong></span>
                 </div>
 
                 {/* Change Password Inline */}

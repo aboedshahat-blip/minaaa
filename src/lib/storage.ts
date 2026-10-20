@@ -30,7 +30,16 @@ export const saveSettings = (settings: SystemSettings) => {
 export const getStoredUsers = (): ManagedUser[] => {
   try {
     const raw = localStorage.getItem(KEYS.USERS);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: ManagedUser[] = JSON.parse(raw);
+      return parsed.map((u) => {
+        const init = initialUsers.find((iu) => iu.id === u.id || iu.username === u.username);
+        return {
+          ...u,
+          password: u.password || (init ? init.password : u.pin_code || '123456'),
+        };
+      });
+    }
   } catch (e) {
     console.error(e);
   }

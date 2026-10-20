@@ -166,8 +166,9 @@ export const LoginPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-left font-mono text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded">
-                  admin / admin123
+                <div className="text-left text-[11px] text-emerald-400 font-semibold bg-slate-900/80 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-emerald-400" />
+                  <span>دخول الأدمن</span>
                 </div>
               </button>
 
@@ -190,8 +191,9 @@ export const LoginPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-left font-mono text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded">
-                  accountant / acc123
+                <div className="text-left text-[11px] text-amber-400 font-semibold bg-slate-900/80 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>دخول المحاسب</span>
                 </div>
               </button>
 
@@ -214,8 +216,9 @@ export const LoginPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-left font-mono text-[10px] text-slate-400 bg-slate-900 px-2 py-1 rounded">
-                  dataentry / entry123
+                <div className="text-left text-[11px] text-rose-400 font-semibold bg-slate-900/80 border border-rose-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-rose-400" />
+                  <span>دخول التشغيل</span>
                 </div>
               </button>
             </div>
