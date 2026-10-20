@@ -11,6 +11,20 @@ const KEYS = {
   USERS: 'pls_users',
 };
 
+// Clean version flag for client delivery - forces reset of test movements and keeps clean state
+const CLIENT_CLEAN_VERSION = 'v5_client_delivery_clean';
+try {
+  if (typeof window !== 'undefined' && localStorage.getItem('pls_version') !== CLIENT_CLEAN_VERSION) {
+    localStorage.removeItem(KEYS.MOVEMENTS);
+    localStorage.setItem(KEYS.MOVEMENTS, '[]');
+    localStorage.removeItem(KEYS.PAYMENTS);
+    localStorage.setItem(KEYS.PAYMENTS, '[]');
+    localStorage.setItem('pls_version', CLIENT_CLEAN_VERSION);
+  }
+} catch (e) {
+  console.warn(e);
+}
+
 // ---------------- LOCAL STORAGE FALLBACK ----------------
 
 export const getStoredSettings = (): SystemSettings => {
@@ -126,10 +140,10 @@ export const fetchAllFromSupabase = async () => {
     ]);
 
     return {
-      movements: movementsRes.data && movementsRes.data.length > 0 ? (movementsRes.data as Movement[]) : null,
+      movements: movementsRes.data ? (movementsRes.data as Movement[]) : [],
       customers: customersRes.data && customersRes.data.length > 0 ? (customersRes.data as Customer[]) : null,
       berths: berthsRes.data && berthsRes.data.length > 0 ? (berthsRes.data as Berth[]) : null,
-      payments: paymentsRes.data ? (paymentsRes.data as PaymentReceipt[]) : null,
+      payments: paymentsRes.data ? (paymentsRes.data as PaymentReceipt[]) : [],
     };
   } catch (err) {
     console.warn('Supabase fetch failed:', err);
@@ -189,6 +203,18 @@ export const deleteMovementFromSupabase = async (id: string) => {
     await supabase.from('movements').delete().eq('id', id);
   } catch (e) {
     console.error('Failed to delete movement from Supabase:', e);
+  }
+};
+
+export const clearAllMovementsFromSupabase = async () => {
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) return;
+  try {
+    // Delete all records where id is not empty
+    await supabase.from('movements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  } catch (e) {
+    console.error('Failed to clear all movements from Supabase:', e);
   }
 };
 

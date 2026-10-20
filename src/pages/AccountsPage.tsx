@@ -15,8 +15,10 @@ import {
   Building2,
   User,
   Truck,
+  FileText,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 
 interface AccountsPageProps {
   movements: Movement[];
@@ -34,6 +36,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<'clients' | 'system_revenue' | 'receipts' | 'drivers'>('clients');
   const [driverSearch, setDriverSearch] = useState('');
+  const [selectedDriverForInvoice, setSelectedDriverForInvoice] = useState<{ name: string; moves: Movement[] } | null>(null);
+  const [isDriverInvoiceOpen, setIsDriverInvoiceOpen] = useState(false);
 
   // === Driver Ledger: group ALL movements by driver_name ===
   const driverLedger = useMemo(() => {
@@ -617,13 +621,25 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                       {driver.moves.length} شحنة
                     </span>
                   </div>
-                  <button
-                    onClick={exportDriverExcel}
-                    className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-3 py-1 rounded-lg flex items-center gap-1 transition"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    تصدير Excel
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setSelectedDriverForInvoice(driver);
+                        setIsDriverInvoiceOpen(true);
+                      }}
+                      className="bg-white text-orange-850 hover:bg-orange-50 text-[11px] font-black px-3 py-1 rounded-lg flex items-center gap-1 transition shadow-sm"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-orange-600" />
+                      <span>طباعة فاتورة باسم المكان</span>
+                    </button>
+                    <button
+                      onClick={exportDriverExcel}
+                      className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-3 py-1 rounded-lg flex items-center gap-1 transition"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      تصدير Excel
+                    </button>
+                  </div>
                 </div>
 
                 {/* Movements Table */}
@@ -694,6 +710,19 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Driver Invoice Modal */}
+      {isDriverInvoiceOpen && selectedDriverForInvoice && (
+        <DriverInvoiceModal
+          isOpen={isDriverInvoiceOpen}
+          onClose={() => {
+            setIsDriverInvoiceOpen(false);
+            setSelectedDriverForInvoice(null);
+          }}
+          movements={selectedDriverForInvoice.moves}
+          initialDriverName={selectedDriverForInvoice.name}
+        />
       )}
     </div>
   );

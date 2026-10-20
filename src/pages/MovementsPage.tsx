@@ -16,7 +16,9 @@ import {
   DollarSign,
   Truck,
   RotateCcw,
+  FileText,
 } from 'lucide-react';
+import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 
 interface MovementsPageProps {
   movements: Movement[];
@@ -26,6 +28,7 @@ interface MovementsPageProps {
   onOpenUploadModal: () => void;
   onEditMovement: (movement: Movement) => void;
   onDeleteMovement: (id: string) => void;
+  onClearAllMovements?: () => void;
   onTogglePaid: (movement: Movement) => void;
 }
 
@@ -37,9 +40,13 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onOpenUploadModal,
   onEditMovement,
   onDeleteMovement,
+  onClearAllMovements,
   onTogglePaid,
 }) => {
-  const { canViewFinancials } = useAuth();
+  const { canViewFinancials, isAdmin } = useAuth();
+
+  // Modals state
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -189,6 +196,28 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <Printer className="w-4 h-4" />
               <span>طباعة</span>
             </button>
+
+            {canViewFinancials && filteredMovements.length > 0 && (
+              <button
+                onClick={() => setIsInvoiceModalOpen(true)}
+                className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="إصدار وطباعة فاتورة حساب مجمعة بالحركات المفلترة باسم المكان أو الرصيف"
+              >
+                <FileText className="w-4 h-4" />
+                <span>إصدار فاتورة باسم المكان ({filteredMovements.length})</span>
+              </button>
+            )}
+
+            {isAdmin && movements.length > 0 && onClearAllMovements && (
+              <button
+                onClick={onClearAllMovements}
+                className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="مسح وتصفير كافة الشحنات لتسليم السيستم للعميل"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>مسح الشحنات (تسليم للعميل)</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -479,6 +508,24 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Driver Invoice Modal */}
+      {isInvoiceModalOpen && (
+        <DriverInvoiceModal
+          isOpen={isInvoiceModalOpen}
+          onClose={() => setIsInvoiceModalOpen(false)}
+          movements={filteredMovements}
+          initialDriverName={
+            searchTerm.trim() ||
+            (filteredMovements.length > 0 ? filteredMovements[0].driver_name : undefined)
+          }
+          defaultPlaceName={
+            selectedBerth
+              ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name || 'رصيف الميناء'
+              : 'محطة تشغيل وتفريغ الحاويات والشاحنات - إدارة الحركة'
+          }
+        />
+      )}
     </div>
   );
 };

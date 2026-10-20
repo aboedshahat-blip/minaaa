@@ -24,6 +24,7 @@ import {
   syncBerthToSupabase,
   syncPaymentToSupabase,
   deleteMovementFromSupabase,
+  clearAllMovementsFromSupabase,
   deleteCustomerFromSupabase,
   deleteBerthFromSupabase,
 } from './lib/storage';
@@ -73,7 +74,7 @@ const AppContent: React.FC = () => {
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
-        if (cloudData.movements && cloudData.movements.length > 0) {
+        if (cloudData.movements !== null && cloudData.movements !== undefined) {
           setMovements(cloudData.movements);
           saveMovements(cloudData.movements);
         }
@@ -167,6 +168,19 @@ const AppContent: React.FC = () => {
       setMovements(updated);
       saveMovements(updated);
       deleteMovementFromSupabase(id);
+    }
+  };
+
+  const handleClearAllMovements = async () => {
+    if (!isAdmin) {
+      alert('هذه العملية تتطلب صلاحيات المدير العام.');
+      return;
+    }
+    if (window.confirm('⚠️ تحذير تصفير السيستم:\nهل أنت متأكد من مسح وتصفير كافة الحركات والشحنات المسجلة؟\nسيتم إفراغ النظام وقاعدة البيانات تماماً لتسليمه للعميل خالي من أي بيانات تجريبية.')) {
+      setMovements([]);
+      saveMovements([]);
+      await clearAllMovementsFromSupabase();
+      alert('✓ تم مسح وتصفير كافة الشحنات بنجاح. النظام الآن فارغ ونظيف وجاهز للتسليم للعميل.');
     }
   };
 
@@ -332,6 +346,7 @@ const AppContent: React.FC = () => {
               setIsMovementModalOpen(true);
             }}
             onDeleteMovement={handleDeleteMovement}
+            onClearAllMovements={handleClearAllMovements}
             onTogglePaid={handleTogglePaid}
           />
         )}
