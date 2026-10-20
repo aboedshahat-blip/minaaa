@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Movement } from '../types';
+import { parseAnyDocument } from './fileParser';
 
 // The exact 12 columns from the user's sheet template
 export const TEMPLATE_COLUMNS = [
@@ -111,131 +112,15 @@ export const downloadEmptyTemplate = (rowCount = 50) => {
 };
 
 /**
- * Smart Sheet Parser:
- * Reads an uploaded file (.xlsx, .xls, .csv), detects sheet structure,
- * filters header rows, and maps arbitrary columns to our target template!
+ * Smart Document Parser:
+ * Supports Excel (.xlsx, .xls, .csv), Word (.docx, .doc), and PDF (.pdf).
+ * Reads the uploaded document, detects structure, and maps columns to our 12-column template!
  */
 export const parseUploadedSheet = async (file: File): Promise<{
   rows: Partial<Movement>[];
   headers: string[];
   rawRowCount: number;
+  fileType?: string;
 }> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-
-        const jsonRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
-        if (!jsonRows || jsonRows.length === 0) {
-          resolve({ rows: [], headers: [], rawRowCount: 0 });
-          return;
-        }
-
-        const headers = Object.keys(jsonRows[0] || {});
-
-        // Helper to find matching column header by synonyms
-        const findField = (row: Record<string, any>, keywords: string[]): any => {
-          const keys = Object.keys(row);
-          for (const key of keys) {
-            const cleanKey = key.trim().toLowerCase();
-            if (keywords.some((k) => cleanKey.includes(k.toLowerCase()))) {
-              return row[key];
-            }
-          }
-          return undefined;
-        };
-
-        const parsed: Partial<Movement>[] = jsonRows.map((row, index) => {
-          const truck_no = String(
-            findField(row, ['رقم الشاحنة', 'الشاحنة', 'رقم السيارة', 'truck', 'car_no']) || ''
-          ).trim();
-
-          const trailer_no = String(
-            findField(row, ['رقم المقطورة', 'المقطورة', 'trailer']) || ''
-          ).trim();
-
-          const driver_name = String(
-            findField(row, ['اسم السائق', 'السائق', 'driver']) || ''
-          ).trim();
-
-          const declaration_no = String(
-            findField(row, ['رقم الاقرار', 'الاقرار', 'declaration', 'dec']) || ''
-          ).trim();
-
-          const container_no = String(
-            findField(row, ['رقم الحاوية', 'الحاوية', 'container']) || ''
-          ).trim();
-
-          const container_desc = String(
-            findField(row, ['وصف الحاوية', 'الوصف', 'desc', 'description']) || ''
-          ).trim();
-
-          const container_path = String(
-            findField(row, ['مسار الحاوية', 'مسار', 'path', 'gate', 'بوابة']) || ''
-          ).trim();
-
-          const cashier_invoice = Number(
-            findField(row, ['فاتورة كاشير', 'كاشير', 'فاتورة', 'cashier', 'invoice']) || 0
-          );
-
-          const truck_weight = Number(
-            findField(row, ['وزن الشاحنة', 'وزن السيارة']) || 7.5
-          );
-
-          const truck_axles = Number(
-            findField(row, ['محاور الشاحنة', 'محاور السيارة']) || 20
-          );
-
-          const trailer_weight = Number(
-            findField(row, ['وزن المقطورة']) || 11.5
-          );
-
-          const trailer_axles = Number(
-            findField(row, ['محاور المقطورة']) || 30
-          );
-
-          const seq = Number(
-            findField(row, ['م', 'مسلسل', 'seq', 'no', 'id']) || (index + 1)
-          );
-
-          return {
-            seq,
-            truck_no,
-            truck_weight: isNaN(truck_weight) ? 7.5 : truck_weight,
-            truck_axles: isNaN(truck_axles) ? 20 : truck_axles,
-            trailer_no,
-            trailer_weight: isNaN(trailer_weight) ? 11.5 : trailer_weight,
-            trailer_axles: isNaN(trailer_axles) ? 30 : trailer_axles,
-            driver_name,
-            declaration_no,
-            container_no,
-            container_desc,
-            container_path,
-            cashier_invoice: isNaN(cashier_invoice) ? 0 : cashier_invoice,
-          };
-        });
-
-        // Filter out completely empty rows
-        const cleanedRows = parsed.filter(
-          (r) => r.truck_no || r.container_no || r.driver_name || r.declaration_no
-        );
-
-        resolve({
-          rows: cleanedRows.length > 0 ? cleanedRows : parsed,
-          headers,
-          rawRowCount: jsonRows.length,
-        });
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    reader.onerror = (err) => reject(err);
-    reader.readAsArrayBuffer(file);
-  });
+  return parseAnyDocument(file);
 };

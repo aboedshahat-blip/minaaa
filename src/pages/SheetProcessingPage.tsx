@@ -33,6 +33,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fileName, setFileName] = useState('');
+  const [fileType, setFileType] = useState<'excel' | 'word' | 'pdf' | ''>('');
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<Partial<Movement>[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
@@ -49,9 +50,15 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     try {
       const res = await parseUploadedSheet(file);
       setRows(res.rows);
-    } catch (err) {
+      if (res.fileType) {
+        setFileType(res.fileType as any);
+      }
+      if (res.rows.length === 0) {
+        alert('تمت قراءة الملف لكن لم يتم العثور على أسطر بيانات قابلة للتفريغ. يرجى مراجعة محتوى الملف.');
+      }
+    } catch (err: any) {
       console.error(err);
-      alert('خطأ أثناء قراءة ملف الإكسيل. يرجى التأكد من أن الملف سليم بصيغة Excel أو CSV');
+      alert(`خطأ أثناء قراءة وتفريغ الملف: ${err.message || 'يرجى التأكد من أن الملف سليم بصيغة Excel أو Word أو PDF'}`);
     } finally {
       setLoading(false);
     }
@@ -167,10 +174,10 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
               <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
-              <span>معالج وتصفية الشيتات واستخلاص الاسطمبة</span>
+              <span>معالج وتفريغ المستندات والشيتات (Excel / Word / PDF)</span>
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              ارفع أي ملف إكسيل عشوائي وسيقوم السيستم بتصفية الأعمدة وتعبئتها في الاسطمبة الرسمية
+              ارفع أي ملف إكسيل، مستند وورد (Word .docx)، أو ملف بي دي إف (PDF) وسيقوم السيستم بتفريغ البيانات آلياً في الاسطمبة الرسمية
             </p>
           </div>
 
@@ -185,27 +192,45 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
           </div>
         </div>
 
+        {/* Format Badges */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-bold text-slate-700">الصيغ المدعومة للتفريغ:</span>
+          <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-md border border-emerald-300">
+            📊 Excel (.xlsx, .xls, .csv)
+          </span>
+          <span className="bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-md border border-blue-300">
+            📄 Word (.docx, .doc)
+          </span>
+          <span className="bg-rose-100 text-rose-800 font-bold px-2.5 py-1 rounded-md border border-rose-300">
+            📑 PDF (.pdf)
+          </span>
+        </div>
+
         {/* Upload Zone */}
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="mt-6 border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50/70 rounded-2xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3"
+          className="mt-4 border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50/70 rounded-2xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3"
         >
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx, .xls, .csv"
+            accept=".xlsx, .xls, .csv, .docx, .doc, .pdf"
             onChange={handleFileUpload}
             className="hidden"
           />
           <div className="bg-white p-4 rounded-full shadow-md text-emerald-600">
-            <Upload className="w-8 h-8" />
+            {loading ? <RefreshCw className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
           </div>
           <div>
             <p className="text-base font-bold text-slate-800">
-              {fileName ? `الملف المختار: ${fileName}` : 'اضغط هنا لرفع شيت الإكسيل أو اسحب الملف وأفلته هنا'}
+              {loading
+                ? 'جاري قراءة وتفريغ محتويات الملف واستخلاص الاسطمبة...'
+                : fileName
+                ? `الملف المختار: ${fileName} ${fileType ? `(${fileType.toUpperCase()})` : ''}`
+                : 'اضغط هنا لرفع الملف (Excel أو Word أو PDF) أو اسحب الملف وأفلته هنا'}
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              البرنامج يتعرف تلقائياً على أرقام الشاحنات، المقطورات، الحاويات، السائقين، والإقرارات الجمركية
+              يتعرف البرنامج تلقائياً على جداول الوورد، ملفات PDF، وكشوف الإكسيل، ويطابق أرقام الشاحنات، المقطورات، الحاويات، السائقين، والإقرارات
             </p>
           </div>
         </div>

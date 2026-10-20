@@ -57,7 +57,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabase) return;
 
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('customers')
         .select('*')
         .eq('id', USERS_CLOUD_KEY)
@@ -65,8 +65,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data && data.trucks && Array.isArray(data.trucks) && data.trucks.length > 0) {
         const cloudUsers = data.trucks as ManagedUser[];
-        setUsers(cloudUsers);
-        saveUsers(cloudUsers);
+        const localUsers = getStoredUsers();
+
+        // Merge: keep whichever has newer settings/passwords
+        const merged = cloudUsers.map((cu) => {
+          const local = localUsers.find((lu) => lu.id === cu.id);
+          return {
+            ...cu,
+            // Prefer custom password if set locally or in cloud
+            password: cu.password || local?.password || '123456',
+          };
+        });
+
+        setUsers(merged);
+        saveUsers(merged);
       }
     } catch (e) {
       console.warn('Sync users from cloud failed:', e);
@@ -85,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         code: '__SYS_USERS__',
         name: 'إعدادات مستخدمي المنظومة والصلاحيات',
         trucks: listToSave as any,
-        notes: 'سجل المستخدمين المشفر وقائمة الصلاحيات',
+        notes: `سجل المستخدمين المشفر وقائمة الصلاحيات - آخر تحديث: ${new Date().toISOString()}`,
         created_at: new Date().toISOString(),
       });
     } catch (e) {
@@ -121,19 +133,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const matched = users.find((u) => {
       const matchUser =
         u.username.toLowerCase() === cleanUser ||
-        u.name.toLowerCase().includes(cleanUser) ||
-        (cleanUser === 'مدير' && u.role === 'admin') ||
-        (cleanUser === 'محاسب' && u.role === 'accountant') ||
-        (cleanUser === 'مدخل' && u.role === 'data_entry');
+        u.name.toLowerCase() === cleanUser ||
+        (cleanUser === 'admin' && u.role === 'admin') ||
+        (cleanUser === 'accountant' && u.role === 'accountant') ||
+        (cleanUser === 'dataentry' && u.role === 'data_entry');
 
       if (!matchUser) return false;
 
-      const userPass = u.password || '';
-      const userPin = u.pin_code || '';
-      const fallbackList = defaults[u.username.toLowerCase()] || [];
-      const validPasses = [userPass, userPin, ...fallbackList].filter(Boolean);
+      const userPass = (u.password || '').trim();
+      const userPin = (u.pin_code || '').trim();
 
-      return validPasses.includes(cleanPass);
+      // If user has a set password, STRICTLY check against current password or PIN
+      if (userPass) {
+        return cleanPass === userPass || (Boolean(userPin) && cleanPass === userPin);
+      }
+
+      // Initial default fallback only if password field is completely empty
+      const defaults: Record<string, string[]> = {
+        admin: ['admin123', '1234'],
+        accountant: ['acc123', '2233'],
+        dataentry: ['entry123', '1122'],
+      };
+      const fallbackList = defaults[u.username.toLowerCase()] || [];
+      return fallbackList.includes(cleanPass);
     });
 
     if (!matched) {

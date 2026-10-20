@@ -443,31 +443,37 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   <span>رمز PIN: <strong className="font-mono text-slate-700">{showCurrentPassword ? selectedUser.pin_code : '••••'}</strong></span>
                 </div>
 
-                {/* Change Password Inline */}
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-200/60">
-                  <span className="text-[11px] font-semibold text-slate-500">تغيير كلمة المرور:</span>
-                  <input
-                    type="text"
-                    placeholder="كلمة مرور جديدة..."
-                    value={editingPassword}
-                    onChange={(e) => setEditingPassword(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-mono w-40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!editingPassword.trim()) {
-                        alert('يرجى كتابة كلمة مرور جديدة');
-                        return;
-                      }
-                      updateUserPassword(selectedUser.id, editingPassword.trim());
-                      alert(`تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name}) إلى: ${editingPassword.trim()}`);
-                      setEditingPassword('');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1 rounded-lg transition"
-                  >
-                    حفظ الكلمة الجديدة
-                  </button>
+                {/* Change Password & Security Inline */}
+                <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700">تغيير كلمة المرور فوراً:</span>
+                    <input
+                      type="text"
+                      placeholder="اكتب كلمة مرور جديدة..."
+                      value={editingPassword}
+                      onChange={(e) => setEditingPassword(e.target.value)}
+                      className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-mono w-48 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingPassword.trim()) {
+                          alert('يرجى كتابة كلمة مرور جديدة');
+                          return;
+                        }
+                        updateUserPassword(selectedUser.id, editingPassword.trim());
+                        alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name}) إلى [ ${editingPassword.trim()} ]!\n\nتم حفظها فورياً في قاعدة البيانات وسيقوم السيستم بمقارنتها مباشرة عند أي دخول أو تحديث للصفحة (Refresh).`);
+                        setEditingPassword('');
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>حفظ وتفعيل فوراً</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    💡 بمجرد الحفظ، تُلغى كلمة المرور السابقة تماماً وتصبح هذه الكلمة هي المطلوبة حصرياً لهذا المستخدم.
+                  </p>
                 </div>
               </div>
 

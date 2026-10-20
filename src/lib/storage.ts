@@ -36,7 +36,7 @@ export const getStoredUsers = (): ManagedUser[] => {
         const init = initialUsers.find((iu) => iu.id === u.id || iu.username === u.username);
         return {
           ...u,
-          password: u.password || (init ? init.password : u.pin_code || '123456'),
+          password: (u.password && u.password.trim().length > 0) ? u.password : (init ? init.password : u.pin_code || '123456'),
         };
       });
     }

@@ -42,16 +42,6 @@ export const LoginPage: React.FC = () => {
     }, 200);
   };
 
-  const handleQuickLogin = (user: string, pass: string) => {
-    setUsername(user);
-    setPassword(pass);
-    setErrorMessage('');
-    const res = login(user, pass);
-    if (!res.success) {
-      setErrorMessage(res.message || 'بيانات الدخول غير صحيحة');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900 via-slate-900 to-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 text-slate-100">
       {/* Background glowing effects */}
@@ -139,88 +129,33 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Quick Demo Login Cards */}
+          {/* Security Policy Information (Strict credentials required) */}
           <div className="pt-4 border-t border-slate-800/80 space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-400">
-              <span className="font-semibold text-slate-300">أو تسجيل دخول سريع (حسابات النظام):</span>
-              <span className="text-[10px] text-blue-400 font-mono">اضغط للدخول فوراً</span>
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                <span>سياسة الأمان والسرية المشددة:</span>
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">حماية 100%</span>
             </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              {/* Admin Button */}
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin', 'admin123')}
-                className="w-full text-right bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-blue-500/50 p-2.5 rounded-xl transition flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-emerald-500/20 text-emerald-400 p-2 rounded-lg border border-emerald-500/30">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white group-hover:text-blue-300 transition">
-                      1. المدير العام (أدمن المنظومة)
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      كافة الصلاحيات + التحكم الكامل بالمستخدمين والعمولات
-                    </div>
-                  </div>
-                </div>
-                <div className="text-left text-[11px] text-emerald-400 font-semibold bg-slate-900/80 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-emerald-400" />
-                  <span>دخول الأدمن</span>
-                </div>
-              </button>
+            <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
+              🔒 <strong>يلزم كتابة اسم المستخدم وكلمة المرور الخاصة بك يدوياً</strong> للدخول. لا يُسمح بالتبديل بين الحسابات إلا بعد تسجيل الخروج وإدخال كلمة المرور منعاً لتداخل الصلاحيات.
+            </p>
 
-              {/* Accountant Button */}
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('accountant', 'acc123')}
-                className="w-full text-right bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-amber-500/50 p-2.5 rounded-xl transition flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-amber-500/20 text-amber-400 p-2 rounded-lg border border-amber-500/30">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white group-hover:text-amber-300 transition">
-                      2. المحاسب المالي (حسابات)
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      إدارة فواتير الكاشير، كشوف حسابات العملاء، والتحصيل
-                    </div>
-                  </div>
-                </div>
-                <div className="text-left text-[11px] text-amber-400 font-semibold bg-slate-900/80 border border-amber-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-amber-400" />
-                  <span>دخول المحاسب</span>
-                </div>
-              </button>
-
-              {/* Data Entry Button */}
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('dataentry', 'entry123')}
-                className="w-full text-right bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 hover:border-rose-500/50 p-2.5 rounded-xl transition flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="bg-rose-500/20 text-rose-400 p-2 rounded-lg border border-rose-500/30">
-                    <Truck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white group-hover:text-rose-300 transition">
-                      3. مدخل بيانات الشاحنات (تشغيل فقط)
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      إدخال الحركات ورفع الشيتات (محجوب عنه الحسابات نهائياً)
-                    </div>
-                  </div>
-                </div>
-                <div className="text-left text-[11px] text-rose-400 font-semibold bg-slate-900/80 border border-rose-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-rose-400" />
-                  <span>دخول التشغيل</span>
-                </div>
-              </button>
+            <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+              <div className="bg-slate-800/60 border border-slate-700/60 p-2 rounded-xl">
+                <span className="block text-emerald-400 font-bold">المدير العام</span>
+                <span className="font-mono text-slate-400">admin</span>
+              </div>
+              <div className="bg-slate-800/60 border border-slate-700/60 p-2 rounded-xl">
+                <span className="block text-amber-400 font-bold">المحاسب المالي</span>
+                <span className="font-mono text-slate-400">accountant</span>
+              </div>
+              <div className="bg-slate-800/60 border border-slate-700/60 p-2 rounded-xl">
+                <span className="block text-rose-400 font-bold">مدخل البيانات</span>
+                <span className="font-mono text-slate-400">dataentry</span>
+              </div>
             </div>
           </div>
         </div>

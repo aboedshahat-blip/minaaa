@@ -63,9 +63,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>تصدير الاسطمبة</span>
           </button>
 
-          {/* Current Logged in User & Switcher */}
-          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-lg p-1.5 pr-2">
-            <div className="flex items-center gap-1.5">
+          {/* Current Logged in User Badge & Logout */}
+          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-lg p-1.5 px-2.5">
+            <div className="flex items-center gap-2">
               {currentUser.role === 'admin' && (
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
               )}
@@ -75,31 +75,26 @@ export const Navbar: React.FC<NavbarProps> = ({
               {currentUser.role === 'data_entry' && (
                 <Lock className="w-4 h-4 text-rose-400" />
               )}
-              <span className="text-xs text-slate-300 font-medium hidden md:inline">
-                المستخدم:
-              </span>
+              <div className="flex flex-col text-right">
+                <span className="text-xs text-white font-bold leading-tight">
+                  {currentUser.name}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {currentUser.role === 'admin' ? 'المدير العام' : currentUser.role === 'accountant' ? 'محاسب مالي' : 'مدخل بيانات'}
+                </span>
+              </div>
             </div>
 
-            <select
-              value={currentUser.id}
-              onChange={handleUserChange}
-              className="bg-slate-900 text-white text-xs font-semibold py-1 px-2 rounded border border-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role === 'admin' ? 'أدمن' : u.role === 'accountant' ? 'حسابات' : 'مدخل بيانات'})
-                </option>
-              ))}
-            </select>
+            <div className="h-5 w-px bg-slate-700 mx-1" />
 
-            {/* Logout Button */}
+            {/* Secure Logout Button */}
             <button
               onClick={logout}
-              title="تسجيل الخروج"
-              className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-700/50 rounded transition flex items-center gap-1 text-xs"
+              title="تسجيل الخروج من الحساب"
+              className="py-1 px-2 text-rose-400 hover:text-white hover:bg-rose-600/80 rounded-md transition flex items-center gap-1 text-xs font-semibold"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline text-[11px]">خروج</span>
+              <span className="hidden sm:inline text-[11px]">تسجيل خروج</span>
             </button>
           </div>
         </div>
