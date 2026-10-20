@@ -13,6 +13,8 @@ import {
   ArrowUpRight,
   ShieldCheck,
   Building2,
+  User,
+  Truck,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -30,7 +32,44 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   onOpenPaymentModal,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'system_revenue' | 'receipts'>('clients');
+  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'system_revenue' | 'receipts' | 'drivers'>('clients');
+  const [driverSearch, setDriverSearch] = useState('');
+
+  // === Driver Ledger: group ALL movements by driver_name ===
+  const driverLedger = useMemo(() => {
+    if (!driverSearch.trim()) return [];
+
+    const term = driverSearch.trim().toLowerCase();
+    const filtered = movements.filter(
+      (m) =>
+        m.driver_name && m.driver_name.toLowerCase().includes(term)
+    );
+
+    // Group by exact driver name
+    const driverMap = new Map<string, Movement[]>();
+    filtered.forEach((m) => {
+      const key = m.driver_name || 'غير محدد';
+      if (!driverMap.has(key)) driverMap.set(key, []);
+      driverMap.get(key)!.push(m);
+    });
+
+    return Array.from(driverMap.entries()).map(([name, moves]) => {
+      const cashierTotal = moves.reduce((s, m) => s + (m.cashier_invoice || 0), 0);
+      const systemCommTotal = moves.reduce((s, m) => s + (m.system_commission || 0), 0);
+      const nafezCommTotal = moves.reduce((s, m) => s + (m.nafez_commission || 0), 0);
+      const totalAmount = moves.reduce((s, m) => s + (m.total_amount || 0), 0);
+      const paidTotal = moves.reduce((s, m) => s + (m.paid_amount || 0), 0);
+      const remainingTotal = moves.reduce((s, m) => s + (m.remaining_amount || 0), 0);
+      return { name, moves, cashierTotal, systemCommTotal, nafezCommTotal, totalAmount, paidTotal, remainingTotal };
+    });
+  }, [movements, driverSearch]);
+
+  // All unique driver names for quick autocomplete hint
+  const allDriverNames = useMemo(() => {
+    const names = new Set<string>();
+    movements.forEach((m) => { if (m.driver_name) names.add(m.driver_name); });
+    return Array.from(names).sort();
+  }, [movements]);
 
   // Customer Financial Breakdown
   const customerLedger = useMemo(() => {
@@ -253,6 +292,20 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
         >
           سجل سندات القبض والدفعات ({payments.length})
         </button>
+
+        <button
+          onClick={() => setActiveSubTab('drivers')}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition ${
+            activeSubTab === 'drivers'
+              ? 'bg-orange-600 text-white'
+              : 'bg-white text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          <span className="flex items-center gap-1.5">
+            <Truck className="w-3.5 h-3.5" />
+            كشف حساب السائقين
+          </span>
+        </button>
       </div>
 
       {/* Tab 1: Customer Balances Table */}
@@ -464,6 +517,182 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
               لم يتم تسجيل سندات قبض حتى الآن. اضغط "تسجيل سند قبض جديد" لإضافة دفعة.
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab 4: Driver Account Statement (كشف حساب السائقين) */}
+      {activeSubTab === 'drivers' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Truck className="w-5 h-5 text-orange-600" />
+              <span>كشف حساب السائقين — إجمالي الشحنات والمصاريف</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              ابحث باسم السائق لعرض جميع شحناته وإجمالي ما عليه من مبالغ
+            </p>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative w-full sm:w-96">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="ابحث باسم السائق..."
+              value={driverSearch}
+              onChange={(e) => setDriverSearch(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-400"
+            />
+          </div>
+
+          {/* Autocomplete hints */}
+          {driverSearch.trim().length >= 1 && driverLedger.length === 0 && (
+            <div className="text-xs text-slate-400 text-right">
+              {allDriverNames.filter(n => n.toLowerCase().includes(driverSearch.trim().toLowerCase())).length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {allDriverNames
+                    .filter(n => n.toLowerCase().includes(driverSearch.trim().toLowerCase()))
+                    .slice(0, 8)
+                    .map(n => (
+                      <button
+                        key={n}
+                        onClick={() => setDriverSearch(n)}
+                        className="bg-orange-50 border border-orange-200 text-orange-800 text-xs px-3 py-1 rounded-full hover:bg-orange-100 transition"
+                      >
+                        {n}
+                      </button>
+                    ))}
+                </div>
+              ) : (
+                <span>لا يوجد سائق بهذا الاسم في قاعدة البيانات</span>
+              )}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!driverSearch.trim() && (
+            <div className="text-center py-10 text-slate-400 text-sm">
+              <Truck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+              <p>اكتب اسم السائق في خانة البحث لعرض كشف حسابه الكامل</p>
+              <p className="text-xs mt-1">
+                يوجد {allDriverNames.length} سائق مسجل في النظام
+              </p>
+            </div>
+          )}
+
+          {/* Driver Results */}
+          {driverLedger.map((driver) => {
+            const exportDriverExcel = () => {
+              const rows = driver.moves.map((m, i) => ({
+                'م': i + 1,
+                'رقم الحاوية': m.container_no || '',
+                'رقم الإقرار': m.declaration_no || '',
+                'رقم الشاحنة': m.truck_no || '',
+                'رقم المقطورة': m.trailer_no || '',
+                'التاريخ': m.movement_date || '',
+                'فاتورة كاشير': m.cashier_invoice || 0,
+                'عمولة المنظومة': m.system_commission || 0,
+                'نافذ': m.nafez_commission || 0,
+                'الإجمالي': m.total_amount || 0,
+                'المدفوع': m.paid_amount || 0,
+                'المتبقي': m.remaining_amount || 0,
+                'الحالة': m.payment_status === 'paid' ? 'مسدد' : m.payment_status === 'partial' ? 'جزئي' : 'معلق',
+              }));
+              const ws = XLSX.utils.json_to_sheet(rows);
+              ws['!views'] = [{ rightToLeft: true }];
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, ws, `كشف ${driver.name}`);
+              XLSX.writeFile(wb, `كشف_حساب_${driver.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+            };
+
+            return (
+              <div key={driver.name} className="border border-orange-200 rounded-xl overflow-hidden">
+                {/* Driver Header */}
+                <div className="bg-orange-600 text-white px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    <span className="font-black text-sm">{driver.name}</span>
+                    <span className="bg-orange-500/60 text-[11px] px-2 py-0.5 rounded-full">
+                      {driver.moves.length} شحنة
+                    </span>
+                  </div>
+                  <button
+                    onClick={exportDriverExcel}
+                    className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-3 py-1 rounded-lg flex items-center gap-1 transition"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    تصدير Excel
+                  </button>
+                </div>
+
+                {/* Movements Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-right border-collapse">
+                    <thead className="bg-slate-800 text-white font-bold">
+                      <tr>
+                        <th className="p-2 border border-slate-700 text-center w-8">م</th>
+                        <th className="p-2 border border-slate-700">رقم الحاوية</th>
+                        <th className="p-2 border border-slate-700">رقم الإقرار</th>
+                        <th className="p-2 border border-slate-700">رقم الشاحنة</th>
+                        <th className="p-2 border border-slate-700">رقم المقطورة</th>
+                        <th className="p-2 border border-slate-700 text-center">التاريخ</th>
+                        <th className="p-2 border border-slate-700 text-center">كاشير</th>
+                        <th className="p-2 border border-slate-700 text-center">عمولة منظومة</th>
+                        <th className="p-2 border border-slate-700 text-center">نافذ</th>
+                        <th className="p-2 border border-slate-700 text-center bg-blue-950">الإجمالي</th>
+                        <th className="p-2 border border-slate-700 text-center bg-emerald-950">مدفوع</th>
+                        <th className="p-2 border border-slate-700 text-center bg-rose-950">متبقي</th>
+                        <th className="p-2 border border-slate-700 text-center">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {driver.moves.map((m, i) => (
+                        <tr key={m.id} className="hover:bg-orange-50/30">
+                          <td className="p-2 border border-slate-200 text-center text-slate-500 bg-slate-50">{i + 1}</td>
+                          <td className="p-2 border border-slate-200 font-mono font-bold text-blue-800">{m.container_no || '-'}</td>
+                          <td className="p-2 border border-slate-200 font-mono">{m.declaration_no || '-'}</td>
+                          <td className="p-2 border border-slate-200 font-mono">{m.truck_no || '-'}</td>
+                          <td className="p-2 border border-slate-200 font-mono">{m.trailer_no || '-'}</td>
+                          <td className="p-2 border border-slate-200 text-center text-slate-600">{m.movement_date || '-'}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono">{(m.cashier_invoice || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono text-blue-700">{(m.system_commission || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono text-indigo-700">{(m.nafez_commission || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-black text-slate-900 bg-blue-50/50">{(m.total_amount || 0).toLocaleString()} ج.م</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50">{(m.paid_amount || 0).toLocaleString()} ج.م</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-black text-rose-800 bg-rose-50/50">{(m.remaining_amount || 0).toLocaleString()} ج.م</td>
+                          <td className="p-2 border border-slate-200 text-center">
+                            {m.payment_status === 'paid' && <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">مسدد</span>}
+                            {m.payment_status === 'partial' && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">جزئي</span>}
+                            {m.payment_status === 'unpaid' && <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">معلق</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {/* Totals Footer Row */}
+                    <tfoot>
+                      <tr className="bg-slate-900 text-white font-black text-xs">
+                        <td colSpan={6} className="p-2.5 border border-slate-700 text-right pr-4">
+                          إجمالي {driver.name} ({driver.moves.length} شحنة)
+                        </td>
+                        <td className="p-2.5 border border-slate-700 text-center font-mono">{driver.cashierTotal.toLocaleString()}</td>
+                        <td className="p-2.5 border border-slate-700 text-center font-mono text-blue-300">{driver.systemCommTotal.toLocaleString()}</td>
+                        <td className="p-2.5 border border-slate-700 text-center font-mono text-indigo-300">{driver.nafezCommTotal.toLocaleString()}</td>
+                        <td className="p-2.5 border border-slate-600 text-center font-mono bg-blue-900">{driver.totalAmount.toLocaleString()} ج.م</td>
+                        <td className="p-2.5 border border-slate-600 text-center font-mono bg-emerald-900">{driver.paidTotal.toLocaleString()} ج.م</td>
+                        <td className="p-2.5 border border-slate-600 text-center font-mono bg-rose-900">{driver.remainingTotal.toLocaleString()} ج.م</td>
+                        <td className="p-2.5 border border-slate-700 text-center">
+                          {driver.remainingTotal === 0
+                            ? <span className="text-emerald-300 text-[10px]">✓ خالص</span>
+                            : <span className="text-rose-300 text-[10px]">مدين</span>}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
