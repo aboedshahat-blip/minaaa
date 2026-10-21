@@ -78,6 +78,8 @@ export interface Movement {
 
   // Financial fields
   cashier_invoice: number; // قيمة فاتورة كاشير
+  cashier_receipt_no?: string; // مسلسل فاتورة الكاشير (e.g. 0047-01-1/01-261021)
+  booking_category?: string; // تصنيف الحجز (تعتيق حاوية فارغة / وارد حاويات / صادر)
   system_commission: number; // عمولة المنظومة (default 200 or dynamic)
   nafez_commission: number; // عمولة نافذ (إن وجدت)
   total_amount: number; // الإجمالي = فاتورة كاشير + عمولة المنظومة + عمولة نافذ

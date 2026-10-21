@@ -212,12 +212,23 @@ const AppContent: React.FC = () => {
     syncMovementToSupabase(updatedMovement);
   };
 
-  const handleImportMovements = (importedMovements: Movement[]) => {
-    const updated = [...importedMovements, ...movements];
-    setMovements(updated);
-    saveMovements(updated);
-    // Sync all to Supabase
+  const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
+    const updatedMovements = [...importedMovements, ...movements];
+    setMovements(updatedMovements);
+    saveMovements(updatedMovements);
     importedMovements.forEach((m) => syncMovementToSupabase(m));
+
+    if (newCustomers && newCustomers.length > 0) {
+      // Merge unique customers by name
+      const existingIds = new Set(customers.map((c) => c.id));
+      const filteredNew = newCustomers.filter((c) => !existingIds.has(c.id));
+      if (filteredNew.length > 0) {
+        const updatedCustomers = [...filteredNew, ...customers];
+        setCustomers(updatedCustomers);
+        saveCustomers(updatedCustomers);
+        filteredNew.forEach((c) => syncCustomerToSupabase(c));
+      }
+    }
   };
 
   // Customer Handlers

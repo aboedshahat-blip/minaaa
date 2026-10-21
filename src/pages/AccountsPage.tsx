@@ -393,12 +393,25 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                       )}
                     </td>
                     <td className="p-2.5 border border-slate-200 text-center">
-                      <button
-                        onClick={() => onOpenPaymentModal(row.customer.id)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition"
-                      >
-                        سند قبض
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            setDriverSearch(row.customer.name);
+                            setActiveSubTab('drivers');
+                          }}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2 py-1 rounded border border-blue-200 transition flex items-center gap-1"
+                          title="عرض شحنات وحركات هذا السائق/العميل"
+                        >
+                          <Truck className="w-3 h-3" />
+                          <span>الشحنات ({row.truckCount})</span>
+                        </button>
+                        <button
+                          onClick={() => onOpenPaymentModal(row.customer.id)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition"
+                        >
+                          سند قبض
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -653,7 +666,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                         <th className="p-2 border border-slate-700">رقم الشاحنة</th>
                         <th className="p-2 border border-slate-700">رقم المقطورة</th>
                         <th className="p-2 border border-slate-700 text-center">التاريخ</th>
-                        <th className="p-2 border border-slate-700 text-center">كاشير</th>
+                        <th className="p-2 border border-slate-700 text-center">مسلسل الكاشير</th>
+                        <th className="p-2 border border-slate-700 text-center">مبلغ الكاشير</th>
                         <th className="p-2 border border-slate-700 text-center">عمولة منظومة</th>
                         <th className="p-2 border border-slate-700 text-center">نافذ</th>
                         <th className="p-2 border border-slate-700 text-center bg-blue-950">الإجمالي</th>
@@ -671,6 +685,15 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                           <td className="p-2 border border-slate-200 font-mono">{m.truck_no || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{m.trailer_no || '-'}</td>
                           <td className="p-2 border border-slate-200 text-center text-slate-600">{m.movement_date || '-'}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono text-indigo-700 font-bold">
+                            {m.cashier_receipt_no ? (
+                              <span className="bg-indigo-50 border border-indigo-200 text-indigo-900 px-1.5 py-0.5 rounded text-[10px]">
+                                {m.cashier_receipt_no}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-[10px]">-</span>
+                            )}
+                          </td>
                           <td className="p-2 border border-slate-200 text-center font-mono">{(m.cashier_invoice || 0).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center font-mono text-blue-700">{(m.system_commission || 0).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center font-mono text-indigo-700">{(m.nafez_commission || 0).toLocaleString()}</td>
@@ -688,7 +711,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                     {/* Totals Footer Row */}
                     <tfoot>
                       <tr className="bg-slate-900 text-white font-black text-xs">
-                        <td colSpan={6} className="p-2.5 border border-slate-700 text-right pr-4">
+                        <td colSpan={7} className="p-2.5 border border-slate-700 text-right pr-4">
                           إجمالي {driver.name} ({driver.moves.length} شحنة)
                         </td>
                         <td className="p-2.5 border border-slate-700 text-center font-mono">{driver.cashierTotal.toLocaleString()}</td>

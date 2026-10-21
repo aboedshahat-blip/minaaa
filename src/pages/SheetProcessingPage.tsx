@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
+import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import { useAuth } from '../contexts/AuthContext';
 import {
   FileSpreadsheet,
@@ -12,6 +13,7 @@ import {
   Eye,
   Plus,
   RefreshCw,
+  FileDown,
 } from 'lucide-react';
 
 interface SheetProcessingPageProps {
@@ -19,7 +21,7 @@ interface SheetProcessingPageProps {
   berths: Berth[];
   settings: SystemSettings;
   currentMaxSeq: number;
-  onImportMovements: (movements: Movement[]) => void;
+  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => void;
 }
 
 export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
@@ -88,6 +90,8 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     const nafezComm = settings.default_nafez_commission ?? 0;
 
     let seqCounter = currentMaxSeq;
+    const newCustomersMap = new Map<string, Customer>();
+    let customerSeq = customers.length;
 
     const finalizedMovements: Movement[] = rows.map((r) => {
       seqCounter += 1;
@@ -96,22 +100,55 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       const nafezCommission = applyCommission ? nafezComm : 0;
       const total = cashier + systemCommission + nafezCommission;
 
+      // Smart Driver = Customer mapping
+      const cleanDriver = (r.driver_name || '').trim();
+      let rowCustomer = targetCustomer;
+
+      if (cleanDriver) {
+        const existing =
+          customers.find((c) => c.name.trim().toLowerCase() === cleanDriver.toLowerCase()) ||
+          newCustomersMap.get(cleanDriver.toLowerCase());
+
+        if (existing) {
+          rowCustomer = existing;
+        } else {
+          customerSeq += 1;
+          const newCust: Customer = {
+            id: `c-drv-${Date.now()}-${customerSeq}`,
+            code: `DRV-${customerSeq}`,
+            name: cleanDriver,
+            phone: '',
+            trucks: [
+              {
+                truck_no: r.truck_no || '',
+                trailer_no: r.trailer_no || '',
+                driver_name: cleanDriver,
+              },
+            ],
+            created_at: new Date().toISOString(),
+            notes: 'تم إنشاؤه تلقائياً كعميل/سائق من كشف الحركات',
+          };
+          newCustomersMap.set(cleanDriver.toLowerCase(), newCust);
+          rowCustomer = newCust;
+        }
+      }
+
       return {
         id: `m-imp-${Date.now()}-${seqCounter}`,
         seq: seqCounter,
         movement_date: r.movement_date || now,
         berth_id: targetBerth?.id || berths[0]?.id || '',
         berth_name: targetBerth?.name || berths[0]?.name || 'رصيف 1',
-        customer_id: targetCustomer?.id || '',
-        customer_code: targetCustomer?.code || '',
-        customer_name: targetCustomer?.name || 'عميل عام',
+        customer_id: rowCustomer?.id || '',
+        customer_code: rowCustomer?.code || '',
+        customer_name: rowCustomer?.name || cleanDriver || 'عميل عام',
         truck_no: r.truck_no || 'غير محدد',
         truck_weight: r.truck_weight ?? 7.5,
         truck_axles: r.truck_axles ?? 20,
         trailer_no: r.trailer_no || '',
         trailer_weight: r.trailer_weight ?? 11.5,
         trailer_axles: r.trailer_axles ?? 30,
-        driver_name: r.driver_name || '',
+        driver_name: cleanDriver || '',
         declaration_no: r.declaration_no || '',
         container_no: r.container_no || '',
         container_desc: r.container_desc || '',
@@ -128,10 +165,49 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       };
     });
 
-    onImportMovements(finalizedMovements);
-    alert(`تم بنجاح إضافة وتصفية ${finalizedMovements.length} حركة شاحنة وحفظها في المنظومة!`);
+    const newCustomersList = Array.from(newCustomersMap.values());
+    onImportMovements(finalizedMovements, newCustomersList);
+
+    const custMsg = newCustomersList.length > 0 ? ` وتم تكويد ${newCustomersList.length} عميل (سائق) جديد تلقائياً` : '';
+    alert(`تم بنجاح إضافة وتصفية ${finalizedMovements.length} حركة شاحنة وحفظها في المنظومة!${custMsg}`);
     setRows([]);
     setFileName('');
+  };
+
+  const handleExportProcessedPdf = async () => {
+    if (rows.length === 0) return;
+    const tempMovements: Movement[] = rows.map((r, i) => ({
+      ...r,
+      id: `temp-${i}`,
+      seq: i + 1,
+      movement_date: new Date().toISOString().split('T')[0],
+      berth_name: berths.find((b) => b.id === selectedBerthId)?.name || '',
+      customer_name: r.driver_name || '',
+      truck_no: r.truck_no || '',
+      truck_weight: r.truck_weight ?? 7.5,
+      truck_axles: r.truck_axles ?? 20,
+      trailer_no: r.trailer_no || '',
+      trailer_weight: r.trailer_weight ?? 11.5,
+      trailer_axles: r.trailer_axles ?? 30,
+      driver_name: r.driver_name || '',
+      declaration_no: r.declaration_no || '',
+      container_no: r.container_no || '',
+      container_desc: r.container_desc || '',
+      container_path: r.container_path || '',
+      cashier_invoice: 0,
+      system_commission: 0,
+      nafez_commission: 0,
+      total_amount: 0,
+      payment_status: 'unpaid',
+      paid_amount: 0,
+      remaining_amount: 0,
+      created_at: '',
+    }));
+    await exportMovementsToOfficialPdf(
+      tempMovements,
+      'كشف تفريغ الشاحنات والحاويات (الاسطمبة المعتمدة)',
+      berths.find((b) => b.id === selectedBerthId)?.name
+    );
   };
 
   const handleExportProcessedSheet = () => {
@@ -250,7 +326,16 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleExportProcessedPdf}
+                className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="تصدير وتنزيل ملف PDF بالاسطمبة الرسمية (بدون العمولات) لتقديمه للمكتب"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>تحميل PDF الاسطمبة الرسمية</span>
+              </button>
+
               <button
                 onClick={handleExportProcessedSheet}
                 className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"

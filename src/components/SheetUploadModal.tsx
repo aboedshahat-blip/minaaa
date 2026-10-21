@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
+import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import { Customer, Berth, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -11,12 +12,13 @@ import {
   X,
   ArrowRight,
   Filter,
+  FileDown,
 } from 'lucide-react';
 
 interface SheetUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportMovements: (movements: Movement[]) => void;
+  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => void;
   customers: Customer[];
   berths: Berth[];
   settings: SystemSettings;
@@ -79,6 +81,8 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     const nafezComm = settings.default_nafez_commission ?? 0;
 
     let seqCounter = currentMaxSeq;
+    const newCustomersMap = new Map<string, Customer>();
+    let customerSeq = customers.length;
 
     const finalizedMovements: Movement[] = parsedRows.map((row) => {
       seqCounter += 1;
@@ -87,22 +91,54 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       const nafezCommission = applyDefaultCommissions ? nafezComm : 0;
       const total = cashier + systemCommission + nafezCommission;
 
+      const cleanDriver = (row.driver_name || '').trim();
+      let rowCustomer = targetCustomer;
+
+      if (cleanDriver) {
+        const existing =
+          customers.find((c) => c.name.trim().toLowerCase() === cleanDriver.toLowerCase()) ||
+          newCustomersMap.get(cleanDriver.toLowerCase());
+
+        if (existing) {
+          rowCustomer = existing;
+        } else {
+          customerSeq += 1;
+          const newCust: Customer = {
+            id: `c-drv-${Date.now()}-${customerSeq}`,
+            code: `DRV-${customerSeq}`,
+            name: cleanDriver,
+            phone: '',
+            trucks: [
+              {
+                truck_no: row.truck_no || '',
+                trailer_no: row.trailer_no || '',
+                driver_name: cleanDriver,
+              },
+            ],
+            created_at: new Date().toISOString(),
+            notes: 'تم إنشاؤه تلقائياً كعميل/سائق من كشف الشيت المرفوع',
+          };
+          newCustomersMap.set(cleanDriver.toLowerCase(), newCust);
+          rowCustomer = newCust;
+        }
+      }
+
       return {
         id: `m-imp-${Date.now()}-${seqCounter}`,
         seq: seqCounter,
         movement_date: row.movement_date || now,
         berth_id: targetBerth?.id || berths[0]?.id || '',
         berth_name: targetBerth?.name || berths[0]?.name || 'رصيف 1',
-        customer_id: targetCustomer?.id || '',
-        customer_code: targetCustomer?.code || '',
-        customer_name: targetCustomer?.name || 'عميل عام',
+        customer_id: rowCustomer?.id || '',
+        customer_code: rowCustomer?.code || '',
+        customer_name: rowCustomer?.name || cleanDriver || 'عميل عام',
         truck_no: row.truck_no || 'غير محدد',
         truck_weight: row.truck_weight ?? 7.5,
         truck_axles: row.truck_axles ?? 20,
         trailer_no: row.trailer_no || '',
         trailer_weight: row.trailer_weight ?? 11.5,
         trailer_axles: row.trailer_axles ?? 30,
-        driver_name: row.driver_name || '',
+        driver_name: cleanDriver || '',
         declaration_no: row.declaration_no || '',
         container_no: row.container_no || '',
         container_desc: row.container_desc || '',
@@ -119,9 +155,47 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       };
     });
 
-    onImportMovements(finalizedMovements);
-    alert(`تم بنجاح تصفية واستيراد ${finalizedMovements.length} حركة شاحنة إلى السيستم!`);
+    const newCustomersList = Array.from(newCustomersMap.values());
+    onImportMovements(finalizedMovements, newCustomersList);
+    const custMsg = newCustomersList.length > 0 ? ` وتم تكويد ${newCustomersList.length} عميل (سائق) جديد تلقائياً` : '';
+    alert(`تم بنجاح تصفية واستيراد ${finalizedMovements.length} حركة شاحنة إلى السيستم!${custMsg}`);
     onClose();
+  };
+
+  const handleExportPdfDirectly = async () => {
+    if (parsedRows.length === 0) return;
+    const tempMovements: Movement[] = parsedRows.map((r, i) => ({
+      ...r,
+      id: `temp-${i}`,
+      seq: i + 1,
+      movement_date: new Date().toISOString().split('T')[0],
+      berth_name: berths.find((b) => b.id === selectedBerthId)?.name || '',
+      customer_name: r.driver_name || '',
+      truck_no: r.truck_no || '',
+      truck_weight: r.truck_weight ?? 7.5,
+      truck_axles: r.truck_axles ?? 20,
+      trailer_no: r.trailer_no || '',
+      trailer_weight: r.trailer_weight ?? 11.5,
+      trailer_axles: r.trailer_axles ?? 30,
+      driver_name: r.driver_name || '',
+      declaration_no: r.declaration_no || '',
+      container_no: r.container_no || '',
+      container_desc: r.container_desc || '',
+      container_path: r.container_path || '',
+      cashier_invoice: 0,
+      system_commission: 0,
+      nafez_commission: 0,
+      total_amount: 0,
+      payment_status: 'unpaid',
+      paid_amount: 0,
+      remaining_amount: 0,
+      created_at: '',
+    }));
+    await exportMovementsToOfficialPdf(
+      tempMovements,
+      'كشف الحركات المصفاة لتقديمه للمكتب (الاسطمبة الرسمية)',
+      berths.find((b) => b.id === selectedBerthId)?.name
+    );
   };
 
   const handleExportProcessedDirectly = () => {
@@ -364,16 +438,28 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
 
         {/* Footer Actions */}
         <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {parsedRows.length > 0 && (
-              <button
-                type="button"
-                onClick={handleExportProcessedDirectly}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 text-xs font-semibold transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>تصدير هذه البيانات إلى شيت الاسطمبة فوراً</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleExportPdfDirectly}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold transition shadow-sm"
+                  title="تنزيل كشف الحركات بصيغة PDF بالاسطمبة الرسمية لتقديمه للمكتب"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>تحميل PDF الاسطمبة الرسمية</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportProcessedDirectly}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-100 text-xs font-semibold transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>تصدير إلى Excel</span>
+                </button>
+              </>
             )}
           </div>
 

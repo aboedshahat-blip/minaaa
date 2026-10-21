@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Berth, Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
+import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import {
   Search,
   Filter,
@@ -17,8 +18,11 @@ import {
   Truck,
   RotateCcw,
   FileText,
+  FileDown,
+  Link2,
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
+import { CashierLinkingModal } from '../components/CashierLinkingModal';
 
 interface MovementsPageProps {
   movements: Movement[];
@@ -47,6 +51,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Modals state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [isCashierModalOpen, setIsCashierModalOpen] = useState(false);
+  const [linkingMovement, setLinkingMovement] = useState<Movement | null>(null);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,6 +142,15 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     exportTemplateToExcel(filteredMovements, `كشف_حركات_الميناء_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleExportPdf = async () => {
+    const selectedBerthObj = berths.find((b) => b.id === selectedBerth || b.name === selectedBerth);
+    await exportMovementsToOfficialPdf(
+      filteredMovements,
+      'كشف حركات الشاحنات والحاويات (الاسطمبة الرسمية)',
+      selectedBerthObj?.name
+    );
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -182,12 +197,35 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             </button>
 
             <button
+              onClick={handleExportPdf}
+              className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              title="تنزيل كشف الحركات كملف PDF رسمي (بدون عمولات ومبالغ) لتقديمه لمكتب الميناء"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>تحميل PDF الاسطمبة الرسمية</span>
+            </button>
+
+            <button
               onClick={handleExportExcel}
               className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
             >
               <Download className="w-4 h-4" />
               <span>تصدير Excel بالاسطمبة</span>
             </button>
+
+            {canViewFinancials && (
+              <button
+                onClick={() => {
+                  setLinkingMovement(null);
+                  setIsCashierModalOpen(true);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="ربط فاتورة الكاشير من إيصال الميناء برقم الحاوية والسيارة"
+              >
+                <Link2 className="w-4 h-4" />
+                <span>ربط فاتورة كاشير</span>
+              </button>
+            )}
 
             <button
               onClick={handlePrint}
@@ -211,7 +249,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             {isAdmin && movements.length > 0 && onClearAllMovements && (
               <button
                 onClick={onClearAllMovements}
-                className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                className="bg-slate-600 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
                 title="مسح وتصفير كافة الشحنات لتسليم السيستم للعميل"
               >
                 <Trash2 className="w-4 h-4" />
@@ -440,7 +478,16 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                     {canViewFinancials && (
                       <>
                         <td className="p-2 border border-slate-200 text-center font-mono font-bold">
-                          {(m.cashier_invoice || 0).toLocaleString()}
+                          <div>{(m.cashier_invoice || 0).toLocaleString()}</div>
+                          {m.cashier_receipt_no ? (
+                            <span className="inline-block mt-0.5 text-[9.5px] font-mono bg-indigo-50 text-indigo-800 px-1.5 py-0.2 rounded border border-indigo-200">
+                              #{m.cashier_receipt_no}
+                            </span>
+                          ) : (
+                            <span className="inline-block mt-0.5 text-[9px] text-slate-400">
+                              غير مربوط
+                            </span>
+                          )}
                         </td>
                         <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700">
                           {(m.system_commission || 200).toLocaleString()}
@@ -476,6 +523,18 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                     {/* Actions */}
                     <td className="p-2 border border-slate-200 text-center no-print whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1">
+                        {canViewFinancials && (
+                          <button
+                            onClick={() => {
+                              setLinkingMovement(m);
+                              setIsCashierModalOpen(true);
+                            }}
+                            className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded"
+                            title="ربط وتحديث فاتورة الكاشير"
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => onEditMovement(m)}
                           className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
@@ -524,6 +583,20 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name || 'رصيف الميناء'
               : 'محطة تشغيل وتفريغ الحاويات والشاحنات - إدارة الحركة'
           }
+        />
+      )}
+
+      {/* Cashier Linking Modal */}
+      {isCashierModalOpen && (
+        <CashierLinkingModal
+          isOpen={isCashierModalOpen}
+          onClose={() => {
+            setIsCashierModalOpen(false);
+            setLinkingMovement(null);
+          }}
+          movements={movements}
+          onSaveMovement={(m) => onEditMovement(m as Movement)}
+          initialMovement={linkingMovement}
         />
       )}
     </div>

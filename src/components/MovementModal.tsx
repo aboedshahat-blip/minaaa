@@ -333,14 +333,22 @@ export const MovementModal: React.FC<MovementModalProps> = ({
 
               <div className="md:col-span-3">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  اسم السائق
+                  اسم السائق (العميل) *
                 </label>
                 <input
                   type="text"
-                  placeholder="الاسم الثلاثي أو الرباعي للسائق"
+                  placeholder="الاسم الثلاثي أو الرباعي للسائق (المؤسسة هي باسم السائق)"
                   value={formData.driver_name || ''}
-                  onChange={(e) => setFormData({ ...formData, driver_name: e.target.value })}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  onChange={(e) => {
+                    const newDriver = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      driver_name: newDriver,
+                      // Automatically match or create customer by driver name if not set
+                      customer_name: (!prev.customer_name || prev.customer_name === prev.driver_name) ? newDriver : prev.customer_name,
+                    }));
+                  }}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold"
                 />
               </div>
             </div>
@@ -423,7 +431,37 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4 pb-4 border-b border-blue-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    مسلسل / رقم فاتورة الكاشير (الميناء)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: 0047-01-1/01-261021"
+                    value={formData.cashier_receipt_no || ''}
+                    onChange={(e) => setFormData({ ...formData, cashier_receipt_no: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono font-bold text-indigo-900"
+                  />
+                  <span className="text-[10px] text-slate-500">من واقع إيصال مكتب الكاشير</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    تصنيف الحجز / الخدمة
+                  </label>
+                  <select
+                    value={formData.booking_category || 'وارد حاويات'}
+                    onChange={(e) => setFormData({ ...formData, booking_category: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800"
+                  >
+                    <option value="وارد حاويات">وارد حاويات</option>
+                    <option value="صادر حاويات">صادر حاويات</option>
+                    <option value="تعتيق حاوية فارغة">تعتيق حاوية فارغة</option>
+                    <option value="شحن بضائع عامة">شحن بضائع عامة</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     قيمة فاتورة كاشير (ج.م)
@@ -437,7 +475,9 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-900"
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     عمولة المنظومة (ج.م) [متغيرة]
