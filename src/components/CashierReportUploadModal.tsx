@@ -41,6 +41,13 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const [matchResults, setMatchResults] = useState<CashierMatchResult[]>([]);
   const [updatedMovementsList, setUpdatedMovementsList] = useState<Movement[]>([]);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [isImageMode, setIsImageMode] = useState(false);
+  const [selectedMovementId, setSelectedMovementId] = useState('');
+  const [manualReceiptNo, setManualReceiptNo] = useState('');
+  const [manualAmount, setManualAmount] = useState<number | ''>('');
+  const [manualCategory, setManualCategory] = useState('وارد حاويات');
+  const [imageSearchTerm, setImageSearchTerm] = useState('');
 
   if (!isOpen) return null;
 
@@ -50,6 +57,19 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
     setLoading(true);
     setFileName(file.name);
+
+    const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
+
+    if (isImg) {
+      const url = URL.createObjectURL(file);
+      setImagePreviewUrl(url);
+      setIsImageMode(true);
+      setLoading(false);
+      return;
+    }
+
+    setIsImageMode(false);
+    setImagePreviewUrl(null);
 
     try {
       // 1. Parse Cashier report
@@ -80,6 +100,46 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLinkFromImage = () => {
+    if (!selectedMovementId) {
+      alert('يرجى اختيار الشاحنة / الحركة المراد ربط الفاتورة بها');
+      return;
+    }
+    if (!manualAmount || Number(manualAmount) <= 0) {
+      alert('يرجى إدخال مبلغ فاتورة الكاشير');
+      return;
+    }
+
+    const sysComm = settings.default_system_commission ?? 200;
+    const nafezComm = settings.default_nafez_commission ?? 0;
+    const cashierVal = Number(manualAmount);
+    const newTotal = cashierVal + sysComm + nafezComm;
+
+    const updated = movements.map((m) => {
+      if (m.id === selectedMovementId) {
+        const paid = m.paid_amount || 0;
+        return {
+          ...m,
+          cashier_receipt_no: manualReceiptNo || m.cashier_receipt_no,
+          cashier_invoice: cashierVal,
+          booking_category: manualCategory || m.booking_category,
+          system_commission: m.system_commission || sysComm,
+          nafez_commission: m.nafez_commission || nafezComm,
+          total_amount: newTotal,
+          remaining_amount: Math.max(0, newTotal - paid),
+          payment_status: paid >= newTotal && newTotal > 0 ? ('paid' as const) : paid > 0 ? ('partial' as const) : ('unpaid' as const),
+        };
+      }
+      return m;
+    });
+
+    onBatchUpdateMovements(updated);
+    alert('✓ تم بنجاح ربط وتحديث فاتورة الكاشير للشاحنة المختارة وحساب العميل!');
+    setManualReceiptNo('');
+    setManualAmount('');
+    setSelectedMovementId('');
   };
 
   const handleApplyUpdates = () => {
@@ -131,7 +191,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf, .xlsx, .xls, .docx, .doc, .csv"
+              accept=".pdf, .xlsx, .xls, .docx, .doc, .csv, .png, .jpg, .jpeg, .webp, image/*"
               onChange={handleFileUpload}
               className="hidden"
             />
@@ -148,13 +208,166 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                   ? 'جاري قراءة تقرير الكاشير واستخراج الفواتير ومطابقة الشاحنات...'
                   : fileName
                   ? `تم اختيار الملف: ${fileName}`
-                  : 'اضغط هنا لرفع تقرير فواتير الكاشير (PDF أو Excel أو Word) أو اسحب الملف هنا'}
+                  : 'اضغط هنا لرفع تقرير فواتير الكاشير (PDF أو Excel أو Word أو صورة) أو اسحب الملف هنا'}
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                يدعم قراءة تقرير فواتير كاشير الشاحنات (Red Sea Container Terminal وموانئ السخنة وبورسعيد والدخيلة والإسكندرية)
+                يدعم ملفات PDF وExcel وWord، وصور فواتير الكاشير (.png, .jpg) الصادرة من موانئ السخنة والإسكندرية وبورسعيد
               </p>
             </div>
           </div>
+
+          {/* Image Mode UI if User Uploaded an Image */}
+          {isImageMode && imagePreviewUrl && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="bg-indigo-600 text-white text-xs font-bold px-2.5 py-1 rounded-md">
+                    وضع ربط فاتورة من صورة 📷
+                  </span>
+                  <span className="text-xs text-slate-600 font-semibold">
+                    معاينة الصورة وتحديد الشاحنة لتسجيل رقم ومبلغ الكاشير
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsImageMode(false);
+                    setImagePreviewUrl(null);
+                    setFileName('');
+                  }}
+                  className="text-xs text-rose-600 hover:text-rose-800 font-bold"
+                >
+                  إلغاء الصورة وتغيير الملف
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Image Preview Box */}
+                <div className="border border-slate-300 rounded-xl overflow-hidden bg-black/5 flex flex-col items-center justify-center p-2 max-h-96">
+                  <img
+                    src={imagePreviewUrl}
+                    alt="فاتورة الكاشير المرفوعة"
+                    className="max-h-80 w-auto object-contain rounded shadow"
+                  />
+                  <span className="text-[11px] text-slate-500 mt-2">
+                    {fileName} (معاينة صورة الفاتورة)
+                  </span>
+                </div>
+
+                {/* Form to link to movement */}
+                <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Receipt className="w-4 h-4 text-emerald-600" />
+                    <span>بيانات الفاتورة وتحديد الشاحنة / السائق:</span>
+                  </h4>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      ابحث برقم الشاحنة أو اسم السائق أو رقم الحاوية:
+                    </label>
+                    <input
+                      type="text"
+                      value={imageSearchTerm}
+                      onChange={(e) => setImageSearchTerm(e.target.value)}
+                      placeholder="ابحث هنا لفلترة الشاحنات..."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      اختر الشاحنة / الحركة المراد ربطها: *
+                    </label>
+                    <select
+                      value={selectedMovementId}
+                      onChange={(e) => {
+                        const mId = e.target.value;
+                        setSelectedMovementId(mId);
+                        const found = movements.find((m) => m.id === mId);
+                        if (found) {
+                          if (found.cashier_receipt_no) setManualReceiptNo(found.cashier_receipt_no);
+                          if (found.cashier_invoice) setManualAmount(found.cashier_invoice);
+                        }
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900"
+                    >
+                      <option value="">-- اضغط لاختيار الشاحنة --</option>
+                      {movements
+                        .filter((m) => {
+                          if (!imageSearchTerm) return true;
+                          const t = imageSearchTerm.toLowerCase();
+                          return (
+                            m.truck_no?.toLowerCase().includes(t) ||
+                            m.trailer_no?.toLowerCase().includes(t) ||
+                            m.driver_name?.toLowerCase().includes(t) ||
+                            m.container_no?.toLowerCase().includes(t)
+                          );
+                        })
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            [{m.seq}] شاحنة: {m.truck_no} | سائق: {m.driver_name || m.customer_name} | حاوية: {m.container_no || '-'}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        مسلسل فاتورة الكاشير:
+                      </label>
+                      <input
+                        type="text"
+                        value={manualReceiptNo}
+                        onChange={(e) => setManualReceiptNo(e.target.value)}
+                        placeholder="e.g. 0039-03-1/01-261020"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        مبلغ فاتورة الكاشير (ج.م): *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={manualAmount}
+                        onChange={(e) => setManualAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="e.g. 242.15"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-black text-indigo-700 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      تصنيف الحجز:
+                    </label>
+                    <select
+                      value={manualCategory}
+                      onChange={(e) => setManualCategory(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold"
+                    >
+                      <option value="وارد حاويات">وارد حاويات</option>
+                      <option value="صادر حاويات">صادر حاويات</option>
+                      <option value="تعتيق حاوية فارغة">تعتيق حاوية فارغة</option>
+                      <option value="استلام حاوية فارغة">استلام حاوية فارغة</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLinkFromImage}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl shadow transition flex items-center justify-center gap-2 text-xs mt-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>حفظ وربط الفاتورة بهذه الشاحنة والعميل فوراً</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Results Analysis */}
           {parsedEntries.length > 0 && (

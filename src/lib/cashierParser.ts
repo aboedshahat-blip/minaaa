@@ -44,11 +44,21 @@ export const normalizeArabic = (text: string): string => {
 };
 
 /**
+ * Extracts clean 3-4 digits for Egyptian vehicle license plates.
+ */
+export const extractPlateDigits = (text: string): string => {
+  if (!text) return '';
+  // Look for 3 or 4 digit plate numbers first
+  const match = text.match(/\b\d{3,4}\b/);
+  if (match) return match[0];
+  return text.replace(/\D/g, '');
+};
+
+/**
  * Extracts clean digits from a string.
  */
 export const extractDigits = (text: string): string => {
-  if (!text) return '';
-  return text.replace(/\D/g, '');
+  return extractPlateDigits(text);
 };
 
 /**
@@ -152,16 +162,12 @@ export const parseCashierTextLines = (lines: string[]): CashierInvoiceEntry[] =>
       else if (context.includes('وارد')) booking_category = 'وارد حاويات';
       else if (context.includes('استلام')) booking_category = 'استلام حاوية فارغة';
 
-      // Look for vehicle plate string
-      // Usually between receipt_no and booking_category or containing '/'
-      let vehicleStr = '';
-      const slashParts = line.split('/');
-      if (slashParts.length >= 2) {
-        // One part has the receipt, another has vehicle plates
-        vehicleStr = line;
-      } else {
-        vehicleStr = context;
-      }
+      // Remove receipt number from context so its internal slash and digits do not pollute plate numbers
+      const cleanLine = line.replace(receipt_no, ' ');
+      const cleanContext = context.replace(receipt_no, ' ');
+
+      // Look for vehicle plate string containing '/' between truck and trailer
+      let vehicleStr = cleanLine.includes('/') ? cleanLine : cleanContext;
 
       const parsedVeh = parseVehicleString(vehicleStr);
 

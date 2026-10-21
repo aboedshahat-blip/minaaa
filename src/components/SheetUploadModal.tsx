@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
 import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import { Customer, Berth, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
 import {
   Upload,
   FileSpreadsheet,
@@ -13,6 +14,7 @@ import {
   ArrowRight,
   Filter,
   FileDown,
+  Printer,
 } from 'lucide-react';
 
 interface SheetUploadModalProps {
@@ -45,6 +47,39 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashierInvoice, setDefaultCashierInvoice] = useState<number>(0);
   const [applyDefaultCommissions, setApplyDefaultCommissions] = useState<boolean>(true);
+  const [isOfficialSheetModalOpen, setIsOfficialSheetModalOpen] = useState<boolean>(false);
+
+  const previewMovements: Movement[] = useMemo(() => {
+    const targetBerth = berths.find((b) => b.id === selectedBerthId);
+    return parsedRows.map((r, i) => ({
+      ...r,
+      id: `temp-${i}`,
+      seq: i + 1,
+      movement_date: r.movement_date || new Date().toISOString().split('T')[0],
+      berth_id: targetBerth?.id || '',
+      berth_name: targetBerth?.name || 'رصيف الميناء',
+      customer_name: r.driver_name || '',
+      truck_no: r.truck_no || '',
+      truck_weight: r.truck_weight ?? 7.5,
+      truck_axles: r.truck_axles ?? 20,
+      trailer_no: r.trailer_no || '',
+      trailer_weight: r.trailer_weight ?? 11.5,
+      trailer_axles: r.trailer_axles ?? 30,
+      driver_name: r.driver_name || '',
+      declaration_no: r.declaration_no || '',
+      container_no: r.container_no || '',
+      container_desc: r.container_desc || '',
+      container_path: r.container_path || '',
+      cashier_invoice: 0,
+      system_commission: 0,
+      nafez_commission: 0,
+      total_amount: 0,
+      payment_status: 'unpaid',
+      paid_amount: 0,
+      remaining_amount: 0,
+      created_at: '',
+    }));
+  }, [parsedRows, selectedBerthId, berths]);
 
   if (!isOpen) return null;
 
@@ -443,12 +478,12 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
               <>
                 <button
                   type="button"
-                  onClick={handleExportPdfDirectly}
+                  onClick={() => setIsOfficialSheetModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold transition shadow-sm"
-                  title="تنزيل كشف الحركات بصيغة PDF بالاسطمبة الرسمية لتقديمه للمكتب"
+                  title="معاينة وطباعة وتنزيل كشف الحركات المجمع الرسمي لتقديمه للمكتب (خالٍ تماماً من العمولات والمبالغ)"
                 >
-                  <FileDown className="w-3.5 h-3.5" />
-                  <span>تحميل PDF الاسطمبة الرسمية</span>
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>معاينة وطباعة كشف المكتب (بدون عمولات)</span>
                 </button>
 
                 <button
@@ -483,6 +518,17 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Official Manifest Print Preview Modal */}
+      {isOfficialSheetModalOpen && (
+        <OfficialSheetPrintModal
+          isOpen={isOfficialSheetModalOpen}
+          onClose={() => setIsOfficialSheetModalOpen(false)}
+          movements={previewMovements}
+          title="كشف حركات وتفريغ الشاحنات والحاويات المجمع (الاسطمبة الرسمية)"
+          berthName={berths.find((b) => b.id === selectedBerthId)?.name}
+        />
+      )}
     </div>
   );
 };

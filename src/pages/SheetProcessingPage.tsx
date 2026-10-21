@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
 import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import { useAuth } from '../contexts/AuthContext';
+import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import {
   FileSpreadsheet,
   Upload,
@@ -12,6 +13,7 @@ import {
   Check,
   Eye,
   Plus,
+  Printer,
   RefreshCw,
   FileDown,
 } from 'lucide-react';
@@ -42,6 +44,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashier, setDefaultCashier] = useState<number>(0);
   const [applyCommission, setApplyCommission] = useState(true);
+  const [isOfficialSheetModalOpen, setIsOfficialSheetModalOpen] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -174,14 +177,15 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     setFileName('');
   };
 
-  const handleExportProcessedPdf = async () => {
-    if (rows.length === 0) return;
-    const tempMovements: Movement[] = rows.map((r, i) => ({
+  const previewMovements: Movement[] = useMemo(() => {
+    const targetBerth = berths.find((b) => b.id === selectedBerthId);
+    return rows.map((r, i) => ({
       ...r,
       id: `temp-${i}`,
       seq: i + 1,
-      movement_date: new Date().toISOString().split('T')[0],
-      berth_name: berths.find((b) => b.id === selectedBerthId)?.name || '',
+      movement_date: r.movement_date || new Date().toISOString().split('T')[0],
+      berth_id: targetBerth?.id || '',
+      berth_name: targetBerth?.name || 'رصيف الميناء',
       customer_name: r.driver_name || '',
       truck_no: r.truck_no || '',
       truck_weight: r.truck_weight ?? 7.5,
@@ -203,11 +207,11 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       remaining_amount: 0,
       created_at: '',
     }));
-    await exportMovementsToOfficialPdf(
-      tempMovements,
-      'كشف تفريغ الشاحنات والحاويات (الاسطمبة المعتمدة)',
-      berths.find((b) => b.id === selectedBerthId)?.name
-    );
+  }, [rows, selectedBerthId, berths]);
+
+  const handleExportProcessedPdf = async () => {
+    if (rows.length === 0) return;
+    setIsOfficialSheetModalOpen(true);
   };
 
   const handleExportProcessedSheet = () => {
@@ -328,12 +332,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={handleExportProcessedPdf}
-                className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
-                title="تصدير وتنزيل ملف PDF بالاسطمبة الرسمية (بدون العمولات) لتقديمه للمكتب"
+                onClick={() => setIsOfficialSheetModalOpen(true)}
+                className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 border border-rose-600/30"
+                title="معاينة وطباعة وتنزيل الكشف المجمع الرسمي لتقديمه للمكتب والمحاسبة (خالٍ تماماً من أي عمولات أو خدمات أو مبالغ)"
               >
-                <FileDown className="w-3.5 h-3.5" />
-                <span>تحميل PDF الاسطمبة الرسمية</span>
+                <Printer className="w-4 h-4" />
+                <span>1️⃣ معاينة وطباعة / تنزيل كشف المكتب (بدون عمولات)</span>
               </button>
 
               <button
@@ -553,6 +557,17 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Official Clean Manifest Print Modal (NO COMMISSIONS, NO NAFEZ, NO TOTALS) */}
+      {isOfficialSheetModalOpen && (
+        <OfficialSheetPrintModal
+          isOpen={isOfficialSheetModalOpen}
+          onClose={() => setIsOfficialSheetModalOpen(false)}
+          movements={previewMovements}
+          title="كشف حركات وتفريغ الشاحنات والحاويات المجمع (الاسطمبة الرسمية)"
+          berthName={berths.find((b) => b.id === selectedBerthId)?.name}
+        />
       )}
     </div>
   );

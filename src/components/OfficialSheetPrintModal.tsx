@@ -38,6 +38,33 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+      {/* Print isolation style: Only print the clean 12-column manifest */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #official-clean-manifest-print-zone, #official-clean-manifest-print-zone * {
+            visibility: visible !important;
+          }
+          #official-clean-manifest-print-zone {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 10mm !important;
+            background: white !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          @page {
+            size: landscape;
+            margin: 8mm;
+          }
+        }
+      `}</style>
+
       <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full overflow-hidden border border-slate-300 flex flex-col max-h-[95vh]">
         {/* Modal Controls (Hidden in Print) */}
         <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-3 no-print">
@@ -47,7 +74,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
               <span>معاينة وطباعة الكشف المجمع للمكتب (خالٍ تماماً من العمولات والمبالغ)</span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              هذا هو الكشف الرسمي المعتمد بـ 12 عموداً لتقديمه لمكتب الميناء لإنهاء الإجراءات والمحاسبة
+              الاسطمبة الرسمية المعتمدة بـ 12 عموداً فقط لتقديمها لمكتب الميناء لإنهاء الإجراءات والمحاسبة
             </p>
           </div>
 
@@ -87,7 +114,10 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
 
         {/* Printable Paper View */}
         <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60 print:bg-white print:p-0">
-          <div className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200 print:border-none print:shadow-none max-w-5xl mx-auto text-slate-900 font-sans">
+          <div
+            id="official-clean-manifest-print-zone"
+            className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200 print:border-none print:shadow-none max-w-5xl mx-auto text-slate-900 font-sans"
+          >
             {/* Official Sheet Header */}
             <div className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
               <div className="flex items-center justify-between text-xs text-slate-600 mb-2">

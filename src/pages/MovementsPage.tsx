@@ -285,11 +285,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             {canViewFinancials && filteredMovements.length > 0 && (
               <button
                 onClick={() => setIsInvoiceModalOpen(true)}
-                className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
-                title="إصدار وطباعة فاتورة حساب مجمعة بالحركات المفلترة باسم المكان أو الرصيف"
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="فاتورة ومطالبة حساب للعميل أو السائق بالمبالغ والعمولات (تُستخدم بعد إدخال ومطابقة الكاشير)"
               >
                 <FileText className="w-4 h-4" />
-                <span>إصدار فاتورة مكان ({filteredMovements.length})</span>
+                <span>فاتورة مطالبة حساب داخلية ({filteredMovements.length})</span>
               </button>
             )}
 
