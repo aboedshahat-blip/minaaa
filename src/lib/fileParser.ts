@@ -104,49 +104,81 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         /^[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}$/i.test(t)
       );
 
-      if (containerIdx === -1) {
-        // Line without container code is skipped
-        return;
+      let container_no = '';
+      let declaration_no = '';
+      let afterDec: string[] = [];
+
+      if (containerIdx !== -1) {
+        container_no = rowTokens[containerIdx].replace(/\s+/g, '').toUpperCase();
+        if (rowTokens[containerIdx + 1] && /^\d{5,7}$/.test(rowTokens[containerIdx + 1])) {
+          declaration_no = rowTokens[containerIdx + 1];
+        }
+        afterDec = rowTokens.slice(containerIdx + 2);
+      } else {
+        // Line without container code - check for declaration number (5-7 digits)
+        const decIdx = rowTokens.findIndex((t, idx) => idx > 0 && /^\d{5,7}$/.test(t));
+        if (decIdx !== -1) {
+          declaration_no = rowTokens[decIdx];
+          afterDec = rowTokens.slice(decIdx + 1);
+        } else {
+          // Check if line contains truck weight (7.5 or 7,5) and trailer weight (11 or 11.5)
+          const hasWeights = rowTokens.some((t) => t === '7.5' || t === '7,5');
+          if (hasWeights) {
+            afterDec = rowTokens.slice(1);
+          } else {
+            return; // Not a data row
+          }
+        }
       }
 
-      const container_no = rowTokens[containerIdx].replace(/\s+/g, '').toUpperCase();
       const container_path = rowTokens[0] === 'وارد' || rowTokens[0] === 'صادر' ? rowTokens[0] : 'وارد';
       const container_desc = container_path;
 
-      // Declaration number is typically the 5 to 7 digit number right after the container code
-      let declaration_no = '';
-      if (rowTokens[containerIdx + 1] && /^\d{5,7}$/.test(rowTokens[containerIdx + 1])) {
-        declaration_no = rowTokens[containerIdx + 1];
-      }
-
-      const afterDec = rowTokens.slice(containerIdx + 2);
-
-      // Default weights and axles according to standard Egyptian port specs
+      // Dynamic weights and axles
       let truck_axles = 20;
       let truck_weight = 7.5;
       let trailer_axles = 30;
       let trailer_weight = 11.5;
 
-      // Tokens before '30' are the driver's name
-      const thirtyIdx = afterDec.findIndex((t) => t === '30');
+      // Find trailer axles index ('30' or '20')
+      const axleIdx = afterDec.findIndex((t) => t === '30' || t === '20');
       let driver_name = '';
-      if (thirtyIdx > 0) {
-        driver_name = afterDec.slice(0, thirtyIdx).join(' ');
+      if (axleIdx > 0) {
+        driver_name = afterDec.slice(0, axleIdx).join(' ');
+        trailer_axles = Number(afterDec[axleIdx]) || 30;
       }
 
-      // Tokens between '11.5' and '20' are the trailer plate number and letters
-      const elevenIdx = afterDec.findIndex((t) => t === '11.5' || t === '11,5');
-      const twentyIdx = afterDec.findIndex((t, idx) => t === '20' && idx > elevenIdx);
+      // Trailer weight index ('11.5', '11,5', or '11')
+      const elevenIdx = afterDec.findIndex(
+        (t, idx) => (t === '11.5' || t === '11,5' || t === '11') && idx >= axleIdx
+      );
+      if (elevenIdx !== -1) {
+        trailer_weight = Number(afterDec[elevenIdx].replace(',', '.')) || 11.5;
+      }
+
+      // Trailer plate is between elevenIdx and truck_axles ('20')
+      const truckAxleIdx = afterDec.findIndex(
+        (t, idx) => (t === '20' || t === '30') && idx > elevenIdx
+      );
       let trailer_no = '';
-      if (elevenIdx !== -1 && twentyIdx !== -1 && twentyIdx > elevenIdx + 1) {
-        trailer_no = afterDec.slice(elevenIdx + 1, twentyIdx).join(' ');
+      if (elevenIdx !== -1 && truckAxleIdx !== -1 && truckAxleIdx > elevenIdx + 1) {
+        trailer_no = afterDec.slice(elevenIdx + 1, truckAxleIdx).join(' ');
+      }
+
+      // Truck weight ('7.5' or '7,5')
+      const sevenIdx = afterDec.findIndex(
+        (t, idx) => (t === '7.5' || t === '7,5') && idx >= truckAxleIdx
+      );
+      if (sevenIdx !== -1) {
+        truck_weight = Number(afterDec[sevenIdx].replace(',', '.')) || 7.5;
       }
 
       // Tokens after '7.5' are the truck plate number and letters
-      const sevenIdx = afterDec.findIndex((t) => t === '7.5' || t === '7,5');
       let truck_no = '';
       if (sevenIdx !== -1 && sevenIdx < afterDec.length - 1) {
-        const truckTokens = afterDec.slice(sevenIdx + 1).filter((t) => !/^\d{1,2}$/.test(t)); // Filter out sequence number
+        const truckTokens = afterDec
+          .slice(sevenIdx + 1)
+          .filter((t) => !/^\d{1,2}$/.test(t)); // Filter out sequence number
         truck_no = truckTokens.join(' ');
       }
 

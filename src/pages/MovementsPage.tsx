@@ -20,38 +20,46 @@ import {
   FileText,
   FileDown,
   Link2,
+  Receipt,
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 import { CashierLinkingModal } from '../components/CashierLinkingModal';
+import { CashierReportUploadModal } from '../components/CashierReportUploadModal';
+import { SystemSettings } from '../types';
 
 interface MovementsPageProps {
   movements: Movement[];
   customers: Customer[];
   berths: Berth[];
+  settings?: SystemSettings;
   onOpenAddModal: () => void;
   onOpenUploadModal: () => void;
   onEditMovement: (movement: Movement) => void;
   onDeleteMovement: (id: string) => void;
   onClearAllMovements?: () => void;
   onTogglePaid: (movement: Movement) => void;
+  onBatchUpdateMovements?: (updatedMovements: Movement[]) => void;
 }
 
 export const MovementsPage: React.FC<MovementsPageProps> = ({
   movements,
   customers,
   berths,
+  settings,
   onOpenAddModal,
   onOpenUploadModal,
   onEditMovement,
   onDeleteMovement,
   onClearAllMovements,
   onTogglePaid,
+  onBatchUpdateMovements,
 }) => {
   const { canViewFinancials, isAdmin } = useAuth();
 
   // Modals state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
   const [isCashierModalOpen, setIsCashierModalOpen] = useState(false);
+  const [isCashierReportModalOpen, setIsCashierReportModalOpen] = useState(false);
   const [linkingMovement, setLinkingMovement] = useState<Movement | null>(null);
 
   // Filters state
@@ -213,17 +221,28 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <span>تصدير Excel بالاسطمبة</span>
             </button>
 
+            {canViewFinancials && onBatchUpdateMovements && (
+              <button
+                onClick={() => setIsCashierReportModalOpen(true)}
+                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="رفع تقرير فواتير الكاشير الصادر من الميناء وتحديث أرقام ومبالغ الفواتير آلياً ومطابقة الشاحنات"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>رفع تقرير فواتير الكاشير آلياً</span>
+              </button>
+            )}
+
             {canViewFinancials && (
               <button
                 onClick={() => {
                   setLinkingMovement(null);
                   setIsCashierModalOpen(true);
                 }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
-                title="ربط فاتورة الكاشير من إيصال الميناء برقم الحاوية والسيارة"
+                className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                title="ربط يدوي لفاتورة الكاشير من إيصال الميناء برقم الحاوية والسيارة"
               >
                 <Link2 className="w-4 h-4" />
-                <span>ربط فاتورة كاشير</span>
+                <span>ربط يدوي لكاشير</span>
               </button>
             )}
 
@@ -597,6 +616,29 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           movements={movements}
           onSaveMovement={(m) => onEditMovement(m as Movement)}
           initialMovement={linkingMovement}
+        />
+      )}
+
+      {/* Cashier Automated Report Matching Modal */}
+      {isCashierReportModalOpen && onBatchUpdateMovements && (
+        <CashierReportUploadModal
+          isOpen={isCashierReportModalOpen}
+          onClose={() => setIsCashierReportModalOpen(false)}
+          movements={movements}
+          onBatchUpdateMovements={onBatchUpdateMovements}
+          settings={
+            settings || {
+              default_system_commission: 200,
+              default_nafez_commission: 0,
+              default_truck_axles: 20,
+              default_truck_weight: 7.5,
+              default_trailer_axles: 30,
+              default_trailer_weight: 11.5,
+              supabase_url: '',
+              supabase_anon_key: '',
+              admin_pin: '',
+            }
+          }
         />
       )}
     </div>

@@ -231,6 +231,12 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleBatchUpdateMovements = (updatedMovements: Movement[]) => {
+    setMovements(updatedMovements);
+    saveMovements(updatedMovements);
+    updatedMovements.forEach((m) => syncMovementToSupabase(m));
+  };
+
   // Customer Handlers
   const handleSaveCustomer = (customerData: Customer) => {
     if (!canManageCustomers) {
@@ -354,6 +360,7 @@ const AppContent: React.FC = () => {
             movements={movements}
             customers={customers}
             berths={berths}
+            settings={settings}
             onOpenAddModal={() => {
               setEditingMovement(null);
               setIsMovementModalOpen(true);
@@ -366,6 +373,7 @@ const AppContent: React.FC = () => {
             onDeleteMovement={handleDeleteMovement}
             onClearAllMovements={handleClearAllMovements}
             onTogglePaid={handleTogglePaid}
+            onBatchUpdateMovements={handleBatchUpdateMovements}
           />
         )}
 
