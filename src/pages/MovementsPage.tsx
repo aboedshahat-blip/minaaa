@@ -25,6 +25,7 @@ import {
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 import { CashierLinkingModal } from '../components/CashierLinkingModal';
 import { CashierReportUploadModal } from '../components/CashierReportUploadModal';
+import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
 
 interface MovementsPageProps {
@@ -58,6 +59,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Modals state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+  const [isOfficialSheetModalOpen, setIsOfficialSheetModalOpen] = useState(false);
   const [isCashierModalOpen, setIsCashierModalOpen] = useState(false);
   const [isCashierReportModalOpen, setIsCashierReportModalOpen] = useState(false);
   const [linkingMovement, setLinkingMovement] = useState<Movement | null>(null);
@@ -197,12 +199,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
           <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={handleExportPdf}
+              onClick={() => setIsOfficialSheetModalOpen(true)}
               className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-black px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition flex items-center gap-2 border border-rose-500/30"
-              title="تنزيل الكشف المجمع الرسمي لتقديمه للمكتب والمحاسبة (خالٍ من العمولات والمبالغ)"
+              title="معاينة وطباعة وتنزيل الكشف المجمع الرسمي لتقديمه للمكتب والمحاسبة (خالٍ تماماً من أي عمولات أو خدمات أو مبالغ)"
             >
-              <FileDown className="w-4 h-4" />
-              <span>1️⃣ تنزيل PDF الكشف المجمع للمكتب</span>
+              <Printer className="w-4 h-4" />
+              <span>1️⃣ طباعة / تنزيل الكشف المجمع للمكتب</span>
             </button>
 
             {canViewFinancials && onBatchUpdateMovements && (
@@ -250,6 +252,15 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             </button>
 
             <button
+              onClick={() => setIsOfficialSheetModalOpen(true)}
+              className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+              title="طباعة وتنزيل كشف الحركات المجمع الرسمي للمكتب بالاسطمبة الرسمية (بدون عمولات)"
+            >
+              <Printer className="w-4 h-4" />
+              <span>طباعة كشف المكتب المجمع</span>
+            </button>
+
+            <button
               onClick={handleExportExcel}
               className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
             >
@@ -271,14 +282,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               </button>
             )}
 
-            <button
-              onClick={handlePrint}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-lg transition flex items-center gap-1.5"
-            >
-              <Printer className="w-4 h-4" />
-              <span>طباعة</span>
-            </button>
-
             {canViewFinancials && filteredMovements.length > 0 && (
               <button
                 onClick={() => setIsInvoiceModalOpen(true)}
@@ -286,7 +289,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 title="إصدار وطباعة فاتورة حساب مجمعة بالحركات المفلترة باسم المكان أو الرصيف"
               >
                 <FileText className="w-4 h-4" />
-                <span>إصدار فاتورة باسم المكان ({filteredMovements.length})</span>
+                <span>إصدار فاتورة مكان ({filteredMovements.length})</span>
               </button>
             )}
 
@@ -457,14 +460,14 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <th className="p-2.5 border border-slate-700 whitespace-nowrap min-w-[150px]">وصف الحاوية</th>
                 <th className="p-2.5 border border-slate-700 whitespace-nowrap min-w-[140px]">مسار الحاوية</th>
                 
-                {/* Financial columns visible only to Admin and Accountant */}
+                {/* Financial columns visible only to Admin and Accountant, NEVER printed on manifest */}
                 {canViewFinancials && (
                   <>
-                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950">فاتورة كاشير</th>
-                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950">عمولة المنظومة</th>
-                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950">نافذ</th>
-                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950">الإجمالي</th>
-                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950">الحالة والمتبقي</th>
+                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950 no-print">فاتورة كاشير</th>
+                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950 no-print">عمولة المنظومة</th>
+                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950 no-print">نافذ</th>
+                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950 no-print">الإجمالي</th>
+                    <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap bg-blue-950 no-print">الحالة والمتبقي</th>
                   </>
                 )}
 
@@ -518,10 +521,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       {m.container_path || '-'}
                     </td>
 
-                    {/* Financial Cells */}
+                    {/* Financial Cells (Hidden in print) */}
                     {canViewFinancials && (
                       <>
-                        <td className="p-2 border border-slate-200 text-center font-mono font-bold">
+                        <td className="p-2 border border-slate-200 text-center font-mono font-bold no-print">
                           <div>{(m.cashier_invoice || 0).toLocaleString()}</div>
                           {m.cashier_receipt_no ? (
                             <span className="inline-block mt-0.5 text-[9.5px] font-mono bg-indigo-50 text-indigo-800 px-1.5 py-0.2 rounded border border-indigo-200">
@@ -533,16 +536,16 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                             </span>
                           )}
                         </td>
-                        <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700">
+                        <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700 no-print">
                           {(m.system_commission || 200).toLocaleString()}
                         </td>
-                        <td className="p-2 border border-slate-200 text-center font-mono font-bold text-indigo-700">
+                        <td className="p-2 border border-slate-200 text-center font-mono font-bold text-indigo-700 no-print">
                           {(m.nafez_commission || 0).toLocaleString()}
                         </td>
-                        <td className="p-2 border border-slate-200 text-center font-mono font-black text-slate-900 bg-slate-50">
+                        <td className="p-2 border border-slate-200 text-center font-mono font-black text-slate-900 bg-slate-50 no-print">
                           {(m.total_amount || 0).toLocaleString()}
                         </td>
-                        <td className="p-2 border border-slate-200 text-center whitespace-nowrap">
+                        <td className="p-2 border border-slate-200 text-center whitespace-nowrap no-print">
                           {m.payment_status === 'paid' && (
                             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
                               <CheckCircle className="w-3 h-3" />
@@ -626,6 +629,21 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             selectedBerth
               ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name || 'رصيف الميناء'
               : 'محطة تشغيل وتفريغ الحاويات والشاحنات - إدارة الحركة'
+          }
+        />
+      )}
+
+      {/* Official Clean Manifest Print Modal (NO COMMISSIONS, NO TOTALS) */}
+      {isOfficialSheetModalOpen && (
+        <OfficialSheetPrintModal
+          isOpen={isOfficialSheetModalOpen}
+          onClose={() => setIsOfficialSheetModalOpen(false)}
+          movements={filteredMovements}
+          title="كشف حركات وتفريغ الشاحنات والحاويات المجمع (الاسطمبة الرسمية)"
+          berthName={
+            selectedBerth
+              ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name
+              : undefined
           }
         />
       )}
