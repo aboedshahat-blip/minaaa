@@ -174,16 +174,61 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* 2-Step Workflow Guide Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white rounded-2xl p-6 shadow-md border border-indigo-900/50 no-print">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="bg-indigo-600 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                طريقة وسير العمل
+              </span>
+              <span className="text-xs text-indigo-300 font-semibold">
+                (تجميع الشيتات ← تحويل PDF للمكتب ← رفع فاتورة الكاشير ← حساب كل عميل)
+              </span>
+            </div>
+            <h1 className="text-lg font-black text-white">
+              منظومة تجميع الشاحنات وفواتير الكاشير وحسابات العملاء
+            </h1>
+            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+              <strong>الخطوة 1:</strong> جمّع شيتات الوارد وأدخل الحركات يدوياً أو بالرفع، ثم نزّل كشف الـ PDF المجمع لإنهاء ورق الميناء (بدون خدمات أو مبالغ).<br />
+              <strong>الخطوة 2:</strong> بعد المحاسبة في الميناء، ارفع تقرير فواتير الكاشير ليقوم السيستم بتوزيع المبالغ وحساب كل عميل دفعله كام آلياً.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleExportPdf}
+              className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-black px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition flex items-center gap-2 border border-rose-500/30"
+              title="تنزيل الكشف المجمع الرسمي لتقديمه للمكتب والمحاسبة (خالٍ من العمولات والمبالغ)"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>1️⃣ تنزيل PDF الكشف المجمع للمكتب</span>
+            </button>
+
+            {canViewFinancials && onBatchUpdateMovements && (
+              <button
+                onClick={() => setIsCashierReportModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition flex items-center gap-2 border border-emerald-500/30"
+                title="رفع تقرير فواتير الكاشير الصادر من الميناء لحساب كل عميل دفعله كام آلياً"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>2️⃣ رفع تقرير فواتير الكاشير آلياً</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Top Banner / Controls */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 no-print">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
-            <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Truck className="w-6 h-6 text-blue-600" />
-              <span>كشف تسجيل حركات الشاحنات والحاويات (الاسطمبة الرسمية)</span>
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              تسجيل الحركات يدوي، أو استيراد الشيتات، وحساب الفواتير والعمولات وتصدير الاسطمبة
+            <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <Truck className="w-5 h-5 text-blue-600" />
+              <span>جدول تسجيل وتجميع الحركات المجمعة ({movements.length} حركة)</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              يمكنك إضافة حركات يدوياً أو رفع عدة شيتات وسيتم تجميعها وتراكمها معاً تلقائياً
             </p>
           </div>
 
@@ -193,7 +238,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
-              <span>تسجيل حركة جديدة</span>
+              <span>تسجيل حركة يدوية</span>
             </button>
 
             <button
@@ -201,16 +246,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>رفع وتصفية شيت</span>
-            </button>
-
-            <button
-              onClick={handleExportPdf}
-              className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
-              title="تنزيل كشف الحركات كملف PDF رسمي (بدون عمولات ومبالغ) لتقديمه لمكتب الميناء"
-            >
-              <FileDown className="w-4 h-4" />
-              <span>تحميل PDF الاسطمبة الرسمية</span>
+              <span>رفع شيت إضافي وتجميعه</span>
             </button>
 
             <button
@@ -220,17 +256,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <Download className="w-4 h-4" />
               <span>تصدير Excel بالاسطمبة</span>
             </button>
-
-            {canViewFinancials && onBatchUpdateMovements && (
-              <button
-                onClick={() => setIsCashierReportModalOpen(true)}
-                className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
-                title="رفع تقرير فواتير الكاشير الصادر من الميناء وتحديث أرقام ومبالغ الفواتير آلياً ومطابقة الشاحنات"
-              >
-                <Receipt className="w-4 h-4" />
-                <span>رفع تقرير فواتير الكاشير آلياً</span>
-              </button>
-            )}
 
             {canViewFinancials && (
               <button
@@ -272,7 +297,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 title="مسح وتصفير كافة الشحنات لتسليم السيستم للعميل"
               >
                 <Trash2 className="w-4 h-4" />
-                <span>مسح الشحنات (تسليم للعميل)</span>
+                <span>مسح وتصفير الشحنات</span>
               </button>
             )}
           </div>

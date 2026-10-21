@@ -336,16 +336,16 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                 <tr>
                   <th className="p-2.5 border border-slate-700 text-center w-10">م</th>
                   <th className="p-2.5 border border-slate-700">كود العميل</th>
-                  <th className="p-2.5 border border-slate-700">اسم العميل</th>
-                  <th className="p-2.5 border border-slate-700 text-center">عدد الشاحنات</th>
-                  <th className="p-2.5 border border-slate-700 text-center">فواتير الكاشير</th>
-                  <th className="p-2.5 border border-slate-700 text-center">عمولة المنظومة</th>
-                  <th className="p-2.5 border border-slate-700 text-center">عمولة نافذ</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-blue-950">إجمالي المطلوب</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-emerald-950">المدفوع (دفع كام)</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-rose-950">المتبقي (ناقص كام)</th>
+                  <th className="p-2.5 border border-slate-700">اسم العميل (السائق)</th>
+                  <th className="p-2.5 border border-slate-700 text-center">عدد النقلات</th>
+                  <th className="p-2.5 border border-slate-700 text-center font-bold text-indigo-300">المدفوع له كاشير بالميناء</th>
+                  <th className="p-2.5 border border-slate-700 text-center">خدمة المنظومة</th>
+                  <th className="p-2.5 border border-slate-700 text-center">رسوم المنفذ</th>
+                  <th className="p-2.5 border border-slate-700 text-center bg-blue-950 font-black">إجمالي المطلوب منه</th>
+                  <th className="p-2.5 border border-slate-700 text-center bg-emerald-950 font-bold">المحصل (دفع كام)</th>
+                  <th className="p-2.5 border border-slate-700 text-center bg-rose-950 font-black">المتبقي (ناقص كام)</th>
                   <th className="p-2.5 border border-slate-700 text-center">حالة الحساب</th>
-                  <th className="p-2.5 border border-slate-700 text-center">تحصيل</th>
+                  <th className="p-2.5 border border-slate-700 text-center">كشف وسداد</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
