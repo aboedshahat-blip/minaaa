@@ -16,15 +16,18 @@ import {
   User,
   Truck,
   FileText,
+  Percent,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
+import { exportCustomerStatementPdf } from '../lib/pdfExport';
 
 interface AccountsPageProps {
   movements: Movement[];
   customers: Customer[];
   payments: PaymentReceipt[];
   onOpenPaymentModal: (customerId?: string) => void;
+  onBatchUpdateMovements?: (updatedMovements: Movement[]) => void;
 }
 
 export const AccountsPage: React.FC<AccountsPageProps> = ({
@@ -32,12 +35,81 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   customers,
   payments,
   onOpenPaymentModal,
+  onBatchUpdateMovements,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSubTab, setActiveSubTab] = useState<'clients' | 'system_revenue' | 'receipts' | 'drivers'>('clients');
   const [driverSearch, setDriverSearch] = useState('');
   const [selectedDriverForInvoice, setSelectedDriverForInvoice] = useState<{ name: string; moves: Movement[] } | null>(null);
   const [isDriverInvoiceOpen, setIsDriverInvoiceOpen] = useState(false);
+
+  // Update individual shipment discount
+  const handleUpdateMovementDiscount = (movementId: string, discountVal: number) => {
+    if (!onBatchUpdateMovements) return;
+    const disc = Math.max(0, discountVal || 0);
+    const updated = movements.map((m) => {
+      if (m.id === movementId) {
+        const cashier = Number(m.cashier_invoice) || 0;
+        const sysComm = Number(m.system_commission) || 0;
+        const nafez = Number(m.nafez_commission) || 0;
+        const total = Math.max(0, cashier + sysComm + nafez - disc);
+        const paid = Number(m.paid_amount) || 0;
+        const remaining = Math.max(0, total - paid);
+        return {
+          ...m,
+          discount: disc,
+          total_amount: total,
+          remaining_amount: remaining,
+          payment_status: (paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid') as any,
+        };
+      }
+      return m;
+    });
+    onBatchUpdateMovements(updated);
+  };
+
+  // Apply overall discount distributed to customer's shipments
+  const handleApplyOverallCustomerDiscount = (customerName: string) => {
+    if (!onBatchUpdateMovements) return;
+    const custMoves = movements.filter((m) => (m.driver_name || m.customer_name) === customerName);
+    if (custMoves.length === 0) return;
+
+    const inputVal = prompt(`أدخل إجمالي مبلغ الخصم المراد تطبيقه على العميل [${customerName}] (بالجنيه):`);
+    if (inputVal === null) return;
+    const overallDiscount = Number(inputVal);
+    if (isNaN(overallDiscount) || overallDiscount < 0) {
+      alert('يرجى إدخال مبلغ خصم صحيح');
+      return;
+    }
+
+    const perMoveDiscount = Math.round((overallDiscount / custMoves.length) * 100) / 100;
+    const updated = movements.map((m) => {
+      if ((m.driver_name || m.customer_name) === customerName) {
+        const cashier = Number(m.cashier_invoice) || 0;
+        const sysComm = Number(m.system_commission) || 0;
+        const nafez = Number(m.nafez_commission) || 0;
+        const total = Math.max(0, cashier + sysComm + nafez - perMoveDiscount);
+        const paid = Number(m.paid_amount) || 0;
+        const remaining = Math.max(0, total - paid);
+        return {
+          ...m,
+          discount: perMoveDiscount,
+          total_amount: total,
+          remaining_amount: remaining,
+          payment_status: (paid >= total && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid') as any,
+        };
+      }
+      return m;
+    });
+
+    onBatchUpdateMovements(updated);
+    alert(`✓ تم بنجاح تطبيق خصم إجمالي ${overallDiscount} ج.م على ${custMoves.length} شحنة للعميل!`);
+  };
+
+  // Download direct customer statement PDF
+  const handleDownloadCustomerPdf = async (name: string, moves: Movement[], totals: any) => {
+    await exportCustomerStatementPdf(name, moves, totals);
+  };
 
   // === Driver Ledger: group ALL movements by driver_name ===
   const driverLedger = useMemo(() => {
@@ -61,10 +133,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       const cashierTotal = moves.reduce((s, m) => s + (m.cashier_invoice || 0), 0);
       const systemCommTotal = moves.reduce((s, m) => s + (m.system_commission || 0), 0);
       const nafezCommTotal = moves.reduce((s, m) => s + (m.nafez_commission || 0), 0);
+      const discountTotal = moves.reduce((s, m) => s + (m.discount || 0), 0);
       const totalAmount = moves.reduce((s, m) => s + (m.total_amount || 0), 0);
       const paidTotal = moves.reduce((s, m) => s + (m.paid_amount || 0), 0);
       const remainingTotal = moves.reduce((s, m) => s + (m.remaining_amount || 0), 0);
-      return { name, moves, cashierTotal, systemCommTotal, nafezCommTotal, totalAmount, paidTotal, remainingTotal };
+      return { name, moves, cashierTotal, systemCommTotal, nafezCommTotal, discountTotal, totalAmount, paidTotal, remainingTotal };
     });
   }, [movements, driverSearch]);
 
@@ -85,6 +158,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       const cashierTotal = custMovements.reduce((sum, m) => sum + (m.cashier_invoice || 0), 0);
       const systemCommTotal = custMovements.reduce((sum, m) => sum + (m.system_commission || 0), 0);
       const nafezCommTotal = custMovements.reduce((sum, m) => sum + (m.nafez_commission || 0), 0);
+      const discountTotal = custMovements.reduce((sum, m) => sum + (m.discount || 0), 0);
       const totalAmount = custMovements.reduce((sum, m) => sum + (m.total_amount || 0), 0);
       const paidTotal = custMovements.reduce((sum, m) => sum + (m.paid_amount || 0), 0);
       const remainingTotal = custMovements.reduce((sum, m) => sum + (m.remaining_amount || 0), 0);
@@ -94,9 +168,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       return {
         customer: c,
         truckCount,
+        custMovements,
         cashierTotal,
         systemCommTotal,
         nafezCommTotal,
+        discountTotal,
         totalAmount,
         paidTotal,
         remainingTotal,
@@ -113,6 +189,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
     let cashier = 0;
     let systemCommission = 0;
     let nafez = 0;
+    let discount = 0;
     let total = 0;
     let paid = 0;
     let remaining = 0;
@@ -121,12 +198,13 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       cashier += Number(m.cashier_invoice) || 0;
       systemCommission += Number(m.system_commission) || 0;
       nafez += Number(m.nafez_commission) || 0;
+      discount += Number(m.discount) || 0;
       total += Number(m.total_amount) || 0;
       paid += Number(m.paid_amount) || 0;
       remaining += Number(m.remaining_amount) || 0;
     }
 
-    return { cashier, systemCommission, nafez, total, paid, remaining };
+    return { cashier, systemCommission, nafez, discount, total, paid, remaining };
   }, [movements]);
 
   // Export Customer Financials to Excel
@@ -340,8 +418,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                   <th className="p-2.5 border border-slate-700 text-center">عدد النقلات</th>
                   <th className="p-2.5 border border-slate-700 text-center font-bold text-indigo-300">المدفوع له كاشير بالميناء</th>
                   <th className="p-2.5 border border-slate-700 text-center">خدمة المنظومة</th>
-                  <th className="p-2.5 border border-slate-700 text-center">رسوم المنفذ</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-blue-950 font-black">إجمالي المطلوب منه</th>
+                  <th className="p-2.5 border border-slate-700 text-center text-rose-300">الخصم</th>
+                  <th className="p-2.5 border border-slate-700 text-center bg-blue-950 font-black">الصافي المطلوب</th>
                   <th className="p-2.5 border border-slate-700 text-center bg-emerald-950 font-bold">المحصل (دفع كام)</th>
                   <th className="p-2.5 border border-slate-700 text-center bg-rose-950 font-black">المتبقي (ناقص كام)</th>
                   <th className="p-2.5 border border-slate-700 text-center">حالة الحساب</th>
@@ -369,8 +447,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                     <td className="p-2.5 border border-slate-200 text-center font-mono font-bold text-blue-700">
                       {row.systemCommTotal.toLocaleString()}
                     </td>
-                    <td className="p-2.5 border border-slate-200 text-center font-mono text-indigo-700">
-                      {row.nafezCommTotal.toLocaleString()}
+                    <td className="p-2.5 border border-slate-200 text-center font-mono font-bold text-rose-600">
+                      {row.discountTotal ? `${row.discountTotal.toLocaleString()} ج` : '0'}
                     </td>
                     <td className="p-2.5 border border-slate-200 text-center font-mono font-black text-slate-900 bg-blue-50/50">
                       {row.totalAmount.toLocaleString()} ج.م
@@ -395,19 +473,27 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                     <td className="p-2.5 border border-slate-200 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
+                          onClick={() => handleDownloadCustomerPdf(row.customer.name, row.custMovements, row)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-2 py-1 rounded transition flex items-center gap-1"
+                          title="تحميل كشف حساب ومطالبة العميل PDF"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>PDF</span>
+                        </button>
+                        <button
                           onClick={() => {
                             setDriverSearch(row.customer.name);
                             setActiveSubTab('drivers');
                           }}
                           className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-[11px] font-bold px-2 py-1 rounded border border-blue-200 transition flex items-center gap-1"
-                          title="عرض شحنات وحركات هذا السائق/العميل"
+                          title="عرض وتعديل خصومات شحنات هذا العميل"
                         >
                           <Truck className="w-3 h-3" />
                           <span>الشحنات ({row.truckCount})</span>
                         </button>
                         <button
                           onClick={() => onOpenPaymentModal(row.customer.id)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-2.5 py-1 rounded transition"
                         >
                           سند قبض
                         </button>
@@ -636,28 +722,46 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => handleDownloadCustomerPdf(driver.name, driver.moves, driver)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1 transition shadow-sm"
+                      title="تحميل كشف حساب ومطالبة العميل PDF بصيغة سهلة للطباعة والإرسال"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>تحميل مطالبة PDF للعميل</span>
+                    </button>
+                    {onBatchUpdateMovements && (
+                      <button
+                        onClick={() => handleApplyOverallCustomerDiscount(driver.name)}
+                        className="bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition shadow-sm"
+                        title="تطبيق خصم إجمالي بالجنيه على حساب هذا العميل"
+                      >
+                        <Percent className="w-3 h-3" />
+                        <span>خصم عام</span>
+                      </button>
+                    )}
+                    <button
                       onClick={() => {
                         setSelectedDriverForInvoice(driver);
                         setIsDriverInvoiceOpen(true);
                       }}
-                      className="bg-white text-orange-850 hover:bg-orange-50 text-[11px] font-black px-3 py-1 rounded-lg flex items-center gap-1 transition shadow-sm"
+                      className="bg-white text-orange-850 hover:bg-orange-50 text-[11px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1 transition shadow-sm"
                     >
                       <FileText className="w-3.5 h-3.5 text-orange-600" />
-                      <span>طباعة فاتورة باسم المكان</span>
+                      <span>معاينة الفاتورة</span>
                     </button>
                     <button
                       onClick={exportDriverExcel}
-                      className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-3 py-1 rounded-lg flex items-center gap-1 transition"
+                      className="bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      تصدير Excel
+                      Excel
                     </button>
                   </div>
                 </div>
 
                 {/* Movements Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[850px] text-xs text-right border-collapse">
+                  <table className="w-full min-w-[900px] text-xs text-right border-collapse">
                     <thead className="bg-slate-800 text-white font-bold">
                       <tr>
                         <th className="p-2 border border-slate-700 text-center w-8">م</th>
@@ -669,8 +773,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                         <th className="p-2 border border-slate-700 text-center">مسلسل الكاشير</th>
                         <th className="p-2 border border-slate-700 text-center">مبلغ الكاشير</th>
                         <th className="p-2 border border-slate-700 text-center">عمولة منظومة</th>
-                        <th className="p-2 border border-slate-700 text-center">نافذ</th>
-                        <th className="p-2 border border-slate-700 text-center bg-blue-950">الإجمالي</th>
+                        <th className="p-2 border border-slate-700 text-center text-rose-300">الخصم (ج.م)</th>
+                        <th className="p-2 border border-slate-700 text-center bg-blue-950">الصافي المطلوب</th>
                         <th className="p-2 border border-slate-700 text-center bg-emerald-950">مدفوع</th>
                         <th className="p-2 border border-slate-700 text-center bg-rose-950">متبقي</th>
                         <th className="p-2 border border-slate-700 text-center">الحالة</th>
@@ -696,7 +800,22 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                           </td>
                           <td className="p-2 border border-slate-200 text-center font-mono">{(m.cashier_invoice || 0).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center font-mono text-blue-700">{(m.system_commission || 0).toLocaleString()}</td>
-                          <td className="p-2 border border-slate-200 text-center font-mono text-indigo-700">{(m.nafez_commission || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center">
+                            {onBatchUpdateMovements ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="5"
+                                placeholder="0"
+                                value={m.discount || ''}
+                                onChange={(e) => handleUpdateMovementDiscount(m.id, Number(e.target.value))}
+                                className="w-16 bg-white border border-rose-300 rounded px-1 py-0.5 text-xs text-center font-bold text-rose-700 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                                title="تعديل الخصم لهذه الشحنة"
+                              />
+                            ) : (
+                              <span className="font-mono text-rose-700 font-bold">{m.discount || 0}</span>
+                            )}
+                          </td>
                           <td className="p-2 border border-slate-200 text-center font-mono font-black text-slate-900 bg-blue-50/50">{(m.total_amount || 0).toLocaleString()} ج.م</td>
                           <td className="p-2 border border-slate-200 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50">{(m.paid_amount || 0).toLocaleString()} ج.م</td>
                           <td className="p-2 border border-slate-200 text-center font-mono font-black text-rose-800 bg-rose-50/50">{(m.remaining_amount || 0).toLocaleString()} ج.م</td>
@@ -716,7 +835,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                         </td>
                         <td className="p-2.5 border border-slate-700 text-center font-mono">{driver.cashierTotal.toLocaleString()}</td>
                         <td className="p-2.5 border border-slate-700 text-center font-mono text-blue-300">{driver.systemCommTotal.toLocaleString()}</td>
-                        <td className="p-2.5 border border-slate-700 text-center font-mono text-indigo-300">{driver.nafezCommTotal.toLocaleString()}</td>
+                        <td className="p-2.5 border border-slate-700 text-center font-mono text-rose-300">{(driver.discountTotal || 0).toLocaleString()} ج.م</td>
                         <td className="p-2.5 border border-slate-600 text-center font-mono bg-blue-900">{driver.totalAmount.toLocaleString()} ج.م</td>
                         <td className="p-2.5 border border-slate-600 text-center font-mono bg-emerald-900">{driver.paidTotal.toLocaleString()} ج.م</td>
                         <td className="p-2.5 border border-slate-600 text-center font-mono bg-rose-900">{driver.remainingTotal.toLocaleString()} ج.م</td>

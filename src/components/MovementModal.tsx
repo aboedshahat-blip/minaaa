@@ -90,12 +90,13 @@ export const MovementModal: React.FC<MovementModalProps> = ({
     }
   }, [editingMovement, isOpen, nextSeq, settings, berths, customers]);
 
-  // Recalculate totals whenever cashier, system_commission, or nafez_commission change
+  // Recalculate totals whenever cashier, system_commission, nafez_commission, or discount change
   useEffect(() => {
     const cashier = Number(formData.cashier_invoice) || 0;
     const sysComm = Number(formData.system_commission) || 0;
     const nafez = Number(formData.nafez_commission) || 0;
-    const total = cashier + sysComm + nafez;
+    const discount = Number(formData.discount) || 0;
+    const total = Math.max(0, cashier + sysComm + nafez - discount);
     const paid = Number(formData.paid_amount) || 0;
     const remaining = Math.max(0, total - paid);
 
@@ -114,7 +115,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
       remaining_amount: remaining,
       payment_status: status,
     }));
-  }, [formData.cashier_invoice, formData.system_commission, formData.nafez_commission, formData.paid_amount]);
+  }, [formData.cashier_invoice, formData.system_commission, formData.nafez_commission, formData.discount, formData.paid_amount]);
 
   if (!isOpen) return null;
 
@@ -507,8 +508,23 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   <span className="text-[10px] text-slate-500">إن وجدت، وممكن تبقى 0</span>
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-rose-700 mb-1">
+                    خصم خاص للعميل (ج.م)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    placeholder="0"
+                    value={formData.discount || ''}
+                    onChange={(e) => setFormData({ ...formData, discount: Number(e.target.value) })}
+                    className="w-full bg-white border border-rose-300 rounded-lg px-3 py-2 text-sm font-bold text-rose-800"
+                  />
+                  <span className="text-[10px] text-slate-500">يُخصم من إجمالي المستحق</span>
+                </div>
+
                 <div className="bg-white p-3 rounded-xl border border-blue-300 flex flex-col justify-center">
-                  <span className="text-xs text-slate-600 font-medium">الإجمالي المحسوب</span>
+                  <span className="text-xs text-slate-600 font-medium">الصافي المطلوب</span>
                   <span className="text-xl font-black text-blue-900">
                     {(formData.total_amount || 0).toLocaleString()} ج.م
                   </span>

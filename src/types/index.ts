@@ -82,7 +82,8 @@ export interface Movement {
   booking_category?: string; // تصنيف الحجز (تعتيق حاوية فارغة / وارد حاويات / صادر)
   system_commission: number; // عمولة المنظومة (default 200 or dynamic)
   nafez_commission: number; // عمولة نافذ (إن وجدت)
-  total_amount: number; // الإجمالي = فاتورة كاشير + عمولة المنظومة + عمولة نافذ
+  discount?: number; // قيمة الخصم الممنوح للعميل على هذه الحركة
+  total_amount: number; // الإجمالي = فاتورة كاشير + عمولة المنظومة + عمولة نافذ - الخصم
   
   payment_status: 'unpaid' | 'paid' | 'partial';
   paid_amount: number;

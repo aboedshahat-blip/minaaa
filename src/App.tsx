@@ -416,6 +416,7 @@ const AppContent: React.FC = () => {
               setPaymentCustomerId(cId);
               setIsPaymentModalOpen(true);
             }}
+            onBatchUpdateMovements={handleBatchUpdateMovements}
           />
         )}
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
-import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2 } from 'lucide-react';
+import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
+import { exportCustomerStatementPdf } from '../lib/pdfExport';
 
 interface DriverInvoiceModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
   const totalCashier = movements.reduce((s, m) => s + (Number(m.cashier_invoice) || 0), 0);
   const totalSystemComm = movements.reduce((s, m) => s + (Number(m.system_commission) || 0), 0);
   const totalNafez = movements.reduce((s, m) => s + (Number(m.nafez_commission) || 0), 0);
+  const totalDiscount = movements.reduce((s, m) => s + (Number(m.discount) || 0), 0);
   const grandTotal = movements.reduce((s, m) => s + (Number(m.total_amount) || 0), 0);
   const totalPaid = movements.reduce((s, m) => s + (Number(m.paid_amount) || 0), 0);
   const totalRemaining = movements.reduce((s, m) => s + (Number(m.remaining_amount) || 0), 0);
@@ -42,6 +44,23 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
   const truckPlates = Array.from(new Set(movements.map((m) => m.truck_no).filter(Boolean))).join(' ، ');
   const trailerPlates = Array.from(new Set(movements.map((m) => m.trailer_no).filter(Boolean))).join(' ، ');
   const berths = Array.from(new Set(movements.map((m) => m.berth_name).filter(Boolean))).join(' ، ');
+
+  const handleDownloadPdf = async () => {
+    await exportCustomerStatementPdf(
+      driverName,
+      movements,
+      {
+        cashierTotal: totalCashier,
+        systemCommTotal: totalSystemComm,
+        nafezCommTotal: totalNafez,
+        discountTotal: totalDiscount,
+        totalAmount: grandTotal,
+        paidTotal: totalPaid,
+        remainingTotal: totalRemaining,
+      },
+      placeName
+    );
+  };
 
   const handlePrint = () => {
     const printContent = document.getElementById('printable-driver-invoice');
@@ -164,6 +183,14 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={handleDownloadPdf}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition"
+              title="تحميل كشف الحساب والمطالبة بصيغة PDF للعميل مباشرة"
+            >
+              <Download className="w-4 h-4" />
+              <span>تحميل PDF للعميل</span>
+            </button>
+            <button
               onClick={handlePrint}
               className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-black px-4 py-2 rounded-lg shadow-sm flex items-center gap-1.5 transition"
             >
@@ -172,7 +199,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             </button>
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition mr-1"
             >
               <X className="w-5 h-5" />
             </button>
