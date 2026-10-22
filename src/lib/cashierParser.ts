@@ -307,15 +307,15 @@ export const matchCashierEntriesWithMovements = (
 
       const entryDigits = [entry.truck_digits, entry.trailer_digits].filter(Boolean);
       const matchingDigits = entryDigits.filter((digits) => movementDigits.includes(digits));
-      const bothVehiclesKnown = movementDigits.length === 2 && entryDigits.length === 2;
-      const digitMatch = bothVehiclesKnown
-        ? matchingDigits.length === 2
-        : matchingDigits.length === 1;
+      const digitMatch = matchingDigits.length > 0;
       const entryLetters = [entry.truck_letters, entry.trailer_letters].flatMap((plate) => plateLetterVariants(plate || ''));
       const lettersMatch = entryLetters.some((letters) => movementLetters.includes(letters));
       // Cashier/PDF extraction may reverse the truck and trailer columns in RTL text.
-      // Match the unordered plate-number pair; for a single available plate, require its letters too.
-      const isMatch = digitMatch && (bothVehiclesKnown || !entryLetters.length || lettersMatch);
+      // Compare unordered plate numbers and allow one side to omit the trailer number.
+      // The uploaded cashier report has plate digits but omits plate letters.
+      // Match the complete unordered pair when both sides include truck + trailer,
+      // otherwise allow the single shared number to identify a one-vehicle booking.
+      const isMatch = digitMatch;
 
       if (isMatch) {
         matchedEntryIndexes.add(eIdx);

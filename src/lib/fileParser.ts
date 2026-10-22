@@ -278,13 +278,11 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         cashier_invoice: 0,
       };
       const rowMovementIndexes: number[] = [];
-      (containerNumbers.length > 0 ? containerNumbers : [container_no]).forEach((containerNumber) => {
-        rowMovementIndexes.push(allMovements.length);
-        allMovements.push({
-          ...movementBase,
-          seq: allMovements.length + 1,
-          container_no: containerNumber,
-        });
+      rowMovementIndexes.push(allMovements.length);
+      allMovements.push({
+        ...movementBase,
+        seq: allMovements.length + 1,
+        container_no: containerNumbers.join(' / ') || container_no,
       });
       dataRowMovementIndexes.push(rowMovementIndexes);
       dataRowYs.push(bucket.y);
@@ -405,6 +403,12 @@ export const matrixToMovements = (matrix: unknown[][]): {
         return;
       }
 
+      const spacedContainerMatches = s.match(/[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}/gi) || [];
+      if (spacedContainerMatches.length > 0) {
+        containerNumbers.push(...spacedContainerMatches.map((value) => value.replace(/\s+/g, '').toUpperCase()));
+        return;
+      }
+
       // Declaration code
       const dMatch = s.match(/\b(5\d{5}|4\d{5}|6\d{5}|5\d{4}|52\d{3}|51\d{3})\b/);
       if (dMatch && !declaration_no) {
@@ -465,11 +469,11 @@ export const matrixToMovements = (matrix: unknown[][]): {
       cashier_invoice: 0,
     };
     const uniqueContainerNumbers = Array.from(new Set(containerNumbers));
-    return (uniqueContainerNumbers.length > 0 ? uniqueContainerNumbers : ['']).map((container_no, containerIndex) => ({
+    return [{
       ...movementBase,
-      seq: idx + containerIndex + 1,
-      container_no,
-    }));
+      seq: idx + 1,
+      container_no: uniqueContainerNumbers.join(' / '),
+    }];
   });
 
   parsedMovements.forEach((movement, index) => { movement.seq = index + 1; });
