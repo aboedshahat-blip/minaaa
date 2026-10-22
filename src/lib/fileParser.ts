@@ -1,20 +1,8 @@
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
+import { pdfjsLib } from './pdfjs';
 import { Movement } from '../types';
 import type { Worker as OcrWorker } from 'tesseract.js';
-
-// Configure pdfjs worker for Vite
-if (typeof window !== 'undefined') {
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.min.mjs',
-      import.meta.url
-    ).toString();
-  } catch (e) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  }
-}
 
 export interface ParsedDocumentResult {
   rows: Partial<Movement>[];

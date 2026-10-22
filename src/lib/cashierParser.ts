@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
+import { pdfjsLib } from './pdfjs';
 import { Movement } from '../types';
 
 export interface CashierInvoiceEntry {
