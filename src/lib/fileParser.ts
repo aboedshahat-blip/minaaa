@@ -83,6 +83,11 @@ export const STANDARD_HEADERS = [
   'م',
 ];
 
+const extractContainerNumbers = (text: string): string[] => {
+  const matches = text.match(/[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}/gi) || [];
+  return Array.from(new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase())));
+};
+
 /**
  * Extracts structured movements from PDF documents (Page-by-Page with anchor awareness)
  */
@@ -144,8 +149,8 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         ? Math.max(48, Math.min(90, nearestOtherHeader * 1.35))
         : 62;
     }
-    const pageStartIndex = allMovements.length;
     const dataRowYs: number[] = [];
+    const dataRowMovementIndexes: number[][] = [];
 
     lineBuckets.forEach((bucket) => {
       // Sort items on the line left to right (by X)
@@ -168,17 +173,17 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       }
 
       // Check for ISO container code: 4 letters + 6-7 digits
-      const containerIdx = rowTokens.findIndex((t) =>
-        /^[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}$/i.test(t)
-      );
+      const containerIdx = rowTokens.findIndex((token) => extractContainerNumbers(token).length > 0);
 
       let container_no = '';
+      let containerNumbers: string[] = [];
       let declaration_no = '';
       let afterDec: string[] = [];
       let afterDecItems: typeof bucket.items = [];
 
       if (containerIdx !== -1) {
-        container_no = rowTokens[containerIdx].replace(/\s+/g, '').toUpperCase();
+        containerNumbers = extractContainerNumbers(rowTokens.join(' '));
+        container_no = containerNumbers[0] || '';
         if (rowTokens[containerIdx + 1] && /^\d{5,7}$/.test(rowTokens[containerIdx + 1])) {
           declaration_no = rowTokens[containerIdx + 1];
         }
@@ -259,11 +264,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         truck_no = truckTokens.join(' ');
       }
 
-      allMovements.push({
-        seq: allMovements.length + 1,
+      const movementBase: Partial<Movement> = {
         container_path,
         container_desc,
-        container_no,
         declaration_no,
         driver_name,
         trailer_axles,
@@ -273,7 +276,17 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         truck_weight,
         truck_no,
         cashier_invoice: 0,
+      };
+      const rowMovementIndexes: number[] = [];
+      (containerNumbers.length > 0 ? containerNumbers : [container_no]).forEach((containerNumber) => {
+        rowMovementIndexes.push(allMovements.length);
+        allMovements.push({
+          ...movementBase,
+          seq: allMovements.length + 1,
+          container_no: containerNumber,
+        });
       });
+      dataRowMovementIndexes.push(rowMovementIndexes);
       dataRowYs.push(bucket.y);
     });
 
@@ -295,8 +308,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
           ocrWorker,
         );
         recognizedNames.forEach(({ name, confidence }, index) => {
+          const movementIndexes = dataRowMovementIndexes[index] || [];
           if (name && /[\u0600-\u06ff]/.test(name)) {
-            allMovements[pageStartIndex + index].driver_name = name;
+            movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = name; });
             if (confidence < 70) needsDriverReview = true;
           } else {
             needsDriverReview = true;
@@ -359,8 +373,8 @@ export const matrixToMovements = (matrix: unknown[][]): {
     return nonEmpty.length >= 2;
   });
 
-  const parsedMovements: Partial<Movement>[] = cleanRows.map((tokens, idx) => {
-    let container_no = '';
+  const parsedMovements: Partial<Movement>[] = cleanRows.flatMap((tokens, idx) => {
+    const containerNumbers: string[] = [];
     let declaration_no = '';
     let driver_name = '';
     let truck_no = '';
@@ -385,9 +399,9 @@ export const matrixToMovements = (matrix: unknown[][]): {
       }
 
       // Container code
-      const cMatch = s.match(/[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}/i);
-      if (cMatch && !container_no) {
-        container_no = cMatch[0].replace(/\s+/g, '').toUpperCase();
+      const cMatches = extractContainerNumbers(s);
+      if (cMatches.length > 0) {
+        containerNumbers.push(...cMatches);
         return;
       }
 
@@ -437,11 +451,9 @@ export const matrixToMovements = (matrix: unknown[][]): {
       truck_no = plateLetters[0];
     }
 
-    return {
-      seq: idx + 1,
+    const movementBase: Partial<Movement> = {
       container_path,
       container_desc,
-      container_no,
       declaration_no,
       driver_name,
       trailer_axles,
@@ -452,7 +464,15 @@ export const matrixToMovements = (matrix: unknown[][]): {
       truck_no,
       cashier_invoice: 0,
     };
+    const uniqueContainerNumbers = Array.from(new Set(containerNumbers));
+    return (uniqueContainerNumbers.length > 0 ? uniqueContainerNumbers : ['']).map((container_no, containerIndex) => ({
+      ...movementBase,
+      seq: idx + containerIndex + 1,
+      container_no,
+    }));
   });
+
+  parsedMovements.forEach((movement, index) => { movement.seq = index + 1; });
 
   return {
     rows: parsedMovements.filter((m) => m.container_no || m.truck_no),

@@ -48,10 +48,23 @@ export const normalizeArabic = (text: string): string => {
  */
 export const extractPlateDigits = (text: string): string => {
   if (!text) return '';
+  const westernDigits = text.replace(/[٠-٩۰-۹]/g, (digit) => {
+    const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    const index = arabicIndic.indexOf(digit);
+    return String(index >= 0 ? index : persian.indexOf(digit));
+  });
   // Look for 3 or 4 digit plate numbers first
-  const match = text.match(/\b\d{3,4}\b/);
+  const match = westernDigits.match(/\b\d{3,4}\b/);
   if (match) return match[0];
-  return text.replace(/\D/g, '');
+  return westernDigits.replace(/\D/g, '');
+};
+
+const plateLetterVariants = (text: string): string[] => {
+  const letters = extractPlateLetters(text).replace(/\s+/g, '');
+  if (!letters) return [];
+  const reversed = Array.from(letters).reverse().join('');
+  return Array.from(new Set([letters, reversed]));
 };
 
 /**
@@ -138,12 +151,14 @@ export const parseCashierTextLines = (lines: string[]): CashierInvoiceEntry[] =>
     if (match) {
       const receipt_no = match[0];
 
-      // Nearby text in this line or next line often contains vehicle and amount
-      // Combine with previous and next line for context if needed
-      const context = [lines[i - 1] || '', line, lines[i + 1] || ''].join(' ');
+      // Cashier PDFs often put the receipt, plate pair, and amount on separate lines.
+      // Keep collecting until the next receipt so we don't associate a plate with its neighbor.
+      let end = i + 1;
+      while (end < lines.length && !receiptRegex.test(lines[end])) end++;
+      const context = lines.slice(i, end).join(' ');
 
       // Look for amount: a number with decimals or standalone currency amount
-      const amountMatches = context.match(/\b\d{1,5}(?:\.\d{1,2})\b/g);
+      const amountMatches = context.match(/(?:\d{1,5}(?:\.\d{1,2})|[٠-٩۰-۹]{1,5}(?:\.[٠-٩۰-۹]{1,2}))/g);
       let amount = 0;
       if (amountMatches && amountMatches.length > 0) {
         // Exclude parts that look like dates or sequence numbers
@@ -163,11 +178,7 @@ export const parseCashierTextLines = (lines: string[]): CashierInvoiceEntry[] =>
       else if (context.includes('استلام')) booking_category = 'استلام حاوية فارغة';
 
       // Remove receipt number from context so its internal slash and digits do not pollute plate numbers
-      const cleanLine = line.replace(receipt_no, ' ');
-      const cleanContext = context.replace(receipt_no, ' ');
-
-      // Look for vehicle plate string containing '/' between truck and trailer
-      let vehicleStr = cleanLine.includes('/') ? cleanLine : cleanContext;
+      const vehicleStr = context.replace(receipt_no, ' ');
 
       const parsedVeh = parseVehicleString(vehicleStr);
 
@@ -284,7 +295,8 @@ export const matchCashierEntriesWithMovements = (
   updatedMovements.forEach((mov, movIdx) => {
     const mTruckDigits = extractDigits(mov.truck_no || '');
     const mTrailerDigits = extractDigits(mov.trailer_no || '');
-    const mTruckLetters = extractPlateLetters(mov.truck_no || '');
+    const movementDigits = [mTruckDigits, mTrailerDigits].filter(Boolean);
+    const movementLetters = [mov.truck_no, mov.trailer_no].flatMap((plate) => plateLetterVariants(plate || ''));
 
     if (!mTruckDigits && !mTrailerDigits) return;
 
@@ -293,20 +305,17 @@ export const matchCashierEntriesWithMovements = (
       if (matchedEntryIndexes.has(eIdx)) continue;
       const entry = entries[eIdx];
 
-      // Exact Match criteria:
-      // 1. Truck digits match AND (trailer digits match OR truck letters match)
-      // 2. OR truck digits match exactly
-      const truckDigitsMatch = mTruckDigits && entry.truck_digits && mTruckDigits === entry.truck_digits;
-      const trailerDigitsMatch = mTrailerDigits && entry.trailer_digits && mTrailerDigits === entry.trailer_digits;
-
-      let isMatch = false;
-      if (truckDigitsMatch && trailerDigitsMatch) {
-        isMatch = true; // Perfect 100% Match: both truck and trailer plate numbers match
-      } else if (truckDigitsMatch && (!entry.trailer_digits || !mTrailerDigits)) {
-        isMatch = true; // Match by truck plate number
-      } else if (trailerDigitsMatch && (!entry.truck_digits || !mTruckDigits)) {
-        isMatch = true; // Match by trailer plate number
-      }
+      const entryDigits = [entry.truck_digits, entry.trailer_digits].filter(Boolean);
+      const matchingDigits = entryDigits.filter((digits) => movementDigits.includes(digits));
+      const bothVehiclesKnown = movementDigits.length === 2 && entryDigits.length === 2;
+      const digitMatch = bothVehiclesKnown
+        ? matchingDigits.length === 2
+        : matchingDigits.length === 1;
+      const entryLetters = [entry.truck_letters, entry.trailer_letters].flatMap((plate) => plateLetterVariants(plate || ''));
+      const lettersMatch = entryLetters.some((letters) => movementLetters.includes(letters));
+      // Cashier/PDF extraction may reverse the truck and trailer columns in RTL text.
+      // Match the unordered plate-number pair; for a single available plate, require its letters too.
+      const isMatch = digitMatch && (bothVehiclesKnown || !entryLetters.length || lettersMatch);
 
       if (isMatch) {
         matchedEntryIndexes.add(eIdx);
