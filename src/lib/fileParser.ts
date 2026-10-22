@@ -326,7 +326,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
 /**
  * Universal Matrix Processor for Word tables and Excel sheets
  */
-export const matrixToMovements = (matrix: string[][]): {
+export const matrixToMovements = (matrix: unknown[][]): {
   rows: Partial<Movement>[];
   headers: string[];
   rawRowCount: number;
@@ -335,24 +335,27 @@ export const matrixToMovements = (matrix: string[][]): {
     return { rows: [], headers: STANDARD_HEADERS, rawRowCount: 0 };
   }
 
+  // Excel cells can be numbers, dates, booleans, or formula results rather than strings.
+  const textMatrix = matrix.map((row) => row.map((cell) => cell == null ? '' : String(cell).trim()));
+
   // When a sheet has headers, use its driver-name column as the source of
   // truth instead of guessing the name from other text in the row.
-  const headerRowIndex = matrix.findIndex((row) =>
+  const headerRowIndex = textMatrix.findIndex((row) =>
     row.some((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
   );
   const driverNameColumnIndex = headerRowIndex >= 0
-    ? matrix[headerRowIndex].findIndex((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
+    ? textMatrix[headerRowIndex].findIndex((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
     : -1;
 
   // Filter out header and empty rows
-  const cleanRows = matrix.filter((row, rowIndex) => {
+  const cleanRows = textMatrix.filter((row, rowIndex) => {
     if (rowIndex === headerRowIndex) return false;
     const text = row.join(' ');
     const headerWords = ['مسار', 'الحاوية', 'المقطورة', 'الشاحنة', 'السائق', 'الرخصة', 'واقع', 'محاور', 'وزن', 'رقم'];
     let hits = 0;
     headerWords.forEach((kw) => { if (text.includes(kw)) hits++; });
     if (hits >= 2) return false;
-    const nonEmpty = row.filter((c) => c && c.trim() && c.trim() !== '-');
+    const nonEmpty = row.filter((cell) => cell && cell.trim() !== '-');
     return nonEmpty.length >= 2;
   });
 
@@ -509,7 +512,7 @@ export const parseExcelDocument = async (file: File): Promise<ParsedDocumentResu
   const worksheet = workbook.Sheets[firstSheetName];
 
   const matrix = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, defval: '' });
-  const { rows, headers, rawRowCount } = matrixToMovements(matrix as string[][]);
+  const { rows, headers, rawRowCount } = matrixToMovements(matrix);
 
   return {
     rows,
