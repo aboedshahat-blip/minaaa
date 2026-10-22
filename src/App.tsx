@@ -187,6 +187,15 @@ const AppContent: React.FC = () => {
     refreshDataFromCloud();
   }, []);
 
+  useEffect(() => {
+    if (!cloudFeedback) return;
+    const isError = cloudFeedback.includes('تعذر') || cloudFeedback.includes('فشل');
+    if (isError) return;
+
+    const timeoutId = window.setTimeout(() => setCloudFeedback(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [cloudFeedback]);
+
   // Security guard: If non-admin user lands on admin_control, redirect to movements
   useEffect(() => {
     if (activeTab === 'admin_control' && !isAdmin) {

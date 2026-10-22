@@ -20,6 +20,19 @@ import {
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 
+type AccountsSubTab = 'clients' | 'system_revenue' | 'receipts' | 'drivers';
+const ACCOUNTS_SUB_TAB_KEY = 'pls_accounts_sub_tab';
+const ACCOUNTS_SUB_TABS: AccountsSubTab[] = ['clients', 'system_revenue', 'receipts', 'drivers'];
+
+const getStoredAccountsSubTab = (): AccountsSubTab => {
+  try {
+    const savedTab = localStorage.getItem(ACCOUNTS_SUB_TAB_KEY) as AccountsSubTab | null;
+    return savedTab && ACCOUNTS_SUB_TABS.includes(savedTab) ? savedTab : 'clients';
+  } catch {
+    return 'clients';
+  }
+};
+
 interface AccountsPageProps {
   movements: Movement[];
   customers: Customer[];
@@ -36,10 +49,18 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   onBatchUpdateMovements,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState<'clients' | 'system_revenue' | 'receipts' | 'drivers'>('clients');
+  const [activeSubTab, setActiveSubTab] = useState<AccountsSubTab>(getStoredAccountsSubTab);
   const [driverSearch, setDriverSearch] = useState('');
   const [selectedDriverForInvoice, setSelectedDriverForInvoice] = useState<{ name: string; moves: Movement[] } | null>(null);
   const [isDriverInvoiceOpen, setIsDriverInvoiceOpen] = useState(false);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(ACCOUNTS_SUB_TAB_KEY, activeSubTab);
+    } catch (error) {
+      console.warn('Could not remember the accounts section:', error);
+    }
+  }, [activeSubTab]);
 
   // Update individual shipment discount
   const handleUpdateMovementDiscount = (movementId: string, discountVal: number) => {
