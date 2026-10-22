@@ -13,7 +13,6 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 interface ReportsPageProps {
   customers: Customer[];
@@ -110,8 +109,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   }, [customers, movements, berths]);
 
   // Export Client Detailed Report
-  const handleExportClientExcel = () => {
+  const handleExportClientExcel = async () => {
     if (!selectedCustomer) return;
+    const XLSX = await import('xlsx');
 
     const data = clientMovements.map((m, idx) => ({
       'م': m.seq || idx + 1,

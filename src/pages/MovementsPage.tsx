@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { Berth, Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
-import { exportMovementsToOfficialPdf, exportCustomerStatementPdf } from '../lib/pdfExport';
 import {
   Search,
   Filter,
@@ -225,6 +224,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   };
 
   const handleDownloadCustomerPdf = async (group: any) => {
+    const { exportCustomerStatementPdf } = await import('../lib/pdfExport');
     await exportCustomerStatementPdf(group.name, group.moves, group);
   };
 
@@ -266,6 +266,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   const handleExportPdf = async () => {
     const selectedBerthObj = berths.find((b) => b.id === selectedBerth || b.name === selectedBerth);
+    const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
     await exportMovementsToOfficialPdf(
       filteredMovements,
       'كشف حركات الشاحنات والحاويات (الاسطمبة الرسمية)',

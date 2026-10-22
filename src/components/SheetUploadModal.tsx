@@ -1,6 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
-import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import { Customer, Berth, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
@@ -94,6 +93,9 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       const result = await parseUploadedSheet(file);
       setParsedRows(result.rows);
       setOriginalHeaders(result.headers);
+      if (result.needsDriverReview) {
+        alert('تمت قراءة الملف. راجع أسماء السائقين في الجدول قبل إضافتها، لأن وضوح النص في ملف PDF قد يؤثر على القراءة.');
+      }
     } catch (err: any) {
       console.error(err);
       alert(`حدث خطأ أثناء قراءة الملف: ${err?.message || 'تأكد من صيغة الملف (.xlsx, .docx, .pdf, .csv)'}`);
@@ -226,6 +228,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       remaining_amount: 0,
       created_at: '',
     }));
+    const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
     await exportMovementsToOfficialPdf(
       tempMovements,
       'كشف الحركات المصفاة لتقديمه للمكتب (الاسطمبة الرسمية)',

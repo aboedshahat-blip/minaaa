@@ -10,6 +10,7 @@ const KEYS = {
   SETTINGS: 'pls_settings',
   USERS: 'pls_users',
   PENDING_SYNC: 'pls_pending_sync_v1',
+  DATA_RESET_AT: 'pls_data_reset_at',
 };
 
 type SyncTable = 'movements' | 'customers' | 'berths' | 'payments';
@@ -62,6 +63,21 @@ export const getPendingSyncForTable = <T extends { id: string }>(table: SyncTabl
     deletes: pending.deletes[table] || [],
   };
 };
+
+export const clearOperationalLocalData = (resetAt: string) => {
+  saveMovements([]);
+  saveCustomers([]);
+  savePayments([]);
+  const pending = getPendingSync();
+  for (const table of ['movements', 'customers', 'payments'] as const) {
+    pending.upserts[table] = {};
+    pending.deletes[table] = [];
+  }
+  savePendingSync(pending);
+  localStorage.setItem(KEYS.DATA_RESET_AT, resetAt);
+};
+
+export const getLocalDataResetAt = () => localStorage.getItem(KEYS.DATA_RESET_AT);
 
 export const flushPendingSync = async () => {
   const pending = getPendingSync();
@@ -206,9 +222,10 @@ export const fetchAllFromSupabase = async () => {
 
     return {
       movements: (movementsRes.data || []) as Movement[],
-      customers: (customersRes.data || []).filter((customer) => customer.id !== '__SYSTEM_USERS_CONFIG__') as Customer[],
+      customers: (customersRes.data || []).filter((customer) => !['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__'].includes(customer.id)) as Customer[],
       berths: (berthsRes.data || []) as Berth[],
       payments: (paymentsRes.data || []) as PaymentReceipt[],
+      dataResetAt: (customersRes.data || []).find((customer) => customer.id === '__SYSTEM_HANDOFF_RESET__')?.created_at as string | undefined,
     };
   } catch (err) {
     console.warn('Supabase fetch failed:', err);

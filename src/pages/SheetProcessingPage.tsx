@@ -1,7 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
-import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import {
@@ -55,6 +54,9 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     try {
       const res = await parseUploadedSheet(file);
       setRows(res.rows);
+      if (res.needsDriverReview) {
+        alert('تمت قراءة الملف. راجع أسماء السائقين في الجدول قبل إضافتها، لأن وضوح النص في ملف PDF قد يؤثر على القراءة.');
+      }
       if (res.fileType) {
         setFileType(res.fileType as any);
       }

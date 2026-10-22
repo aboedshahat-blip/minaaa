@@ -2,7 +2,6 @@ import React from 'react';
 import { Movement } from '../types';
 import { X, Printer, Download, FileSpreadsheet, Check } from 'lucide-react';
 import { exportTemplateToExcel } from '../lib/excelUtils';
-import { exportMovementsToOfficialPdf } from '../lib/pdfExport';
 
 interface OfficialSheetPrintModalProps {
   isOpen: boolean;
@@ -26,6 +25,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
   };
 
   const handleExportPdf = async () => {
+    const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
     await exportMovementsToOfficialPdf(movements, title, berthName);
   };
 

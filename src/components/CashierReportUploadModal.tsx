@@ -1,8 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Movement, SystemSettings } from '../types';
-import {
-  parseUploadedCashierReport,
-  matchCashierEntriesWithMovements,
+import type {
   CashierInvoiceEntry,
   CashierMatchResult,
 } from '../lib/cashierParser';
@@ -73,6 +71,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
     try {
       // 1. Parse Cashier report
+      const { parseUploadedCashierReport, matchCashierEntriesWithMovements } = await import('../lib/cashierParser');
       const entries = await parseUploadedCashierReport(file);
       setParsedEntries(entries);
 

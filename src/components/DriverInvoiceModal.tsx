@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
 import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
-import { exportCustomerStatementPdf } from '../lib/pdfExport';
 
 interface DriverInvoiceModalProps {
   isOpen: boolean;
@@ -46,6 +45,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
   const berths = Array.from(new Set(movements.map((m) => m.berth_name).filter(Boolean))).join(' ، ');
 
   const handleDownloadPdf = async () => {
+    const { exportCustomerStatementPdf } = await import('../lib/pdfExport');
     await exportCustomerStatementPdf(
       driverName,
       movements,

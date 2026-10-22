@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 import { Movement } from '../types';
+import type { Worker as OcrWorker } from 'tesseract.js';
 
 // Configure pdfjs worker for Vite
 if (typeof window !== 'undefined') {
@@ -20,7 +21,61 @@ export interface ParsedDocumentResult {
   headers: string[];
   rawRowCount: number;
   fileType: 'excel' | 'word' | 'pdf';
+  needsDriverReview?: boolean;
 }
+
+const readArabicNamesFromPdf = async (
+  page: pdfjsLib.PDFPageProxy,
+  rowYs: number[],
+  columnCenter: number,
+  columnWidth: number,
+  worker: OcrWorker,
+) => {
+  if (rowYs.length === 0) return [];
+
+  const scale = 4;
+  const viewport = page.getViewport({ scale });
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = Math.ceil(viewport.width);
+  sourceCanvas.height = Math.ceil(viewport.height);
+  const sourceContext = sourceCanvas.getContext('2d');
+  if (!sourceContext) throw new Error('تعذر تجهيز صفحة PDF لقراءة الأسماء.');
+
+  await page.render({ canvas: sourceCanvas, canvasContext: sourceContext, viewport }).promise;
+
+  const cropWidth = Math.round(columnWidth * scale);
+  const cropHeight = Math.round(18 * scale);
+  const recognized: { name: string; confidence: number }[] = [];
+
+  for (const rowY of rowYs) {
+    const [centerX, centerY] = viewport.convertToViewportPoint(columnCenter, rowY);
+    const crop = document.createElement('canvas');
+    crop.width = cropWidth * 2;
+    crop.height = cropHeight * 2;
+    const context = crop.getContext('2d');
+    if (!context) throw new Error('تعذر قص اسم السائق من ملف PDF.');
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, crop.width, crop.height);
+
+    const sourceX = Math.max(0, Math.round(centerX - cropWidth / 2));
+    const sourceY = Math.max(0, Math.round(centerY - cropHeight / 2));
+    const availableWidth = Math.min(cropWidth, sourceCanvas.width - sourceX);
+    const availableHeight = Math.min(cropHeight, sourceCanvas.height - sourceY);
+    context.drawImage(sourceCanvas, sourceX, sourceY, availableWidth, availableHeight, 0, 0, availableWidth * 2, availableHeight * 2);
+
+    const result = await worker.recognize(crop);
+    const name = result.data.text
+      .replace(/[\r\n|ـ]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[\s,.;:،]+|[\s,.;:،]+$/g, '')
+      .trim();
+    recognized.push({ name, confidence: result.data.confidence });
+  }
+
+  sourceCanvas.width = 0;
+  sourceCanvas.height = 0;
+  return recognized;
+};
 
 /**
  * Standard 12-column Template Headers
@@ -53,6 +108,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   const pdf = await loadingTask.promise;
   const numPages = pdf.numPages;
   const allMovements: Partial<Movement>[] = [];
+  let ocrWorker: OcrWorker | undefined;
+  let ocrUnavailable = false;
+  let needsDriverReview = false;
 
   // Iterate strictly page by page so Y coordinates never conflict across pages
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -60,7 +118,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     const content = await page.getTextContent();
 
     // Group items on this single page by vertical Y proximity (within 7px)
-    const lineBuckets: { y: number; items: { x: number; str: string; dir?: string }[] }[] = [];
+    const lineBuckets: { y: number; items: { x: number; str: string; dir?: string; width?: number }[] }[] = [];
 
     content.items.forEach((item: any) => {
       const str = (item.str || '').trim();
@@ -73,11 +131,33 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         bucket = { y, items: [] };
         lineBuckets.push(bucket);
       }
-      bucket.items.push({ x, str, dir: item.dir });
+      bucket.items.push({ x, str, dir: item.dir, width: item.width });
     });
 
     // Sort lines top to bottom on this page
     lineBuckets.sort((a, b) => b.y - a.y);
+
+    const driverHeader = lineBuckets.find((bucket) => {
+      const text = bucket.items.map((item) => item.str).join('');
+      return text.includes('اسم') && text.includes('السائق');
+    });
+    let driverColumnCenter = 0;
+    let driverColumnWidth = 0;
+    if (driverHeader) {
+      const labelItems = driverHeader.items.filter((item) => item.str.includes('اسم') || item.str.includes('السائق'));
+      const left = Math.min(...labelItems.map((item) => item.x));
+      const right = Math.max(...labelItems.map((item) => item.x + (item.width || item.str.length * 5)));
+      driverColumnCenter = (left + right) / 2;
+      const nearestOtherHeader = driverHeader.items
+        .filter((item) => !labelItems.includes(item) && item.str.trim())
+        .map((item) => Math.abs(item.x + (item.width || item.str.length * 5) / 2 - driverColumnCenter))
+        .sort((a, b) => a - b)[0];
+      driverColumnWidth = nearestOtherHeader
+        ? Math.max(48, Math.min(90, nearestOtherHeader * 1.35))
+        : 62;
+    }
+    const pageStartIndex = allMovements.length;
+    const dataRowYs: number[] = [];
 
     lineBuckets.forEach((bucket) => {
       // Sort items on the line left to right (by X)
@@ -206,14 +286,52 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         truck_no,
         cashier_invoice: 0,
       });
+      dataRowYs.push(bucket.y);
     });
+
+    if (dataRowYs.length > 0 && driverHeader && !ocrUnavailable) {
+      try {
+        if (!ocrWorker) {
+          const { createWorker, PSM } = await import('tesseract.js');
+          ocrWorker = await createWorker('ara', 1);
+          await ocrWorker.setParameters({
+            tessedit_pageseg_mode: PSM.SINGLE_LINE,
+            user_defined_dpi: '300',
+          });
+        }
+        const recognizedNames = await readArabicNamesFromPdf(
+          page,
+          dataRowYs,
+          driverColumnCenter,
+          driverColumnWidth,
+          ocrWorker,
+        );
+        recognizedNames.forEach(({ name, confidence }, index) => {
+          if (name && /[\u0600-\u06ff]/.test(name)) {
+            allMovements[pageStartIndex + index].driver_name = name;
+            if (confidence < 70) needsDriverReview = true;
+          } else {
+            needsDriverReview = true;
+          }
+        });
+      } catch (error) {
+        console.warn('Arabic PDF OCR was unavailable; retaining extracted text for review.', error);
+        ocrUnavailable = true;
+        needsDriverReview = true;
+      }
+    } else if (dataRowYs.length > 0) {
+      needsDriverReview = true;
+    }
   }
+
+  if (ocrWorker) await ocrWorker.terminate();
 
   return {
     rows: allMovements,
     headers: STANDARD_HEADERS,
     rawRowCount: allMovements.length,
     fileType: 'pdf',
+    needsDriverReview,
   };
 };
 

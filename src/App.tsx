@@ -26,6 +26,8 @@ import {
   restoreLocalDataToSupabase,
   getPendingSyncForTable,
   flushPendingSync,
+  clearOperationalLocalData,
+  getLocalDataResetAt,
   deleteMovementFromSupabase,
   clearAllMovementsFromSupabase,
   deleteCustomerFromSupabase,
@@ -59,6 +61,18 @@ const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: 
   return localRows.filter((row) => !cloudIds.has(row.id));
 };
 
+const APP_TABS: TabType[] = ['movements', 'sheet_import', 'customers', 'accounts', 'reports', 'berths', 'settings', 'admin_control'];
+const ACTIVE_TAB_KEY = 'pls_active_tab';
+
+const getStoredActiveTab = (): TabType => {
+  try {
+    const savedTab = localStorage.getItem(ACTIVE_TAB_KEY) as TabType | null;
+    return savedTab && APP_TABS.includes(savedTab) ? savedTab : 'movements';
+  } catch {
+    return 'movements';
+  }
+};
+
 const AppContent: React.FC = () => {
   const {
     isAuthenticated,
@@ -75,7 +89,7 @@ const AppContent: React.FC = () => {
   } = useAuth();
 
   // State
-  const [activeTab, setActiveTab] = useState<TabType>('movements');
+  const [activeTab, setActiveTab] = useState<TabType>(getStoredActiveTab);
   const [movements, setMovements] = useState<Movement[]>(getStoredMovements);
   const [customers, setCustomers] = useState<Customer[]>(getStoredCustomers);
   const [berths, setBerths] = useState<Berth[]>(getStoredBerths);
@@ -98,14 +112,18 @@ const AppContent: React.FC = () => {
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
-        const localMovements = getStoredMovements();
-        const localCustomers = getStoredCustomers();
+        const resetDetected = Boolean(cloudData.dataResetAt && cloudData.dataResetAt !== getLocalDataResetAt());
+        if (resetDetected && cloudData.dataResetAt) {
+          clearOperationalLocalData(cloudData.dataResetAt);
+        }
+        const localMovements = resetDetected ? [] : getStoredMovements();
+        const localCustomers = resetDetected ? [] : getStoredCustomers();
         const localBerths = getStoredBerths();
-        const localPayments = getStoredPayments();
-        const pendingMovements = getPendingSyncForTable<Movement>('movements');
-        const pendingCustomers = getPendingSyncForTable<Customer>('customers');
+        const localPayments = resetDetected ? [] : getStoredPayments();
+        const pendingMovements = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Movement>('movements');
+        const pendingCustomers = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Customer>('customers');
         const pendingBerths = getPendingSyncForTable<Berth>('berths');
-        const pendingPayments = getPendingSyncForTable<PaymentReceipt>('payments');
+        const pendingPayments = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<PaymentReceipt>('payments');
         const mergePending = <T extends { id: string }>(cloud: T[], local: T[], pending: { upserts: T[]; deletes: string[] }) => {
           const merged = new Map(cloud.map((row) => [row.id, row]));
           for (const row of local) if (!merged.has(row.id)) merged.set(row.id, row);
@@ -144,7 +162,9 @@ const AppContent: React.FC = () => {
             payments: paymentsToRestore,
           });
         }
-        setCloudFeedback(restoredCount > 0
+        setCloudFeedback(resetDetected
+          ? 'تم مسح البيانات المحلية القديمة بعد تجهيز النظام للتسليم.'
+          : restoredCount > 0
           ? 'استعدنا البيانات المحفوظة على هذا الجهاز وأعدنا مزامنتها مع السحابة.'
           : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.');
       }
@@ -154,6 +174,14 @@ const AppContent: React.FC = () => {
       setCloudFeedback(`${message} احتفظنا بالبيانات المحلية كما هي.`);
     }
   };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
+    } catch (error) {
+      console.warn('Could not remember the current page:', error);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     refreshDataFromCloud();

@@ -1,6 +1,4 @@
-import * as XLSX from 'xlsx';
-import { Movement } from '../types';
-import { parseAnyDocument } from './fileParser';
+import type { Movement } from '../types';
 
 // The exact 12 columns from the user's sheet template
 export const TEMPLATE_COLUMNS = [
@@ -21,7 +19,8 @@ export const TEMPLATE_COLUMNS = [
 /**
  * Exports movements to Excel matching the exact format requested by the user
  */
-export const exportTemplateToExcel = (movements: Movement[], fileName = 'كشف_حركات_الشاحنات.xlsx') => {
+export const exportTemplateToExcel = async (movements: Movement[], fileName = 'كشف_حركات_الشاحنات.xlsx') => {
+  const XLSX = await import('xlsx');
   // Construct data rows in the exact column order
   const rows = movements.map((m, index) => ({
     'مسار الحاوية': m.container_path || '',
@@ -69,7 +68,8 @@ export const exportTemplateToExcel = (movements: Movement[], fileName = 'كشف_
 /**
  * Generates an empty official template with defaults (like the 100 rows in the user's prompt)
  */
-export const downloadEmptyTemplate = (rowCount = 50) => {
+export const downloadEmptyTemplate = async (rowCount = 50) => {
+  const XLSX = await import('xlsx');
   const rows = [];
   for (let i = 1; i <= rowCount; i++) {
     rows.push({
@@ -121,6 +121,8 @@ export const parseUploadedSheet = async (file: File): Promise<{
   headers: string[];
   rawRowCount: number;
   fileType?: string;
+  needsDriverReview?: boolean;
 }> => {
+  const { parseAnyDocument } = await import('./fileParser');
   return parseAnyDocument(file);
 };

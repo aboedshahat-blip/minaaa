@@ -18,9 +18,7 @@ import {
   FileText,
   Percent,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
-import { exportCustomerStatementPdf } from '../lib/pdfExport';
 
 interface AccountsPageProps {
   movements: Movement[];
@@ -108,6 +106,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
 
   // Download direct customer statement PDF
   const handleDownloadCustomerPdf = async (name: string, moves: Movement[], totals: any) => {
+    const { exportCustomerStatementPdf } = await import('../lib/pdfExport');
     await exportCustomerStatementPdf(name, moves, totals);
   };
 
@@ -208,7 +207,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   }, [movements]);
 
   // Export Customer Financials to Excel
-  const handleExportAccountsExcel = () => {
+  const handleExportAccountsExcel = async () => {
+    const XLSX = await import('xlsx');
     const data = customerLedger.map((item, idx) => ({
       'م': idx + 1,
       'كود العميل': item.customer.code,
@@ -686,7 +686,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
 
           {/* Driver Results */}
           {driverLedger.map((driver) => {
-            const exportDriverExcel = () => {
+            const exportDriverExcel = async () => {
+              const XLSX = await import('xlsx');
               const rows = driver.moves.map((m, i) => ({
                 'م': i + 1,
                 'رقم الحاوية': m.container_no || '',
