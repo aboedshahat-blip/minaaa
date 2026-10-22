@@ -29,11 +29,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (initialCustomerId) {
-      setSelectedCustomerId(initialCustomerId);
-    } else if (customers.length > 0) {
-      setSelectedCustomerId(customers[0].id);
-    }
+    if (!isOpen) return;
+    const customerId = initialCustomerId && customers.some((customer) => customer.id === initialCustomerId)
+      ? initialCustomerId
+      : customers[0]?.id || '';
+    setSelectedCustomerId(customerId);
+    setAmount(0);
+    setSelectedMovementIds([]);
+    setPaymentMethod('cash');
+    setNotes('');
   }, [initialCustomerId, customers, isOpen]);
 
   if (!isOpen) return null;
@@ -43,15 +47,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     (m) => m.customer_id === selectedCustomerId || m.customer_name === customers.find(c => c.id === selectedCustomerId)?.name
   );
 
-  const unpaidMovements = clientMovements.filter((m) => (m.remaining_amount || 0) > 0);
-  const totalClientDebt = unpaidMovements.reduce((sum, m) => sum + (m.remaining_amount || 0), 0);
+  const unpaidMovements = clientMovements.filter((m) => Number(m.remaining_amount) > 0);
+  const totalClientDebt = unpaidMovements.reduce((sum, m) => sum + (Number(m.remaining_amount) || 0), 0);
 
   const handleSelectAllUnpaid = () => {
     if (selectedMovementIds.length === unpaidMovements.length) {
       setSelectedMovementIds([]);
     } else {
       setSelectedMovementIds(unpaidMovements.map((m) => m.id));
-      const totalSelected = unpaidMovements.reduce((sum, m) => sum + (m.remaining_amount || 0), 0);
+      const totalSelected = unpaidMovements.reduce((sum, m) => sum + (Number(m.remaining_amount) || 0), 0);
       setAmount(totalSelected);
     }
   };
@@ -67,7 +71,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     const totalSelected = unpaidMovements
       .filter((m) => nextIds.includes(m.id))
-      .reduce((sum, m) => sum + (m.remaining_amount || 0), 0);
+      .reduce((sum, m) => sum + (Number(m.remaining_amount) || 0), 0);
     setAmount(totalSelected);
   };
 
@@ -81,25 +85,36 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     const currentCustomer = customers.find((c) => c.id === selectedCustomerId);
     if (!currentCustomer) return;
 
-    // Distribute amount to movements
+    const selectedTargets = unpaidMovements.filter((movement) => selectedMovementIds.includes(movement.id));
+    const targetMovements = selectedTargets.length > 0 ? selectedTargets : unpaidMovements;
+    const availableDebt = targetMovements.reduce((sum, movement) => sum + (Number(movement.remaining_amount) || 0), 0);
+    if (targetMovements.length === 0 || availableDebt <= 0) {
+      alert('لا توجد حركات عليها رصيد مستحق لهذا العميل لتسويتها.');
+      return;
+    }
+    if (amount > availableDebt) {
+      alert(`المبلغ أكبر من الرصيد المحدد. أقصى مبلغ يمكن تسجيله هو ${availableDebt.toLocaleString()} ج.م`);
+      return;
+    }
+
+    // Distribute payment to the selected unpaid movements, or to all unpaid movements.
     let remainingToDistribute = amount;
-    const targetMovements = selectedMovementIds.length > 0
-      ? unpaidMovements.filter((m) => selectedMovementIds.includes(m.id))
-      : unpaidMovements; // distribute across oldest if none selected
+    const appliedMovementIds: string[] = [];
 
     const updatedMovements = movements.map((m) => {
       const isTarget = targetMovements.some((tm) => tm.id === m.id);
       if (!isTarget || remainingToDistribute <= 0) return m;
 
-      const debt = m.remaining_amount || 0;
+      const debt = Number(m.remaining_amount) || 0;
       if (debt <= 0) return m;
 
       const paymentForThis = Math.min(debt, remainingToDistribute);
       remainingToDistribute -= paymentForThis;
 
-      const newPaid = (m.paid_amount || 0) + paymentForThis;
-      const newRemaining = Math.max(0, (m.total_amount || 0) - newPaid);
+      const newPaid = (Number(m.paid_amount) || 0) + paymentForThis;
+      const newRemaining = Math.max(0, (Number(m.total_amount) || 0) - newPaid);
       const newStatus = newRemaining === 0 ? 'paid' : 'partial';
+      appliedMovementIds.push(m.id);
 
       return {
         ...m,
@@ -118,7 +133,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       amount,
       payment_method: paymentMethod,
       notes: notes.trim(),
-      movement_ids: selectedMovementIds,
+      movement_ids: appliedMovementIds,
       created_at: new Date().toISOString(),
     };
 
