@@ -9,6 +9,80 @@ const KEYS = {
   PAYMENTS: 'pls_payments',
   SETTINGS: 'pls_settings',
   USERS: 'pls_users',
+  PENDING_SYNC: 'pls_pending_sync_v1',
+};
+
+type SyncTable = 'movements' | 'customers' | 'berths' | 'payments';
+type PendingSync = {
+  upserts: Partial<Record<SyncTable, Record<string, unknown>>>;
+  deletes: Partial<Record<SyncTable, string[]>>;
+};
+
+const getPendingSync = (): PendingSync => {
+  try {
+    const raw = localStorage.getItem(KEYS.PENDING_SYNC);
+    return raw ? JSON.parse(raw) as PendingSync : { upserts: {}, deletes: {} };
+  } catch {
+    return { upserts: {}, deletes: {} };
+  }
+};
+
+const savePendingSync = (pending: PendingSync) => {
+  localStorage.setItem(KEYS.PENDING_SYNC, JSON.stringify(pending));
+};
+
+const setPendingUpsert = <T extends { id: string }>(table: SyncTable, row: T) => {
+  const pending = getPendingSync();
+  pending.upserts[table] = { ...pending.upserts[table], [row.id]: row };
+  pending.deletes[table] = (pending.deletes[table] || []).filter((id) => id !== row.id);
+  savePendingSync(pending);
+};
+
+const clearPendingUpsert = (table: SyncTable, id: string) => {
+  const pending = getPendingSync();
+  const rows = { ...pending.upserts[table] };
+  delete rows[id];
+  pending.upserts[table] = rows;
+  savePendingSync(pending);
+};
+
+const setPendingDelete = (table: SyncTable, id: string) => {
+  const pending = getPendingSync();
+  const rows = { ...pending.upserts[table] };
+  delete rows[id];
+  pending.upserts[table] = rows;
+  pending.deletes[table] = [...new Set([...(pending.deletes[table] || []), id])];
+  savePendingSync(pending);
+};
+
+export const getPendingSyncForTable = <T extends { id: string }>(table: SyncTable) => {
+  const pending = getPendingSync();
+  return {
+    upserts: Object.values(pending.upserts[table] || {}) as T[],
+    deletes: pending.deletes[table] || [],
+  };
+};
+
+export const flushPendingSync = async () => {
+  const pending = getPendingSync();
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+
+  for (const table of ['movements', 'customers', 'berths', 'payments'] as const) {
+    for (const row of Object.values(pending.upserts[table] || {})) {
+      const { error } = await supabase.from(table).upsert(row as Record<string, unknown>);
+      if (error) throw new Error(`تعذرت مزامنة ${table}: ${error.message}`);
+      clearPendingUpsert(table, (row as { id: string }).id);
+    }
+    for (const id of pending.deletes[table] || []) {
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) throw new Error(`تعذر حذف سجل من ${table}: ${error.message}`);
+      const latest = getPendingSync();
+      latest.deletes[table] = (latest.deletes[table] || []).filter((pendingId) => pendingId !== id);
+      savePendingSync(latest);
+    }
+  }
 };
 
 // ---------------- LOCAL STORAGE FALLBACK ----------------
@@ -143,12 +217,14 @@ export const fetchAllFromSupabase = async () => {
 };
 
 export const syncMovementToSupabase = async (movement: Movement) => {
+  setPendingUpsert('movements', movement);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('movements').upsert(movement);
     if (error) throw error;
+    clearPendingUpsert('movements', movement.id);
   } catch (e) {
     console.error('Failed to sync movement to Supabase:', e);
     throw e;
@@ -156,12 +232,14 @@ export const syncMovementToSupabase = async (movement: Movement) => {
 };
 
 export const syncCustomerToSupabase = async (customer: Customer) => {
+  setPendingUpsert('customers', customer);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('customers').upsert(customer);
     if (error) throw error;
+    clearPendingUpsert('customers', customer.id);
   } catch (e) {
     console.error('Failed to sync customer to Supabase:', e);
     throw e;
@@ -169,12 +247,14 @@ export const syncCustomerToSupabase = async (customer: Customer) => {
 };
 
 export const syncBerthToSupabase = async (berth: Berth) => {
+  setPendingUpsert('berths', berth);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('berths').upsert(berth);
     if (error) throw error;
+    clearPendingUpsert('berths', berth.id);
   } catch (e) {
     console.error('Failed to sync berth to Supabase:', e);
     throw e;
@@ -182,12 +262,14 @@ export const syncBerthToSupabase = async (berth: Berth) => {
 };
 
 export const syncPaymentToSupabase = async (payment: PaymentReceipt) => {
+  setPendingUpsert('payments', payment);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('payments').upsert(payment);
     if (error) throw error;
+    clearPendingUpsert('payments', payment.id);
   } catch (e) {
     console.error('Failed to sync payment to Supabase:', e);
     throw e;
@@ -200,6 +282,10 @@ export const restoreLocalDataToSupabase = async (data: {
   berths: Berth[];
   payments: PaymentReceipt[];
 }) => {
+  data.movements.forEach((row) => setPendingUpsert('movements', row));
+  data.customers.forEach((row) => setPendingUpsert('customers', row));
+  data.berths.forEach((row) => setPendingUpsert('berths', row));
+  data.payments.forEach((row) => setPendingUpsert('payments', row));
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
@@ -212,15 +298,23 @@ export const restoreLocalDataToSupabase = async (data: {
   ]);
   const failedWrite = results.find((result) => result.error);
   if (failedWrite?.error) throw new Error(`تعذرت استعادة البيانات إلى Supabase: ${failedWrite.error.message}`);
+  for (const row of data.movements) clearPendingUpsert('movements', row.id);
+  for (const row of data.customers) clearPendingUpsert('customers', row.id);
+  for (const row of data.berths) clearPendingUpsert('berths', row.id);
+  for (const row of data.payments) clearPendingUpsert('payments', row.id);
 };
 
 export const deleteMovementFromSupabase = async (id: string) => {
+  setPendingDelete('movements', id);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('movements').delete().eq('id', id);
     if (error) throw error;
+    const pending = getPendingSync();
+    pending.deletes.movements = (pending.deletes.movements || []).filter((pendingId) => pendingId !== id);
+    savePendingSync(pending);
   } catch (e) {
     console.error('Failed to delete movement from Supabase:', e);
     throw e;
@@ -235,6 +329,10 @@ export const clearAllMovementsFromSupabase = async () => {
     // Delete all records where id is not empty
     const { error } = await supabase.from('movements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     if (error) throw error;
+    const pending = getPendingSync();
+    pending.upserts.movements = {};
+    pending.deletes.movements = [];
+    savePendingSync(pending);
   } catch (e) {
     console.error('Failed to clear all movements from Supabase:', e);
     throw e;
@@ -242,12 +340,16 @@ export const clearAllMovementsFromSupabase = async () => {
 };
 
 export const deleteCustomerFromSupabase = async (id: string) => {
+  setPendingDelete('customers', id);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('customers').delete().eq('id', id);
     if (error) throw error;
+    const pending = getPendingSync();
+    pending.deletes.customers = (pending.deletes.customers || []).filter((pendingId) => pendingId !== id);
+    savePendingSync(pending);
   } catch (e) {
     console.error('Failed to delete customer from Supabase:', e);
     throw e;
@@ -255,12 +357,16 @@ export const deleteCustomerFromSupabase = async (id: string) => {
 };
 
 export const deleteBerthFromSupabase = async (id: string) => {
+  setPendingDelete('berths', id);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
     const { error } = await supabase.from('berths').delete().eq('id', id);
     if (error) throw error;
+    const pending = getPendingSync();
+    pending.deletes.berths = (pending.deletes.berths || []).filter((pendingId) => pendingId !== id);
+    savePendingSync(pending);
   } catch (e) {
     console.error('Failed to delete berth from Supabase:', e);
     throw e;

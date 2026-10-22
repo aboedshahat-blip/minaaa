@@ -24,6 +24,8 @@ import {
   syncBerthToSupabase,
   syncPaymentToSupabase,
   restoreLocalDataToSupabase,
+  getPendingSyncForTable,
+  flushPendingSync,
   deleteMovementFromSupabase,
   clearAllMovementsFromSupabase,
   deleteCustomerFromSupabase,
@@ -100,10 +102,21 @@ const AppContent: React.FC = () => {
         const localCustomers = getStoredCustomers();
         const localBerths = getStoredBerths();
         const localPayments = getStoredPayments();
-        const movementsToUse = mergeCloudAndLocal(cloudData.movements, localMovements);
-        const customersToUse = mergeCloudAndLocal(cloudData.customers, localCustomers);
-        const berthsToUse = mergeCloudAndLocal(cloudData.berths, localBerths);
-        const paymentsToUse = mergeCloudAndLocal(cloudData.payments, localPayments);
+        const pendingMovements = getPendingSyncForTable<Movement>('movements');
+        const pendingCustomers = getPendingSyncForTable<Customer>('customers');
+        const pendingBerths = getPendingSyncForTable<Berth>('berths');
+        const pendingPayments = getPendingSyncForTable<PaymentReceipt>('payments');
+        const mergePending = <T extends { id: string }>(cloud: T[], local: T[], pending: { upserts: T[]; deletes: string[] }) => {
+          const merged = new Map(cloud.map((row) => [row.id, row]));
+          for (const row of local) if (!merged.has(row.id)) merged.set(row.id, row);
+          for (const id of pending.deletes) merged.delete(id);
+          for (const row of pending.upserts) merged.set(row.id, row);
+          return Array.from(merged.values());
+        };
+        const movementsToUse = mergePending(cloudData.movements, localMovements, pendingMovements);
+        const customersToUse = mergePending(cloudData.customers, localCustomers, pendingCustomers);
+        const berthsToUse = mergePending(cloudData.berths, localBerths, pendingBerths);
+        const paymentsToUse = mergePending(cloudData.payments, localPayments, pendingPayments);
 
         setMovements(movementsToUse);
         saveMovements(movementsToUse);
@@ -113,6 +126,9 @@ const AppContent: React.FC = () => {
         saveBerths(berthsToUse);
         setPayments(paymentsToUse);
         savePayments(paymentsToUse);
+
+        // Retry queued edits/deletes before reporting sync complete.
+        await flushPendingSync();
 
         const movementsToRestore = getLocalOnlyRows(cloudData.movements, localMovements);
         const customersToRestore = getLocalOnlyRows(cloudData.customers, localCustomers);
