@@ -316,7 +316,9 @@ export const matchCashierEntriesWithMovements = (
         const sysComm = mov.system_commission || defaultSystemCommission;
         const nafezComm = mov.nafez_commission || 0;
         const newTotal = newCashier + sysComm + nafezComm;
-        const paid = mov.paid_amount || 0;
+        // A cashier report is proof that the external cashier invoice was paid.
+        // Keep any larger amount already collected on the movement.
+        const paid = Math.max(Number(mov.paid_amount) || 0, newCashier);
         const remaining = Math.max(0, newTotal - paid);
 
         const updatedMov: Movement = {

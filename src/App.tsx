@@ -132,7 +132,21 @@ const AppContent: React.FC = () => {
           for (const row of pending.upserts) merged.set(row.id, row);
           return Array.from(merged.values());
         };
-        const movementsToUse = mergePending(cloudData.movements, localMovements, pendingMovements);
+        const reconciledCashierMovementIds = new Set<string>();
+        const movementsToUse = mergePending(cloudData.movements, localMovements, pendingMovements).map((movement) => {
+          const cashierInvoice = Number(movement.cashier_invoice) || 0;
+          const alreadyPaid = Number(movement.paid_amount) || 0;
+          if (!movement.cashier_receipt_no || cashierInvoice <= alreadyPaid) return movement;
+
+          reconciledCashierMovementIds.add(movement.id);
+          const remaining = Math.max(0, (Number(movement.total_amount) || 0) - cashierInvoice);
+          return {
+            ...movement,
+            paid_amount: cashierInvoice,
+            remaining_amount: remaining,
+            payment_status: (remaining === 0 ? 'paid' : 'partial') as Movement['payment_status'],
+          };
+        });
         const customersToUse = mergePending(cloudData.customers, localCustomers, pendingCustomers);
         const berthsToUse = mergePending(cloudData.berths, localBerths, pendingBerths);
         const paymentsToUse = mergePending(cloudData.payments, localPayments, pendingPayments);
@@ -162,6 +176,10 @@ const AppContent: React.FC = () => {
             berths: berthsToRestore,
             payments: paymentsToRestore,
           });
+        }
+        const reconciledMovements = movementsToUse.filter((movement) => reconciledCashierMovementIds.has(movement.id));
+        if (reconciledMovements.length > 0) {
+          await Promise.all(reconciledMovements.map((movement) => syncMovementToSupabase(movement)));
         }
         setCloudFeedback(resetDetected
           ? 'تم مسح البيانات المحلية القديمة بعد تجهيز النظام للتسليم.'

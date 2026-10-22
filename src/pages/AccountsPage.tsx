@@ -134,11 +134,10 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   // === Driver Ledger: group ALL movements by driver_name ===
   const driverLedger = useMemo(() => {
     if (!driverSearch.trim()) return [];
-
     const term = driverSearch.trim().toLowerCase();
     const filtered = movements.filter(
       (m) =>
-        m.driver_name && m.driver_name.toLowerCase().includes(term)
+        m.driver_name && (!term || m.driver_name.toLowerCase().includes(term))
     );
 
     // Group by exact driver name
@@ -694,14 +693,33 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Driver directory: names are available without typing a search */}
           {!driverSearch.trim() && (
-            <div className="text-center py-10 text-slate-400 text-sm">
-              <Truck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-              <p>اكتب اسم السائق في خانة البحث لعرض كشف حسابه الكامل</p>
-              <p className="text-xs mt-1">
-                يوجد {allDriverNames.length} سائق مسجل في النظام
-              </p>
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">السائقون المسجلون ({allDriverNames.length}) — اضغط على الاسم لعرض كشفه:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {allDriverNames.map((name) => {
+                  const driverMoves = movements.filter((movement) => movement.driver_name === name);
+                  const driverRemaining = driverMoves.reduce((sum, movement) => sum + (Number(movement.remaining_amount) || 0), 0);
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setDriverSearch(name)}
+                      className="flex items-center justify-between gap-3 text-right bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl px-3 py-2.5 transition"
+                    >
+                      <span className="font-bold text-sm text-slate-800 truncate">{name}</span>
+                      <span className="shrink-0 text-[11px] text-slate-600">{driverMoves.length} حركة · متبقي {driverRemaining.toLocaleString()} ج</span>
+                    </button>
+                  );
+                })}
+                {allDriverNames.length === 0 && (
+                  <div className="col-span-full text-center py-8 text-slate-400 text-sm">
+                    <Truck className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                    <p>لا توجد أسماء سائقين مسجلة في الحركات حتى الآن.</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
