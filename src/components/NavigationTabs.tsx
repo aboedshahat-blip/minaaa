@@ -94,7 +94,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
   return (
     <nav className="bg-white border-b border-slate-200 no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex space-x-1 space-x-reverse overflow-x-auto py-2">
+        <div className="flex space-x-1 space-x-reverse overflow-x-auto overscroll-x-contain py-2 px-1 [scrollbar-width:thin]">
           {tabs
             .filter((t) => t.visible)
             .map((tab) => {
@@ -103,7 +103,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => onSelectTab(tab.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-lg text-xs md:text-sm font-semibold transition-all whitespace-nowrap ${
+                  className={`flex min-h-11 items-center gap-2 px-3 sm:px-3.5 py-2.5 rounded-lg text-xs md:text-sm font-semibold transition-all whitespace-nowrap snap-start ${
                     isActive
                       ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-200'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
