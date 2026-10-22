@@ -163,6 +163,12 @@ export async function exportMovementsToOfficialPdf(
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
+      // Tailwind v4 emits OKLCH colors, which html2canvas cannot parse.
+      // The export markup is fully styled inline, so strip app stylesheets
+      // from the cloned document before html2canvas reads its CSS rules.
+      onclone: (clonedDocument) => {
+        clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
+      },
     });
 
     const pdf = new jsPDF({
@@ -358,6 +364,12 @@ export async function exportCustomerStatementPdf(
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
+      // Tailwind v4 emits OKLCH colors, which html2canvas cannot parse.
+      // The export markup is fully styled inline, so strip app stylesheets
+      // from the cloned document before html2canvas reads its CSS rules.
+      onclone: (clonedDocument) => {
+        clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
+      },
     });
 
     const pdf = new jsPDF({
