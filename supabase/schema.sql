@@ -52,8 +52,11 @@ CREATE TABLE IF NOT EXISTS movements (
 
   -- الحسابات والعمولات
   cashier_invoice NUMERIC DEFAULT 0,       -- قيمة فاتورة كاشير
+  cashier_receipt_no TEXT,                 -- مسلسل فاتورة الكاشير
+  booking_category TEXT,                   -- تصنيف الحجز
   system_commission NUMERIC DEFAULT 200,   -- عمولة المنظومة (متغيرة، الافتراضي 200)
   nafez_commission NUMERIC DEFAULT 0,      -- عمولة نافذ (إن وجدت)
+  discount NUMERIC DEFAULT 0,              -- الخصم الممنوح للعميل
   total_amount NUMERIC DEFAULT 200,        -- الإجمالي = كاشير + عمولة منظومة + نافذ
   
   -- المديونية والسداد
