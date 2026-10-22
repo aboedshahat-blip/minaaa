@@ -88,6 +88,14 @@ const extractContainerNumbers = (text: string): string[] => {
   return Array.from(new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase())));
 };
 
+const extractPlateDigits = (text: string): string => {
+  const western = text.replace(/[٠-٩۰-۹]/g, (digit) => {
+    const index = '٠١٢٣٤٥٦٧٨٩'.indexOf(digit);
+    return String(index >= 0 ? index : '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit));
+  });
+  return western.match(/\b\d{3,4}\b/)?.[0] || '';
+};
+
 /**
  * Extracts structured movements from PDF documents (Page-by-Page with anchor awareness)
  */
@@ -151,6 +159,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     }
     const dataRowYs: number[] = [];
     const dataRowMovementIndexes: number[][] = [];
+    let lastMovementIndex: number | null = null;
 
     lineBuckets.forEach((bucket) => {
       // Sort items on the line left to right (by X)
@@ -205,6 +214,24 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
           } else {
             return; // Not a data row
           }
+        }
+      }
+
+      // Some booking PDFs print the second container directly above/below its
+      // partner in the same merged truck row. Treat a container-only line as
+      // continuation of the immediately preceding movement.
+      if (
+        containerNumbers.length > 0 &&
+        !afterDec.some((token) => token === '7.5' || token === '7,5') &&
+        lastMovementIndex != null
+      ) {
+        const continuationMovement = lastMovementIndex == null ? undefined : allMovements[lastMovementIndex];
+        const continuationTruckDigits = extractPlateDigits(continuationMovement?.truck_no || '');
+        const rowTruckDigits = extractPlateDigits(rowTokens.join(' '));
+        if (continuationMovement && continuationTruckDigits && continuationTruckDigits === rowTruckDigits) {
+          const existingContainers = extractContainerNumbers(continuationMovement.container_no || '');
+          continuationMovement.container_no = Array.from(new Set([...existingContainers, ...containerNumbers])).join(' / ');
+          return;
         }
       }
 
@@ -284,6 +311,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         seq: allMovements.length + 1,
         container_no: containerNumbers.join(' / ') || container_no,
       });
+      lastMovementIndex = allMovements.length - 1;
       dataRowMovementIndexes.push(rowMovementIndexes);
       dataRowYs.push(bucket.y);
     });
