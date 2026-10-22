@@ -85,12 +85,17 @@ export const flushPendingSync = async () => {
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
 
-  for (const table of ['movements', 'customers', 'berths', 'payments'] as const) {
+  // Upsert referenced records before dependent rows so foreign keys remain valid.
+  for (const table of ['customers', 'berths', 'movements', 'payments'] as const) {
     for (const row of Object.values(pending.upserts[table] || {})) {
       const { error } = await supabase.from(table).upsert(row as Record<string, unknown>);
       if (error) throw new Error(`تعذرت مزامنة ${table}: ${error.message}`);
       clearPendingUpsert(table, (row as { id: string }).id);
     }
+  }
+
+  // Remove dependent rows before referenced records.
+  for (const table of ['movements', 'payments', 'berths', 'customers'] as const) {
     for (const id of pending.deletes[table] || []) {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) throw new Error(`تعذر حذف سجل من ${table}: ${error.message}`);
@@ -307,14 +312,18 @@ export const restoreLocalDataToSupabase = async (data: {
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
 
-  const results = await Promise.all([
-    data.movements.length ? supabase.from('movements').upsert(data.movements) : Promise.resolve({ error: null }),
-    data.customers.length ? supabase.from('customers').upsert(data.customers) : Promise.resolve({ error: null }),
-    data.berths.length ? supabase.from('berths').upsert(data.berths) : Promise.resolve({ error: null }),
-    data.payments.length ? supabase.from('payments').upsert(data.payments) : Promise.resolve({ error: null }),
-  ]);
-  const failedWrite = results.find((result) => result.error);
-  if (failedWrite?.error) throw new Error(`تعذرت استعادة البيانات إلى Supabase: ${failedWrite.error.message}`);
+  // Restore parent rows before rows that reference them through foreign keys.
+  const orderedWrites = [
+    ['customers', data.customers],
+    ['berths', data.berths],
+    ['movements', data.movements],
+    ['payments', data.payments],
+  ] as const;
+  for (const [table, rows] of orderedWrites) {
+    if (!rows.length) continue;
+    const { error } = await supabase.from(table).upsert(rows as never);
+    if (error) throw new Error(`تعذرت استعادة البيانات إلى Supabase: ${error.message}`);
+  }
   for (const row of data.movements) clearPendingUpsert('movements', row.id);
   for (const row of data.customers) clearPendingUpsert('customers', row.id);
   for (const row of data.berths) clearPendingUpsert('berths', row.id);
