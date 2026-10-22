@@ -23,6 +23,7 @@ import {
   syncCustomerToSupabase,
   syncBerthToSupabase,
   syncPaymentToSupabase,
+  restoreLocalDataToSupabase,
   deleteMovementFromSupabase,
   clearAllMovementsFromSupabase,
   deleteCustomerFromSupabase,
@@ -46,6 +47,16 @@ import { CustomerModal } from './components/CustomerModal';
 import { BerthModal } from './components/BerthModal';
 import { PaymentModal } from './components/PaymentModal';
 
+const mergeCloudAndLocal = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
+  const cloudIds = new Set(cloudRows.map((row) => row.id));
+  return [...cloudRows, ...localRows.filter((row) => !cloudIds.has(row.id))];
+};
+
+const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
+  const cloudIds = new Set(cloudRows.map((row) => row.id));
+  return localRows.filter((row) => !cloudIds.has(row.id));
+};
+
 const AppContent: React.FC = () => {
   const {
     isAuthenticated,
@@ -68,31 +79,63 @@ const AppContent: React.FC = () => {
   const [berths, setBerths] = useState<Berth[]>(getStoredBerths);
   const [payments, setPayments] = useState<PaymentReceipt[]>(getStoredPayments);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
+  const [cloudFeedback, setCloudFeedback] = useState<string | null>(null);
+
+  const runCloudOperation = async (operation: Promise<unknown>) => {
+    try {
+      await operation;
+      setCloudFeedback('تم حفظ التغيير في قاعدة البيانات السحابية.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر حفظ التغيير في قاعدة البيانات السحابية.';
+      setCloudFeedback(message);
+    }
+  };
 
   // Initial cloud fetch from Supabase on mount
   const refreshDataFromCloud = async () => {
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
-        if (cloudData.movements !== null && cloudData.movements !== undefined) {
-          setMovements(cloudData.movements);
-          saveMovements(cloudData.movements);
+        const localMovements = getStoredMovements();
+        const localCustomers = getStoredCustomers();
+        const localBerths = getStoredBerths();
+        const localPayments = getStoredPayments();
+        const movementsToUse = mergeCloudAndLocal(cloudData.movements, localMovements);
+        const customersToUse = mergeCloudAndLocal(cloudData.customers, localCustomers);
+        const berthsToUse = mergeCloudAndLocal(cloudData.berths, localBerths);
+        const paymentsToUse = mergeCloudAndLocal(cloudData.payments, localPayments);
+
+        setMovements(movementsToUse);
+        saveMovements(movementsToUse);
+        setCustomers(customersToUse);
+        saveCustomers(customersToUse);
+        setBerths(berthsToUse);
+        saveBerths(berthsToUse);
+        setPayments(paymentsToUse);
+        savePayments(paymentsToUse);
+
+        const movementsToRestore = getLocalOnlyRows(cloudData.movements, localMovements);
+        const customersToRestore = getLocalOnlyRows(cloudData.customers, localCustomers);
+        const berthsToRestore = getLocalOnlyRows(cloudData.berths, localBerths);
+        const paymentsToRestore = getLocalOnlyRows(cloudData.payments, localPayments);
+        const restoredCount = movementsToRestore.length + customersToRestore.length + berthsToRestore.length + paymentsToRestore.length;
+        const shouldRestoreLocalData = restoredCount > 0;
+        if (shouldRestoreLocalData) {
+          await restoreLocalDataToSupabase({
+            movements: movementsToRestore,
+            customers: customersToRestore,
+            berths: berthsToRestore,
+            payments: paymentsToRestore,
+          });
         }
-        if (cloudData.customers && cloudData.customers.length > 0) {
-          setCustomers(cloudData.customers);
-          saveCustomers(cloudData.customers);
-        }
-        if (cloudData.berths && cloudData.berths.length > 0) {
-          setBerths(cloudData.berths);
-          saveBerths(cloudData.berths);
-        }
-        if (cloudData.payments && cloudData.payments.length > 0) {
-          setPayments(cloudData.payments);
-          savePayments(cloudData.payments);
-        }
+        setCloudFeedback(restoredCount > 0
+          ? 'استعدنا البيانات المحفوظة على هذا الجهاز وأعدنا مزامنتها مع السحابة.'
+          : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.');
       }
     } catch (e) {
       console.warn('Cloud sync error:', e);
+      const message = e instanceof Error ? e.message : 'تعذر الاتصال بقاعدة البيانات السحابية.';
+      setCloudFeedback(`${message} احتفظنا بالبيانات المحلية كما هي.`);
     }
   };
 
@@ -145,7 +188,7 @@ const AppContent: React.FC = () => {
       );
       setMovements(updated);
       saveMovements(updated);
-      syncMovementToSupabase(updatedMovement);
+      void runCloudOperation(syncMovementToSupabase(updatedMovement));
     } else {
       if (!canAddMovements) {
         alert('ليس لديك صلاحية لتسجيل حركات جديدة');
@@ -160,7 +203,7 @@ const AppContent: React.FC = () => {
       const updated = [newMovement, ...movements];
       setMovements(updated);
       saveMovements(updated);
-      syncMovementToSupabase(newMovement);
+      void runCloudOperation(syncMovementToSupabase(newMovement));
     }
     setEditingMovement(null);
   };
@@ -174,7 +217,7 @@ const AppContent: React.FC = () => {
       const updated = movements.filter((m) => m.id !== id);
       setMovements(updated);
       saveMovements(updated);
-      deleteMovementFromSupabase(id);
+      void runCloudOperation(deleteMovementFromSupabase(id));
     }
   };
 
@@ -186,7 +229,14 @@ const AppContent: React.FC = () => {
     if (window.confirm('⚠️ تحذير تصفير السيستم:\nهل أنت متأكد من مسح وتصفير كافة الحركات والشحنات المسجلة؟\nسيتم إفراغ النظام وقاعدة البيانات تماماً لتسليمه للعميل خالي من أي بيانات تجريبية.')) {
       setMovements([]);
       saveMovements([]);
-      await clearAllMovementsFromSupabase();
+      try {
+        await clearAllMovementsFromSupabase();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'تعذر مسح الحركات من قاعدة البيانات السحابية.';
+        setCloudFeedback(message);
+        alert(`تم مسح الحركات محلياً، لكن تعذر مسحها من قاعدة البيانات: ${message}`);
+        return;
+      }
       alert('✓ تم مسح وتصفير كافة الشحنات بنجاح. النظام الآن فارغ ونظيف وجاهز للتسليم للعميل.');
     }
   };
@@ -209,14 +259,14 @@ const AppContent: React.FC = () => {
     );
     setMovements(updated);
     saveMovements(updated);
-    syncMovementToSupabase(updatedMovement);
+    void runCloudOperation(syncMovementToSupabase(updatedMovement));
   };
 
   const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
     const updatedMovements = [...importedMovements, ...movements];
     setMovements(updatedMovements);
     saveMovements(updatedMovements);
-    importedMovements.forEach((m) => syncMovementToSupabase(m));
+    void runCloudOperation(Promise.all(importedMovements.map((m) => syncMovementToSupabase(m))));
 
     if (newCustomers && newCustomers.length > 0) {
       // Merge unique customers by name
@@ -226,7 +276,7 @@ const AppContent: React.FC = () => {
         const updatedCustomers = [...filteredNew, ...customers];
         setCustomers(updatedCustomers);
         saveCustomers(updatedCustomers);
-        filteredNew.forEach((c) => syncCustomerToSupabase(c));
+        void runCloudOperation(Promise.all(filteredNew.map((c) => syncCustomerToSupabase(c))));
       }
     }
   };
@@ -234,7 +284,7 @@ const AppContent: React.FC = () => {
   const handleBatchUpdateMovements = (updatedMovements: Movement[]) => {
     setMovements(updatedMovements);
     saveMovements(updatedMovements);
-    updatedMovements.forEach((m) => syncMovementToSupabase(m));
+    void runCloudOperation(Promise.all(updatedMovements.map((m) => syncMovementToSupabase(m))));
   };
 
   // Customer Handlers
@@ -249,12 +299,12 @@ const AppContent: React.FC = () => {
       );
       setCustomers(updated);
       saveCustomers(updated);
-      syncCustomerToSupabase(customerData);
+      void runCloudOperation(syncCustomerToSupabase(customerData));
     } else {
       const updated = [customerData, ...customers];
       setCustomers(updated);
       saveCustomers(updated);
-      syncCustomerToSupabase(customerData);
+      void runCloudOperation(syncCustomerToSupabase(customerData));
     }
     setEditingCustomer(null);
   };
@@ -268,7 +318,7 @@ const AppContent: React.FC = () => {
       const updated = customers.filter((c) => c.id !== id);
       setCustomers(updated);
       saveCustomers(updated);
-      deleteCustomerFromSupabase(id);
+      void runCloudOperation(deleteCustomerFromSupabase(id));
     }
   };
 
@@ -284,12 +334,12 @@ const AppContent: React.FC = () => {
       );
       setBerths(updated);
       saveBerths(updated);
-      syncBerthToSupabase(berthData);
+      void runCloudOperation(syncBerthToSupabase(berthData));
     } else {
       const updated = [...berths, berthData];
       setBerths(updated);
       saveBerths(updated);
-      syncBerthToSupabase(berthData);
+      void runCloudOperation(syncBerthToSupabase(berthData));
     }
     setEditingBerth(null);
   };
@@ -303,7 +353,7 @@ const AppContent: React.FC = () => {
       const updated = berths.filter((b) => b.id !== id);
       setBerths(updated);
       saveBerths(updated);
-      deleteBerthFromSupabase(id);
+      void runCloudOperation(deleteBerthFromSupabase(id));
     }
   };
 
@@ -316,12 +366,12 @@ const AppContent: React.FC = () => {
     const newPayments = [payment, ...payments];
     setPayments(newPayments);
     savePayments(newPayments);
-    syncPaymentToSupabase(payment);
+    void runCloudOperation(syncPaymentToSupabase(payment));
 
     setMovements(updatedMovements);
     saveMovements(updatedMovements);
     // sync updated movements to Supabase
-    updatedMovements.forEach((m) => syncMovementToSupabase(m));
+    void runCloudOperation(Promise.all(updatedMovements.map((m) => syncMovementToSupabase(m))));
   };
 
   // Settings Handlers
@@ -352,6 +402,11 @@ const AppContent: React.FC = () => {
         onSelectTab={setActiveTab}
         movementCount={movements.length}
       />
+      {cloudFeedback && (
+        <div className={`px-4 py-2 text-center text-xs font-semibold ${cloudFeedback.includes('تعذر') || cloudFeedback.includes('فشل') ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`} role="status">
+          {cloudFeedback}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -459,7 +514,7 @@ const AppContent: React.FC = () => {
             customerCount={customers.length}
             berthCount={berths.length}
             paymentCount={payments.length}
-            onRefreshDataFromCloud={refreshDataFromCloud}
+            onRefreshDataFromCloud={async () => { await refreshDataFromCloud(); }}
           />
         )}
       </main>

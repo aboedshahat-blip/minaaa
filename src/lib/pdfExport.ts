@@ -2,6 +2,45 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Movement } from '../types';
 
+const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}[character] as string));
+
+const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5) => {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const contentWidth = pageWidth - margin * 2;
+  const contentHeight = pageHeight - margin * 2;
+  const pixelsPerMm = canvas.width / contentWidth;
+  const pagePixelHeight = Math.max(1, Math.floor(contentHeight * pixelsPerMm));
+
+  for (let top = 0; top < canvas.height; top += pagePixelHeight) {
+    const sliceHeight = Math.min(pagePixelHeight, canvas.height - top);
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = canvas.width;
+    pageCanvas.height = sliceHeight;
+    const context = pageCanvas.getContext('2d');
+    if (!context) throw new Error('تعذر تجهيز صفحة PDF في المتصفح.');
+
+    context.drawImage(canvas, 0, top, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+    if (top > 0) pdf.addPage();
+    pdf.addImage(
+      pageCanvas.toDataURL('image/jpeg', 0.92),
+      'JPEG',
+      margin,
+      margin,
+      contentWidth,
+      sliceHeight / pixelsPerMm,
+      undefined,
+      'FAST',
+    );
+  }
+};
+
 /**
  * Exports the official 12-column port logistics movement sheet as a downloadable PDF.
  * This sheet is clean and does NOT include financial columns (system commission, nafez, cashier, etc.),
@@ -40,17 +79,17 @@ export async function exportMovementsToOfficialPdf(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #cbd5e1; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-weight: bold; color: #1e3a8a;">${m.seq || idx + 1}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; font-weight: bold; text-align: center; color: #0f172a;">${m.truck_no || '-'}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; font-weight: bold; text-align: center; color: #0f172a;">${escapeHtml(m.truck_no || '-')}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.truck_weight ?? 7.5}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.truck_axles ?? 20}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.trailer_no || '-'}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${escapeHtml(m.trailer_no || '-')}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.trailer_weight ?? 11.5}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.trailer_axles ?? 30}</td>
-      <td style="padding: 7px 8px; border: 1px solid #94a3b8; font-weight: 600; color: #1e293b;">${m.driver_name || '-'}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-family: monospace; font-size: 11px;">${m.declaration_no || '-'}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-family: monospace; font-weight: bold; color: #1d4ed8; font-size: 11px;">${m.container_no || '-'}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${m.container_desc || '-'}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${m.container_path || '-'}</td>
+      <td style="padding: 7px 8px; border: 1px solid #94a3b8; font-weight: 600; color: #1e293b;">${escapeHtml(m.driver_name || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-family: monospace; font-size: 11px;">${escapeHtml(m.declaration_no || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-family: monospace; font-weight: bold; color: #1d4ed8; font-size: 11px;">${escapeHtml(m.container_no || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${escapeHtml(m.container_desc || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${escapeHtml(m.container_path || '-')}</td>
     </tr>
   `
     )
@@ -65,9 +104,9 @@ export async function exportMovementsToOfficialPdf(
         </div>
         <div style="text-align: center;">
           <span style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 6px 18px; border-radius: 8px; font-size: 14px; font-weight: bold;">
-            ${title}
+            ${escapeHtml(title)}
           </span>
-          ${berthName ? `<p style="font-size: 12px; color: #334155; margin: 4px 0 0 0; font-weight: bold;">الرصيف: ${berthName}</p>` : ''}
+          ${berthName ? `<p style="font-size: 12px; color: #334155; margin: 4px 0 0 0; font-weight: bold;">الرصيف: ${escapeHtml(berthName)}</p>` : ''}
         </div>
         <div style="text-align: left; font-size: 11px; color: #475569;">
           <p style="margin: 0;"><strong>تاريخ الاستخراج:</strong> ${dateStr}</p>
@@ -120,46 +159,26 @@ export async function exportMovementsToOfficialPdf(
 
   try {
     const canvas = await html2canvas(container, {
-      scale: 2,
+      scale: 1.25,
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
     });
 
-    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
       format: 'a4',
     });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pdfWidth - 10;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    if (imgHeight <= pdfHeight - 10) {
-      pdf.addImage(imgData, 'PNG', 5, 5, imgWidth, imgHeight);
-    } else {
-      // Split into multi-page if height exceeds page
-      let heightLeft = imgHeight;
-      let position = 5;
-      pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + 5;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
-      }
-    }
+    addCanvasAsPdfPages(pdf, canvas);
 
     const cleanFileName = `كشف_حركات_${new Date().toISOString().split('T')[0]}_${movements.length}_حركة.pdf`;
     pdf.save(cleanFileName);
   } catch (error) {
     console.error('Error exporting PDF:', error);
-    alert('حدث خطأ أثناء إنشاء وتنزيل ملف PDF. يرجى المحاولة مرة أخرى.');
+    const details = error instanceof Error ? error.message : String(error);
+    alert(`تعذر إنشاء ملف PDF. ${details}`);
   } finally {
     document.body.removeChild(container);
   }
@@ -212,11 +231,11 @@ export async function exportCustomerStatementPdf(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${m.container_no || '-'}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${m.declaration_no || '-'}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center;">${m.truck_no || '-'}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px;">${m.movement_date || '-'}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-size: 10px; color: #4338ca;">${m.cashier_receipt_no || '-'}</td>
+      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}</td>
+      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${escapeHtml(m.declaration_no || '-')}</td>
+      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center;">${escapeHtml(m.truck_no || '-')}</td>
+      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px;">${escapeHtml(m.movement_date || '-')}</td>
+      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-size: 10px; color: #4338ca;">${escapeHtml(m.cashier_receipt_no || '-')}</td>
       <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold;">${(Number(m.cashier_invoice) || 0).toLocaleString()}</td>
       <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #1d4ed8;">${(Number(m.system_commission) || 0).toLocaleString()}</td>
       <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: ${m.discount ? '#e11d48' : '#64748b'};">${m.discount ? `${Number(m.discount).toLocaleString()}-` : '0'}</td>
@@ -230,7 +249,7 @@ export async function exportCustomerStatementPdf(
     <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
       <div style="text-align: right;">
         <h2 style="font-size: 20px; font-weight: 900; color: #1e3a8a; margin: 0;">منظومة VIB اللوجستية</h2>
-        <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">${placeName}</p>
+        <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">${escapeHtml(placeName)}</p>
       </div>
       <div style="text-align: center;">
         <span style="display: inline-block; background-color: #1e3a8a; color: #ffffff; padding: 6px 20px; border-radius: 8px; font-size: 14px; font-weight: bold;">
@@ -248,11 +267,11 @@ export async function exportCustomerStatementPdf(
     <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 12px;">
       <div>
         <span style="color: #64748b; font-size: 10px; font-weight: bold; display: block;">اسم العميل / السائق:</span>
-        <strong style="font-size: 14px; color: #0f172a;">${customerName}</strong>
+        <strong style="font-size: 14px; color: #0f172a;">${escapeHtml(customerName)}</strong>
       </div>
       <div>
         <span style="color: #64748b; font-size: 10px; font-weight: bold; display: block;">الشاحنات المنفذة:</span>
-        <span style="color: #334155; font-size: 11px;">${truckPlates || 'غير محدد'}</span>
+        <span style="color: #334155; font-size: 11px;">${escapeHtml(truckPlates || 'غير محدد')}</span>
       </div>
       <div>
         <span style="color: #64748b; font-size: 10px; font-weight: bold; display: block;">حالة الحساب:</span>
@@ -335,45 +354,26 @@ export async function exportCustomerStatementPdf(
 
   try {
     const canvas = await html2canvas(container, {
-      scale: 2,
+      scale: 1.25,
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
     });
 
-    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
     });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pdfWidth - 10;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    if (imgHeight <= pdfHeight - 10) {
-      pdf.addImage(imgData, 'PNG', 5, 5, imgWidth, imgHeight);
-    } else {
-      let heightLeft = imgHeight;
-      let position = 5;
-      pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight + 5;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 5, position, imgWidth, imgHeight);
-        heightLeft -= pdfHeight;
-      }
-    }
+    addCanvasAsPdfPages(pdf, canvas);
 
     const safeName = customerName.replace(/[^ء-يa-zA-Z0-9_-]/g, '_');
     pdf.save(`فاتورة_حساب_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`);
   } catch (error) {
     console.error('Error exporting customer PDF:', error);
-    alert('حدث خطأ أثناء تنزيل فاتورة العميل PDF.');
+    const details = error instanceof Error ? error.message : String(error);
+    alert(`تعذر تنزيل فاتورة العميل PDF. ${details}`);
   } finally {
     document.body.removeChild(container);
   }
