@@ -451,7 +451,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                           <td className="p-2 border border-slate-200">{row.trailer_no || '-'}</td>
                           <td className="p-2 border border-slate-200 text-center">{row.trailer_weight ?? 11.5}</td>
                           <td className="p-2 border border-slate-200 text-center">{row.trailer_axles ?? 30}</td>
-                          <td className="p-2 border border-slate-200">{row.driver_name || '-'}</td>
+                          <td dir="auto" className="p-2 border border-slate-200">{row.driver_name || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{row.declaration_no || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{row.container_no || '-'}</td>
                           <td className="p-2 border border-slate-200">{row.container_desc || '-'}</td>

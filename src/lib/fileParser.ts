@@ -60,7 +60,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     const content = await page.getTextContent();
 
     // Group items on this single page by vertical Y proximity (within 7px)
-    const lineBuckets: { y: number; items: { x: number; str: string }[] }[] = [];
+    const lineBuckets: { y: number; items: { x: number; str: string; dir?: string }[] }[] = [];
 
     content.items.forEach((item: any) => {
       const str = (item.str || '').trim();
@@ -73,7 +73,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         bucket = { y, items: [] };
         lineBuckets.push(bucket);
       }
-      bucket.items.push({ x, str });
+      bucket.items.push({ x, str, dir: item.dir });
     });
 
     // Sort lines top to bottom on this page
@@ -107,6 +107,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       let container_no = '';
       let declaration_no = '';
       let afterDec: string[] = [];
+      let afterDecItems: typeof bucket.items = [];
 
       if (containerIdx !== -1) {
         container_no = rowTokens[containerIdx].replace(/\s+/g, '').toUpperCase();
@@ -114,17 +115,20 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
           declaration_no = rowTokens[containerIdx + 1];
         }
         afterDec = rowTokens.slice(containerIdx + 2);
+        afterDecItems = bucket.items.slice(containerIdx + 2);
       } else {
         // Line without container code - check for declaration number (5-7 digits)
         const decIdx = rowTokens.findIndex((t, idx) => idx > 0 && /^\d{5,7}$/.test(t));
         if (decIdx !== -1) {
           declaration_no = rowTokens[decIdx];
           afterDec = rowTokens.slice(decIdx + 1);
+          afterDecItems = bucket.items.slice(decIdx + 1);
         } else {
           // Check if line contains truck weight (7.5 or 7,5) and trailer weight (11 or 11.5)
           const hasWeights = rowTokens.some((t) => t === '7.5' || t === '7,5');
           if (hasWeights) {
             afterDec = rowTokens.slice(1);
+            afterDecItems = bucket.items.slice(1);
           } else {
             return; // Not a data row
           }
@@ -144,7 +148,12 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       const axleIdx = afterDec.findIndex((t) => t === '30' || t === '20');
       let driver_name = '';
       if (axleIdx > 0) {
-        driver_name = afterDec.slice(0, axleIdx).join(' ');
+        const driverItems = afterDecItems.slice(0, axleIdx);
+        // PDF.js reports Arabic runs as visual fragments. Reorder only the
+        // fragments inside the driver cell into right-to-left reading order.
+        driver_name = driverItems.length > 1 && driverItems.every((item) => item.dir === 'rtl')
+          ? [...driverItems].sort((a, b) => b.x - a.x).map((item) => item.str).join(' ')
+          : afterDec.slice(0, axleIdx).join(' ');
         trailer_axles = Number(afterDec[axleIdx]) || 30;
       }
 
@@ -220,8 +229,18 @@ export const matrixToMovements = (matrix: string[][]): {
     return { rows: [], headers: STANDARD_HEADERS, rawRowCount: 0 };
   }
 
+  // When a sheet has headers, use its driver-name column as the source of
+  // truth instead of guessing the name from other text in the row.
+  const headerRowIndex = matrix.findIndex((row) =>
+    row.some((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
+  );
+  const driverNameColumnIndex = headerRowIndex >= 0
+    ? matrix[headerRowIndex].findIndex((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
+    : -1;
+
   // Filter out header and empty rows
-  const cleanRows = matrix.filter((row) => {
+  const cleanRows = matrix.filter((row, rowIndex) => {
+    if (rowIndex === headerRowIndex) return false;
     const text = row.join(' ');
     const headerWords = ['مسار', 'الحاوية', 'المقطورة', 'الشاحنة', 'السائق', 'الرخصة', 'واقع', 'محاور', 'وزن', 'رقم'];
     let hits = 0;
@@ -247,9 +266,14 @@ export const matrixToMovements = (matrix: string[][]): {
     const plateLetters: string[] = [];
     const plateNumbers: string[] = [];
 
-    tokens.forEach((tok) => {
+    tokens.forEach((tok, columnIndex) => {
       const s = String(tok || '').trim();
       if (!s || s === '-' || s === '—') return;
+
+      if (columnIndex === driverNameColumnIndex) {
+        driver_name = s;
+        return;
+      }
 
       // Container code
       const cMatch = s.match(/[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}/i);

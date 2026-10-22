@@ -504,6 +504,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
                       <td className="p-1 border border-slate-200">
                         <input
                           type="text"
+                          dir="auto"
                           value={row.driver_name || ''}
                           onChange={(e) => handleUpdateRowCell(idx, 'driver_name', e.target.value)}
                           className="w-full bg-transparent px-1.5 py-1 text-xs focus:bg-white focus:ring-1 focus:ring-blue-500 rounded"
