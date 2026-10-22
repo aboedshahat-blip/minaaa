@@ -27,6 +27,7 @@ import {
   getPendingSyncForTable,
   flushPendingSync,
   clearOperationalLocalData,
+  clearOperationalDataFromSupabase,
   getLocalDataResetAt,
   deleteMovementFromSupabase,
   clearAllMovementsFromSupabase,
@@ -292,6 +293,16 @@ const AppContent: React.FC = () => {
       }
       alert('✓ تم مسح وتصفير كافة الشحنات بنجاح. النظام الآن فارغ ونظيف وجاهز للتسليم للعميل.');
     }
+  };
+
+  const handleClearOperationalData = async () => {
+    if (!isAdmin) throw new Error('هذه العملية متاحة للمدير العام فقط.');
+    const resetAt = await clearOperationalDataFromSupabase();
+    clearOperationalLocalData(resetAt);
+    setMovements([]);
+    setCustomers([]);
+    setPayments([]);
+    setCloudFeedback('تم مسح بيانات التشغيل ومزامنة التصفير مع الأجهزة المرتبطة.');
   };
 
   const handleTogglePaid = (movement: Movement) => {
@@ -568,6 +579,7 @@ const AppContent: React.FC = () => {
             berthCount={berths.length}
             paymentCount={payments.length}
             onRefreshDataFromCloud={async () => { await refreshDataFromCloud(); }}
+            onClearOperationalData={handleClearOperationalData}
           />
         )}
       </main>

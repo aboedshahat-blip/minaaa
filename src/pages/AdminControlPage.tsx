@@ -31,6 +31,7 @@ interface AdminControlPageProps {
   berthCount: number;
   paymentCount: number;
   onRefreshDataFromCloud: () => Promise<void>;
+  onClearOperationalData: () => Promise<void>;
 }
 
 export const AdminControlPage: React.FC<AdminControlPageProps> = ({
@@ -41,6 +42,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   berthCount,
   paymentCount,
   onRefreshDataFromCloud,
+  onClearOperationalData,
 }) => {
   const {
     users,
@@ -71,6 +73,11 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+  const [clearPassword, setClearPassword] = useState('');
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [clearFeedback, setClearFeedback] = useState<string | null>(null);
+  const [isClearingData, setIsClearingData] = useState(false);
 
   // Active selected user for permissions/password management
   const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
@@ -98,6 +105,35 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncFeedback(null), 4000);
+    }
+  };
+
+  const handleConfirmClearData = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const adminUser = users.find((u) => u.role === 'admin') || currentUser;
+    const adminPassword = (adminUser?.password || 'admin123').trim();
+    if (clearPassword.trim() !== adminPassword) {
+      setClearError('كلمة المرور غير صحيحة. أدخل كلمة مرور الأدمن للمتابعة.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'تحذير: سيتم حذف كل الحركات والعملاء وسندات القبض من قاعدة البيانات والأجهزة المرتبطة. ستظل حسابات المستخدمين وكلمات المرور والإعدادات والأرصفة محفوظة. هل تريد المتابعة؟'
+    );
+    if (!confirmed) return;
+
+    setIsClearingData(true);
+    setClearError(null);
+    setClearFeedback(null);
+    try {
+      await onClearOperationalData();
+      setClearFeedback('تم مسح بيانات التشغيل ومزامنة التصفير مع الأجهزة المرتبطة.');
+      setClearPassword('');
+      setIsClearDialogOpen(false);
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : 'تعذر مسح البيانات.');
+    } finally {
+      setIsClearingData(false);
     }
   };
 
@@ -309,6 +345,28 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
           <span className="text-[10px] text-amber-600 block mt-1">سند مالي</span>
         </div>
       </div>
+
+      <section className="bg-rose-50 rounded-2xl border border-rose-200 p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-black text-rose-900 flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5" /> مسح بيانات التشغيل
+            </h2>
+            <p className="text-xs text-rose-800 mt-1 leading-6">
+              يمسح الحركات والعملاء وسندات القبض من السحابة والأجهزة المرتبطة. تبقى حسابات المستخدمين والإعدادات والأرصفة كما هي.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setClearError(null); setClearPassword(''); setIsClearDialogOpen(true); }}
+            className="shrink-0 bg-rose-700 hover:bg-rose-800 text-white text-sm font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition shadow-sm"
+          >
+            <Trash2 className="w-4 h-4" /> مسح البيانات
+          </button>
+        </div>
+        {clearFeedback && <p role="status" className="text-sm font-bold text-emerald-700">{clearFeedback}</p>}
+        {clearError && !isClearDialogOpen && <p role="alert" className="text-sm font-bold text-rose-700">{clearError}</p>}
+      </section>
 
       {/* Users & Granular Permissions Matrix */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
@@ -664,6 +722,40 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-xs"
                 >
                   حفظ وإضافة المستخدم
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isClearDialogOpen && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4" dir="rtl">
+          <div role="dialog" aria-modal="true" aria-labelledby="clear-data-title" className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 p-6 space-y-4">
+            <div className="flex items-center gap-3 text-rose-700">
+              <div className="bg-rose-100 p-2.5 rounded-xl"><Lock className="w-5 h-5" /></div>
+              <div>
+                <h3 id="clear-data-title" className="font-black text-slate-900">تأكيد مسح بيانات التشغيل</h3>
+                <p className="text-xs text-slate-500 mt-1">أدخل كلمة مرور الأدمن نفسها المستخدمة لفتح لوحة التحكم.</p>
+              </div>
+            </div>
+            <form onSubmit={handleConfirmClearData} className="space-y-3">
+              <label htmlFor="clear-data-password" className="block text-xs font-bold text-slate-700">كلمة مرور الأدمن</label>
+              <input
+                id="clear-data-password"
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                value={clearPassword}
+                onChange={(e) => { setClearPassword(e.target.value); setClearError(null); }}
+                className="w-full text-center font-mono py-2.5 px-3 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                required
+              />
+              {clearError && <p role="alert" className="text-xs font-bold text-rose-700">{clearError}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" disabled={isClearingData} onClick={() => setIsClearDialogOpen(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 disabled:opacity-50">إلغاء</button>
+                <button type="submit" disabled={isClearingData} className="bg-rose-700 hover:bg-rose-800 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-60 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" /> {isClearingData ? 'جارٍ المسح...' : 'تحقق وامسح البيانات'}
                 </button>
               </div>
             </form>

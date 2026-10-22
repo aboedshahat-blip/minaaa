@@ -79,6 +79,39 @@ export const clearOperationalLocalData = (resetAt: string) => {
 
 export const getLocalDataResetAt = () => localStorage.getItem(KEYS.DATA_RESET_AT);
 
+export const clearOperationalDataFromSupabase = async () => {
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+
+  const resetAt = new Date().toISOString();
+  const deleteAll = async (table: 'payments' | 'movements') => {
+    const { error } = await supabase.from(table).delete().not('id', 'is', null);
+    if (error) throw new Error(`تعذر مسح بيانات ${table}: ${error.message}`);
+  };
+
+  // Remove dependent records first, then customers while retaining system users.
+  await deleteAll('payments');
+  await deleteAll('movements');
+  const { error: customersError } = await supabase
+    .from('customers')
+    .delete()
+    .not('id', 'in', '("__SYSTEM_USERS_CONFIG__","__SYSTEM_HANDOFF_RESET__")');
+  if (customersError) throw new Error(`تعذر مسح بيانات العملاء: ${customersError.message}`);
+
+  const { error: markerError } = await supabase.from('customers').upsert({
+    id: '__SYSTEM_HANDOFF_RESET__',
+    code: '__SYS_RESET__',
+    name: 'علامة تصفير بيانات التشغيل',
+    trucks: [],
+    notes: 'إشارة مزامنة لمسح البيانات التشغيلية من الأجهزة المرتبطة.',
+    created_at: resetAt,
+  });
+  if (markerError) throw new Error(`تم مسح بعض البيانات، لكن تعذر تسجيل علامة المزامنة: ${markerError.message}`);
+
+  return resetAt;
+};
+
 export const flushPendingSync = async () => {
   const pending = getPendingSync();
   const settings = getStoredSettings();
