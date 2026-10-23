@@ -4,7 +4,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel } from '../lib/excelUtils';
 import {
   Search,
-  Filter,
   Download,
   Printer,
   Trash2,
@@ -97,6 +96,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [entryDate, setEntryDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [entryTimeFrom, setEntryTimeFrom] = useState('');
   const [entryTimeTo, setEntryTimeTo] = useState('');
+  const [dailyPage, setDailyPage] = useState(1);
+  const dailyPageSize = 20;
   const [expandedMovementIds, setExpandedMovementIds] = useState<Set<string>>(new Set());
   const [selectedManifestBatch, setSelectedManifestBatch] = useState('latest');
   const [selectedManifestBatchIds, setSelectedManifestBatchIds] = useState<string[]>([]);
@@ -180,6 +181,13 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     else totals.unpaidCount += 1;
     return totals;
   }, { due: 0, paid: 0, remaining: 0, paidCount: 0, partialCount: 0, unpaidCount: 0 }), [dashboardMovements]);
+  const sortedDashboardMovements = useMemo(
+    () => dashboardMovements.slice().sort((a, b) => (getEntryDateTime(b)?.getTime() || 0) - (getEntryDateTime(a)?.getTime() || 0)),
+    [dashboardMovements],
+  );
+  const dailyPageCount = Math.max(1, Math.ceil(sortedDashboardMovements.length / dailyPageSize));
+  const safeDailyPage = Math.min(dailyPage, dailyPageCount);
+  const visibleDashboardMovements = sortedDashboardMovements.slice((safeDailyPage - 1) * dailyPageSize, safeDailyPage * dailyPageSize);
 
   // Filtered movements
   const filteredMovements = useMemo(() => {
@@ -405,158 +413,82 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Stage tab config
   const stageTabs = [
-    {
-      key: 'daily' as const,
-      icon: '📊',
-      label: 'لوحة اليوم',
-      sublabel: 'ملخص الحركات والتحصيل والبحث بالوقت',
-      color: 'blue',
-      bg: 'bg-blue-600',
-      hoverBg: 'hover:bg-blue-700',
-      activeBorder: 'border-blue-500',
-      activeText: 'text-blue-700',
-      activeBg: 'bg-blue-50',
-    },
-    {
-      key: 'stage1_manifest' as const,
-      icon: '1️⃣',
-      label: 'تجميع الشيتات وكشف الميناء',
-      sublabel: 'رفع الشيتات ← طباعة كشف PDF للمكتب',
-      color: 'rose',
-      bg: 'bg-rose-600',
-      hoverBg: 'hover:bg-rose-700',
-      activeBorder: 'border-rose-500',
-      activeText: 'text-rose-700',
-      activeBg: 'bg-rose-50',
-    },
-    {
-      key: 'stage2_cashier' as const,
-      icon: '2️⃣',
-      label: 'تسجيل فواتير الكاشير',
-      sublabel: 'بعد المحاسبة ← رفع فاتورة الكاشير أو ربط يدوي',
-      color: 'emerald',
-      bg: 'bg-emerald-600',
-      hoverBg: 'hover:bg-emerald-700',
-      activeBorder: 'border-emerald-500',
-      activeText: 'text-emerald-700',
-      activeBg: 'bg-emerald-50',
-    },
-    ...(canViewFinancials
-      ? [
-          {
-            key: 'stage3_clients' as const,
-            icon: '3️⃣',
-            label: 'حسابات ومطالبات العملاء',
-            sublabel: 'تجميع الشحنات لكل عميل ← خصم ← PDF العميل',
-            color: 'amber',
-            bg: 'bg-amber-600',
-            hoverBg: 'hover:bg-amber-700',
-            activeBorder: 'border-amber-500',
-            activeText: 'text-amber-700',
-            activeBg: 'bg-amber-50',
-          },
-        ]
-      : []),
-    {
-      key: 'all' as const,
-      icon: '📋',
-      label: 'جدول السيد (الكل)',
-      sublabel: 'جميع البيانات والأعمدة المالية',
-      color: 'slate',
-      bg: 'bg-slate-700',
-      hoverBg: 'hover:bg-slate-800',
-      activeBorder: 'border-slate-500',
-      activeText: 'text-slate-700',
-      activeBg: 'bg-slate-50',
-    },
+    { key: 'daily' as const, icon: '📊', label: 'اليوم' },
+    { key: 'stage1_manifest' as const, icon: '1', label: 'تجميع الشيتات' },
+    { key: 'stage2_cashier' as const, icon: '2', label: 'فواتير الكاشير' },
+    ...(canViewFinancials ? [{ key: 'stage3_clients' as const, icon: '3', label: 'حسابات العملاء' }] : []),
+    { key: 'all' as const, icon: '☷', label: 'كل الحركات' },
   ];
 
   return (
     <div className="space-y-6">
-      {/* ===== STAGE SELECTOR CARDS ===== */}
-      <div className="no-print">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {stageTabs.map((tab) => {
-            const isActive = activeStage === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveStage(tab.key)}
-                className={`text-right p-4 rounded-2xl border-2 transition-all shadow-sm hover:shadow-md ${
-                  isActive
-                    ? `${tab.activeBorder} ${tab.activeBg} shadow-md`
-                    : 'border-slate-200 bg-white hover:border-slate-300'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl leading-none mt-0.5">{tab.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-black leading-snug ${isActive ? tab.activeText : 'text-slate-800'}`}>
-                      {tab.label}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{tab.sublabel}</p>
-                    {isActive && (
-                      <span className={`inline-block mt-2 text-[10px] font-black px-2 py-0.5 rounded-full text-white ${tab.bg}`}>
-                        الوضع النشط
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <nav className="no-print flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2" aria-label="أقسام الحركات">
+        {stageTabs.map((tab) => (
+          <button key={tab.key} onClick={() => setActiveStage(tab.key)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${activeStage === tab.key ? 'bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+            <span className="flex h-5 min-w-5 items-center justify-center rounded bg-white/20 px-1">{tab.icon}</span>{tab.label}
+          </button>
+        ))}
+      </nav>
 
       {activeStage === 'daily' && (
         <section className="space-y-4">
-          <div className="rounded-2xl bg-gradient-to-l from-slate-950 via-blue-950 to-blue-800 p-5 text-white shadow-lg">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div><p className="text-xs text-blue-200">متابعة التشغيل والتحصيل</p><h2 className="mt-1 text-xl font-black">لوحة الحركات اليومية</h2><p className="mt-1 text-xs text-blue-100">الحركات معروضة حسب وقت إدخالها للنظام، ويمكنك البحث بالتاريخ والساعة.</p></div>
-              <div className="flex flex-wrap gap-2">
-                {canUndoLatestDeletion && <button onClick={()=>void runUndoLatestDeletion()} className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950"><RotateCcw className="h-4 w-4"/>تراجع عن آخر حذف (Ctrl+Z)</button>}
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-xl font-black text-slate-900">حركات اليوم</h2><p className="mt-1 text-xs text-slate-500">أحدث الحركات أولًا. ابحث بالعميل أو السائق أو رقم المركبة.</p></div>
+            {canUndoLatestDeletion && <button onClick={() => void runUndoLatestDeletion()} className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"><RotateCcw className="h-4 w-4"/>تراجع عن آخر حذف</button>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <div className="rounded-xl border border-blue-200 bg-white p-4"><span className="text-xs text-slate-500">عدد الحركات</span><strong className="mt-1 block text-2xl text-blue-800">{dashboardMovements.length}</strong></div>
+          <div className={`grid grid-cols-2 gap-3 ${canViewFinancials ? 'lg:grid-cols-4' : 'lg:grid-cols-1'}`}>
+            <div className="rounded-xl border border-blue-200 bg-white p-3"><span className="text-xs text-slate-500">عدد الحركات</span><strong className="mt-1 block text-2xl text-blue-800">{dashboardMovements.length}</strong></div>
             {canViewFinancials && <>
-              <div className="rounded-xl border border-slate-200 bg-white p-4"><span className="text-xs text-slate-500">إجمالي المستحق</span><strong className="mt-1 block text-xl text-slate-900">{dashboardTotals.due.toLocaleString()} ج.م</strong></div>
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><span className="text-xs text-emerald-700">المحصل</span><strong className="mt-1 block text-xl text-emerald-800">{dashboardTotals.paid.toLocaleString()} ج.م</strong></div>
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><span className="text-xs text-rose-700">المتبقي</span><strong className="mt-1 block text-xl text-rose-800">{dashboardTotals.remaining.toLocaleString()} ج.م</strong></div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><span className="text-xs text-amber-700">مدفوع جزئي</span><strong className="mt-1 block text-xl text-amber-800">{dashboardTotals.partialCount} حركة</strong></div>
-              <div className="rounded-xl border border-rose-200 bg-white p-4"><span className="text-xs text-rose-700">لم يدفع</span><strong className="mt-1 block text-xl text-rose-800">{dashboardTotals.unpaidCount} حركة</strong></div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3"><span className="text-xs text-slate-500">المستحق</span><strong className="mt-1 block text-lg text-slate-900">{dashboardTotals.due.toLocaleString()} ج.م</strong></div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><span className="text-xs text-emerald-700">المحصل</span><strong className="mt-1 block text-lg text-emerald-800">{dashboardTotals.paid.toLocaleString()} ج.م</strong></div>
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3"><span className="text-xs text-rose-700">المتبقي</span><strong className="mt-1 block text-lg text-rose-800">{dashboardTotals.remaining.toLocaleString()} ج.م</strong><span className="mt-1 block text-[11px] text-slate-500">{dashboardTotals.unpaidCount} لم يدفع · {dashboardTotals.partialCount} جزئي</span></div>
             </>}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 font-bold text-slate-800"><Filter className="h-4 w-4 text-blue-600"/>بحث وتصفية</div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6">
-              <div className="relative lg:col-span-2"><Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input value={searchTerm} onChange={(e)=>setSearchTerm(e.target.value)} placeholder="اسم العميل، السائق، الشاحنة، الحاوية..." className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-3 text-sm"/></div>
-              <label className="relative"><CalendarDays className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input type="date" value={entryDate} onChange={(e)=>setEntryDate(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-2 text-sm" title="تاريخ الإدخال"/></label>
-              <input type="time" aria-label="من الساعة" value={entryTimeFrom} onChange={(e)=>setEntryTimeFrom(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/>
-              <input type="time" aria-label="إلى الساعة" value={entryTimeTo} onChange={(e)=>setEntryTimeTo(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/>
-              {canViewFinancials && <select value={selectedPaymentStatus} onChange={(e)=>setSelectedPaymentStatus(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="unpaid">لم يدفع</option><option value="partial">دفع جزئي</option><option value="paid">مدفوع</option></select>}
-              <button onClick={()=>{setEntryDate('');setEntryTimeFrom('');setEntryTimeTo('');setSearchTerm('');setSelectedPaymentStatus('');}} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200">عرض كل الأيام ومسح البحث</button>
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <div className="relative"><Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setDailyPage(1); }} placeholder="ابحث بالعميل، السائق، الشاحنة أو الحاوية" className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-3 text-sm"/></div>
+              <label className="relative"><CalendarDays className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input type="date" value={entryDate} onChange={(e) => { setEntryDate(e.target.value); setDailyPage(1); }} className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-2 text-sm" aria-label="تاريخ إدخال الحركة"/></label>
+              <div className="flex gap-2">
+                <button onClick={() => { setEntryDate(new Date().toLocaleDateString('en-CA')); setDailyPage(1); }} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">اليوم</button>
+                <button onClick={() => { setEntryDate(''); setDailyPage(1); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">كل الأيام</button>
+              </div>
             </div>
-            <p className="mt-2 text-xs text-slate-500">توقيت الإدخال: التوقيت المحلي للجهاز. تاريخ الحركة التشغيلي يظهر في تفاصيل كل حركة.</p>
+            <details className="mt-3 border-t border-slate-100 pt-2">
+              <summary className="cursor-pointer text-xs font-bold text-slate-600">فلاتر إضافية: الوقت وحالة الدفع</summary>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <label className="text-xs text-slate-500">من الساعة<input type="time" value={entryTimeFrom} onChange={(e) => { setEntryTimeFrom(e.target.value); setDailyPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/></label>
+                <label className="text-xs text-slate-500">إلى الساعة<input type="time" value={entryTimeTo} onChange={(e) => { setEntryTimeTo(e.target.value); setDailyPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/></label>
+                {canViewFinancials && <label className="text-xs text-slate-500">حالة الدفع<select value={selectedPaymentStatus} onChange={(e) => { setSelectedPaymentStatus(e.target.value); setDailyPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"><option value="">كل الحالات</option><option value="unpaid">لم يدفع</option><option value="partial">دفع جزئي</option><option value="paid">مدفوع</option></select></label>}
+              </div>
+              <button onClick={() => { setEntryTimeFrom(''); setEntryTimeTo(''); setSelectedPaymentStatus(''); setSearchTerm(''); setDailyPage(1); }} className="mt-2 text-xs font-bold text-blue-700">مسح البحث والفلاتر</button>
+            </details>
           </div>
 
-          <div className="space-y-3">
-            {dashboardMovements.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">لا توجد حركات مطابقة للفلاتر المحددة.</div> : dashboardMovements.slice().sort((a,b)=>(getEntryDateTime(b)?.getTime()||0)-(getEntryDateTime(a)?.getTime()||0)).map((m)=>{
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-black text-slate-800">الحركات ({dashboardMovements.length})</h3>
+            {dashboardMovements.length > 0 && <span className="text-xs text-slate-500">عرض {((safeDailyPage - 1) * dailyPageSize) + 1}–{Math.min(safeDailyPage * dailyPageSize, dashboardMovements.length)}</span>}
+          </div>
+          <div className="space-y-2">
+            {dashboardMovements.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">لا توجد حركات مطابقة. غيّر التاريخ أو امسح البحث.</div> : visibleDashboardMovements.map((m)=>{
               const expanded = expandedMovementIds.has(m.id);
               const created = getEntryDateTime(m);
               const statusLabel = m.payment_status === 'paid' ? 'مدفوع' : m.payment_status === 'partial' ? 'مدفوع جزئيًا' : 'لم يدفع';
               return <article key={m.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-                  <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 font-black text-blue-800">{m.seq}</span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-black text-slate-900">{m.driver_name || m.customer_name || 'عميل عام'}</h3><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.payment_status==='paid'?'bg-emerald-100 text-emerald-700':m.payment_status==='partial'?'bg-amber-100 text-amber-700':'bg-rose-100 text-rose-700'}`}>{canViewFinancials?statusLabel:'حركة مسجلة'}</span></div><p className="mt-1 truncate text-sm text-slate-600">شاحنة: {m.truck_no || '—'} <span className="px-1 text-slate-300">|</span> مقطورة: {m.trailer_no || '—'} <span className="px-1 text-slate-300">|</span> حاوية: {m.container_no || '—'}</p><p className="mt-1 text-xs text-slate-500">وقت الإدخال: {created ? created.toLocaleString('ar-EG') : 'غير مسجل'}{m.movement_date ? ` — تاريخ الحركة: ${m.movement_date}` : ''}</p></div></div>
+                  <div className="flex min-w-0 items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-800">{m.seq}</span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-black text-slate-900">{m.customer_name || m.driver_name || 'عميل عام'}</h3><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.payment_status==='paid'?'bg-emerald-100 text-emerald-700':m.payment_status==='partial'?'bg-amber-100 text-amber-700':'bg-rose-100 text-rose-700'}`}>{canViewFinancials?statusLabel:'حركة مسجلة'}</span></div><p className="mt-1 truncate text-sm text-slate-600">الشاحنة: {m.truck_no || '—'} <span className="px-1 text-slate-300">|</span> المقطورة: {m.trailer_no || '—'} <span className="px-1 text-slate-300">|</span> الحاوية: {m.container_no || '—'}</p><p className="mt-1 text-xs text-slate-500">السائق: {m.driver_name || '—'} · {created ? created.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'وقت غير مسجل'}{m.movement_date ? ` · تاريخ الحركة: ${m.movement_date}` : ''}</p></div></div>
                   <div className="flex flex-wrap items-center gap-2 md:justify-end">{canViewFinancials && <div className="me-2 text-sm"><span className="text-slate-500">المتبقي </span><strong className={Number(m.remaining_amount)>0?'text-rose-700':'text-emerald-700'}>{Number(m.remaining_amount||0).toLocaleString()} ج.م</strong></div>}{canManagePayments && Number(m.remaining_amount)>0 && <button onClick={()=>onOpenPaymentModal?.(m.customer_id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">تسجيل تحصيل</button>}<button onClick={()=>onEditMovement(m)} className="rounded-lg border border-blue-200 p-2 text-blue-700" title="تعديل"><Edit2 className="h-4 w-4"/></button><button onClick={()=>setExpandedMovementIds((old)=>{const next=new Set(old);expanded?next.delete(m.id):next.add(m.id);return next;})} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{expanded?'إخفاء التفاصيل':'تفاصيل الحركة'}{expanded?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}</button></div>
                 </div>
                 {expanded && <div className="grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-5">{[["العميل",m.customer_name],['السائق',m.driver_name],['رقم الشاحنة',m.truck_no],['رقم المقطورة',m.trailer_no],['رقم الحاوية',m.container_no],['رقم الإقرار',m.declaration_no],['الرصيف',m.berth_name],['مسار الحاوية',m.container_path],['وصف الحاوية',m.container_desc],['تاريخ الحركة',m.movement_date],...(canViewFinancials?[["فاتورة الكاشير",`${Number(m.cashier_invoice||0).toLocaleString()} ج.م`],['إيصال الكاشير',m.cashier_receipt_no],['عمولة المنظومة',`${Number(m.system_commission||0).toLocaleString()} ج.م`],['عمولة نافذ',`${Number(m.nafez_commission||0).toLocaleString()} ج.م`],['الإجمالي',`${Number(m.total_amount||0).toLocaleString()} ج.م`],['المدفوع',`${Number(m.paid_amount||0).toLocaleString()} ج.م`],['المتبقي',`${Number(m.remaining_amount||0).toLocaleString()} ج.م`]]:[]),['ملاحظات',m.notes]].map(([label,value])=><div key={label} className="bg-white p-3"><span className="block text-[10px] text-slate-500">{label}</span><strong className="mt-1 block break-words text-xs text-slate-800">{value || '—'}</strong></div>)}</div>}
               </article>;
             })}
           </div>
+          {dailyPageCount > 1 && <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+            <button onClick={() => setDailyPage((page) => Math.max(1, page - 1))} disabled={safeDailyPage <= 1} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">السابق</button>
+            <span className="text-xs text-slate-600">صفحة {safeDailyPage} من {dailyPageCount}</span>
+            <button onClick={() => setDailyPage((page) => Math.min(dailyPageCount, page + 1))} disabled={safeDailyPage >= dailyPageCount} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">التالي</button>
+          </div>}
         </section>
       )}
 
