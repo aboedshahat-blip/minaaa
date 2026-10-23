@@ -1,6 +1,7 @@
 import { Berth, Customer, Movement, PaymentReceipt, SystemSettings, ManagedUser } from '../types';
 import { initialBerths, initialCustomers, initialMovements, initialSettings, initialUsers } from './mockData';
 import { getSupabaseClient } from './supabase';
+import { normalizeCustomerName } from './customerName';
 
 const KEYS = {
   MOVEMENTS: 'pls_movements',
@@ -277,9 +278,13 @@ export const flushPendingSync = async () => {
   // Upsert referenced records before dependent rows so foreign keys remain valid.
   for (const table of ['customers', 'berths', 'movements', 'payments'] as const) {
     for (const row of Object.values(pending.upserts[table] || {})) {
+      const movement = table === 'movements'
+        ? await ensureMovementCustomer(row as Movement, supabase)
+        : undefined;
+      if (movement) setPendingUpsert('movements', movement);
       const cloudRow = table === 'customers'
         ? customerForCloud(row as Customer)
-        : table === 'movements' ? movementForCloud(row as Movement)
+        : table === 'movements' ? movementForCloud(movement || row as Movement)
         : table === 'payments' ? paymentForCloud(row as PaymentReceipt) : row;
       const { error } = await supabase.from(table).upsert(cloudRow as Record<string, unknown>);
       if (error) throw new Error(`تعذرت مزامنة ${table}: ${error.message}`);
@@ -452,13 +457,59 @@ export const syncMovementToSupabase = async (movement: Movement) => {
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
-    const { error } = await supabase.from('movements').upsert(movementForCloud(movement));
+    const movementToSync = await ensureMovementCustomer(movement, supabase);
+    setPendingUpsert('movements', movementToSync);
+    const { error } = await supabase.from('movements').upsert(movementForCloud(movementToSync));
     if (error) throw error;
     clearPendingUpsert('movements', movement.id);
   } catch (e) {
     console.error('Failed to sync movement to Supabase:', e);
     throw e;
   }
+};
+
+const ensureMovementCustomer = async (movement: Movement, supabase: NonNullable<ReturnType<typeof getSupabaseClient>>) => {
+  if (!movement.customer_id) return { ...movement, customer_id: null as unknown as string };
+
+  const { data: byId, error: idLookupError } = await supabase
+    .from('customers').select('id, code, name').eq('id', movement.customer_id).maybeSingle();
+  if (idLookupError) throw new Error(`تعذر التحقق من عميل الحركة: ${idLookupError.message}`);
+  if (byId) return movement;
+
+  const name = (movement.customer_name || movement.driver_name || '').trim();
+  const normalizedName = normalizeCustomerName(name);
+  if (!normalizedName || ['عميل عام', 'غير محدد'].includes(normalizedName)) {
+    return { ...movement, customer_id: null as unknown as string, customer_code: '' };
+  }
+
+  const { data: customers, error: customersError } = await supabase
+    .from('customers').select('id, code, name');
+  if (customersError) throw new Error(`تعذر البحث عن العميل المرتبط بالحركة: ${customersError.message}`);
+  const matched = (customers || []).find((customer) => normalizeCustomerName(customer.name || '') === normalizedName);
+  if (matched) {
+    return {
+      ...movement,
+      customer_id: matched.id,
+      customer_code: matched.code || movement.customer_code,
+      customer_name: matched.name || name,
+    };
+  }
+
+  // Repair older locally queued movements by creating the missing customer
+  // with the same ID the movement already references.
+  const customerId = movement.customer_id;
+  const customerCode = `DRV-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  const { error: insertError } = await supabase.from('customers').upsert({
+    id: customerId,
+    code: customerCode,
+    name,
+    phone: '',
+    trucks: [],
+    notes: 'تم إنشاؤه تلقائياً لإصلاح ربط حركة محفوظة محلياً',
+    created_at: new Date().toISOString(),
+  });
+  if (insertError) throw new Error(`تعذر إنشاء العميل المرتبط بالحركة: ${insertError.message}`);
+  return { ...movement, customer_code: customerCode, customer_name: name };
 };
 
 export const syncCustomerToSupabase = async (customer: Customer) => {
