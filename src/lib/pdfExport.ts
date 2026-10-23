@@ -60,10 +60,12 @@ export async function exportMovementsToOfficialPdf(
   // Create an off-screen container styled for high-resolution A4 landscape printing
   const container = document.createElement('div');
   container.style.position = 'fixed';
-  container.style.left = '-9999px';
+  container.style.left = '0';
   container.style.top = '0';
-  container.style.width = '1200px';
-  container.style.padding = '30px';
+  container.style.width = '1400px';
+  container.style.padding = '36px';
+  container.style.boxSizing = 'border-box';
+  container.style.zIndex = '-1';
   container.style.backgroundColor = '#ffffff';
   container.style.color = '#0f172a';
   container.style.fontFamily = "'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif";
@@ -97,23 +99,23 @@ export async function exportMovementsToOfficialPdf(
     .join('');
 
   container.innerHTML = `
-    <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 18px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <img src="${vibLogoUrl}" alt="شعار VIB" style="width:148px;height:118px;object-fit:contain;flex:none;" />
-        <div style="text-align: center;">
-          <span style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 6px 18px; border-radius: 8px; font-size: 14px; font-weight: bold;">
+    <div style="border-bottom: 2px solid #0f172a; padding: 0 0 18px; margin-bottom: 22px;">
+      <div style="display: grid; grid-template-columns: 170px minmax(0,1fr) 220px; align-items: center; gap: 18px; min-height: 125px;">
+        <img src="${vibLogoUrl}" alt="شعار مكتب النقل" style="width:150px;height:118px;object-fit:contain;justify-self:start;" />
+        <div style="text-align: center; min-width: 0; padding: 8px 0;">
+          <div style="display: inline-block; box-sizing: border-box; max-width: 100%; background-color: #0f172a; color: #ffffff; padding: 10px 20px; border-radius: 8px; font-size: 19px; line-height: 1.65; font-weight: bold; white-space: normal; overflow-wrap: anywhere;">
             ${escapeHtml(title)}
-          </span>
-          ${berthName ? `<p style="font-size: 12px; color: #334155; margin: 4px 0 0 0; font-weight: bold;">الرصيف: ${escapeHtml(berthName)}</p>` : ''}
+          </div>
+          ${berthName ? `<p style="font-size: 14px; line-height:1.5; color: #334155; margin: 6px 0 0; font-weight: bold;">الرصيف: ${escapeHtml(berthName)}</p>` : ''}
         </div>
-        <div style="text-align: left; font-size: 11px; color: #475569;">
-          <p style="margin: 0;"><strong>تاريخ الاستخراج:</strong> ${dateStr}</p>
-          <p style="margin: 3px 0 0 0;"><strong>إجمالي الحركات:</strong> ${movements.length} حركة</p>
+        <div style="text-align: left; font-size: 14px; line-height:1.8; color: #475569;">
+          <p style="margin: 0;"><strong>تاريخ الاستخراج:</strong><br>${dateStr}</p>
+          <p style="margin: 3px 0 0;"><strong>إجمالي الحركات:</strong> ${movements.length} حركة</p>
         </div>
       </div>
     </div>
 
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; border: 1.5px solid #0f172a; text-align: right; overflow-wrap:anywhere;word-break:break-word;">
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; line-height:1.5; border: 1.5px solid #0f172a; text-align: right; direction:rtl;">
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 8px 4px; border: 1px solid #334155; width: 35px;">م</th>
@@ -135,12 +137,10 @@ export async function exportMovementsToOfficialPdf(
       </tbody>
     </table>
 
-    <div style="margin-top: 25px; display: flex; justify-content: center; align-items: flex-end; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 12px; color: #475569;">
+    <div style="margin-top: 25px; display: flex; justify-content: center; align-items: center; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 14px; color: #475569;">
       <div style="text-align: center;">
         <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
-        <div style="margin: 8px auto 0; width: 145px; height: 78px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
-          ختم مكتب النقل
-        </div>
+        <img src="${vibLogoUrl}" alt="ختم مكتب النقل" style="display:block;margin:8px auto 0;width:120px;height:85px;object-fit:contain;" />
       </div>
     </div>
   `;
@@ -148,8 +148,9 @@ export async function exportMovementsToOfficialPdf(
   document.body.appendChild(container);
 
   try {
+    await document.fonts?.ready;
     const canvas = await html2canvas(container, {
-      scale: 1.25,
+      scale: 2,
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
