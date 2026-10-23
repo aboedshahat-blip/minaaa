@@ -11,6 +11,81 @@ const KEYS = {
   USERS: 'pls_users',
   PENDING_SYNC: 'pls_pending_sync_v1',
   DATA_RESET_AT: 'pls_data_reset_at',
+  SAFETY_BACKUPS: 'pls_safety_backups_v1',
+};
+
+export interface OperationalSafetyBackup {
+  id: string;
+  label: string;
+  created_at: string;
+  movements: Movement[];
+  customers: Customer[];
+  berths: Berth[];
+  payments: PaymentReceipt[];
+}
+
+export const getSafetyBackups = (): OperationalSafetyBackup[] => {
+  try {
+    const raw = localStorage.getItem(KEYS.SAFETY_BACKUPS);
+    return raw ? JSON.parse(raw) as OperationalSafetyBackup[] : [];
+  } catch {
+    return [];
+  }
+};
+
+export const saveSafetyBackup = (data: Omit<OperationalSafetyBackup, 'id' | 'created_at'>) => {
+  const backup: OperationalSafetyBackup = { ...data, id: crypto.randomUUID(), created_at: new Date().toISOString() };
+  const backups = [backup, ...getSafetyBackups()].slice(0, 10);
+  localStorage.setItem(KEYS.SAFETY_BACKUPS, JSON.stringify(backups));
+  return backup;
+};
+
+export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBackup) => {
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+
+  const deleteAll = async (table: 'payments' | 'movements' | 'berths') => {
+    const { error } = await supabase.from(table).delete().not('id', 'is', null);
+    if (error) throw new Error(`تعذر تجهيز استعادة ${table}: ${error.message}`);
+  };
+  await deleteAll('payments');
+  await deleteAll('movements');
+  await deleteAll('berths');
+  const { error: customerDeleteError } = await supabase.from('customers').delete()
+    .not('id', 'in', '("__SYSTEM_USERS_CONFIG__","__SYSTEM_HANDOFF_RESET__")');
+  if (customerDeleteError) throw new Error(`تعذر تجهيز استعادة العملاء: ${customerDeleteError.message}`);
+
+  const resetAt = new Date().toISOString();
+  const writes: Array<[string, Record<string, unknown>[]]> = [
+    ['customers', backup.customers.map(customerForCloud)],
+    ['berths', backup.berths.map((row) => ({ ...row }))],
+    ['movements', backup.movements.map((row) => ({ ...row }))],
+    ['payments', backup.payments.map((row) => ({ ...row }))],
+  ];
+  for (const [table, rows] of writes) {
+    if (!rows.length) continue;
+    const { error } = await supabase.from(table).upsert(rows as never);
+    if (error) throw new Error(`تعذرت استعادة ${table}: ${error.message}`);
+  }
+
+  const { error: markerError } = await supabase.from('customers').upsert({
+    id: '__SYSTEM_HANDOFF_RESET__', code: '__SYS_RESET__', name: 'علامة مزامنة بيانات التشغيل',
+    trucks: [], notes: 'إشارة مزامنة لإعادة تحميل البيانات التشغيلية على الأجهزة المرتبطة.', created_at: resetAt,
+  });
+  if (markerError) throw new Error(`تمت استعادة البيانات، لكن تعذر تحديث علامة مزامنة الأجهزة: ${markerError.message}`);
+
+  const pending = getPendingSync();
+  for (const table of ['movements', 'customers', 'berths', 'payments'] as const) {
+    pending.upserts[table] = {};
+    pending.deletes[table] = [];
+  }
+  savePendingSync(pending);
+  localStorage.setItem(KEYS.DATA_RESET_AT, resetAt);
+  saveMovements(backup.movements);
+  saveCustomers(backup.customers);
+  saveBerths(backup.berths);
+  savePayments(backup.payments);
 };
 
 const CUSTOMER_FEE_MARKER = /\n?\[\[VIB_CUSTOMER_FEES:(\{.*?\})\]\]/;

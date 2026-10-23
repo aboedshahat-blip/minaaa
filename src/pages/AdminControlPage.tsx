@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ManagedUser, RolePermissions, SystemSettings } from '../types';
+import { OperationalSafetyBackup } from '../lib/storage';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -30,8 +31,10 @@ interface AdminControlPageProps {
   customerCount: number;
   berthCount: number;
   paymentCount: number;
+  safetyBackups: OperationalSafetyBackup[];
   onRefreshDataFromCloud: () => Promise<void>;
   onClearOperationalData: () => Promise<void>;
+  onRestoreSafetyBackup: (backup: OperationalSafetyBackup) => Promise<void>;
 }
 
 export const AdminControlPage: React.FC<AdminControlPageProps> = ({
@@ -41,8 +44,10 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   customerCount,
   berthCount,
   paymentCount,
+  safetyBackups,
   onRefreshDataFromCloud,
   onClearOperationalData,
+  onRestoreSafetyBackup,
 }) => {
   const {
     users,
@@ -78,6 +83,11 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [clearError, setClearError] = useState<string | null>(null);
   const [clearFeedback, setClearFeedback] = useState<string | null>(null);
   const [isClearingData, setIsClearingData] = useState(false);
+  const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
+  const [restorePassword, setRestorePassword] = useState('');
+  const [selectedBackupId, setSelectedBackupId] = useState('');
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Active selected user for permissions/password management
   const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
@@ -134,6 +144,32 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       setClearError(error instanceof Error ? error.message : 'تعذر مسح البيانات.');
     } finally {
       setIsClearingData(false);
+    }
+  };
+
+  const handleConfirmRestore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const adminUser = users.find((u) => u.role === 'admin') || currentUser;
+    if (restorePassword.trim() !== (adminUser?.password || 'admin123').trim()) {
+      setRestoreError('كلمة مرور الأدمن غير صحيحة.');
+      return;
+    }
+    const backup = safetyBackups.find((item) => item.id === selectedBackupId);
+    if (!backup) {
+      setRestoreError('اختر نسخة محفوظة للاستعادة.');
+      return;
+    }
+    if (!window.confirm(`سيتم استبدال بيانات التشغيل الحالية بالنسخة المحفوظة بتاريخ ${new Date(backup.created_at).toLocaleString('ar-EG')} (${backup.label}). قد تختفي أي بيانات أضيفت بعد هذه النسخة. هل تريد الاستمرار؟`)) return;
+    setIsRestoring(true);
+    setRestoreError(null);
+    try {
+      await onRestoreSafetyBackup(backup);
+      setRestorePassword('');
+      setIsRestoreDialogOpen(false);
+    } catch (error) {
+      setRestoreError(error instanceof Error ? error.message : 'تعذرت استعادة النسخة.');
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -366,6 +402,18 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
         </div>
         {clearFeedback && <p role="status" className="text-sm font-bold text-emerald-700">{clearFeedback}</p>}
         {clearError && !isClearDialogOpen && <p role="alert" className="text-sm font-bold text-rose-700">{clearError}</p>}
+      </section>
+
+      <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-black text-emerald-900"><RefreshCw className="h-5 w-5"/>استعادة نسخة الأمان</h2>
+            <p className="mt-1 text-xs leading-6 text-emerald-800">يحفظ النظام تلقائيًا آخر 10 نسخ قبل حذف الحركات أو العميل أو مسح بيانات التشغيل. النسخ محفوظة على هذا الجهاز، والاستعادة تتطلب كلمة مرور الأدمن.</p>
+            {safetyBackups[0] && <p className="mt-1 text-xs font-bold text-emerald-900">آخر نسخة: {new Date(safetyBackups[0].created_at).toLocaleString('ar-EG')} — {safetyBackups[0].label}</p>}
+          </div>
+          <button type="button" disabled={!safetyBackups.length} onClick={()=>{setSelectedBackupId(safetyBackups[0]?.id || '');setRestorePassword('');setRestoreError(null);setIsRestoreDialogOpen(true);}} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>استعادة المحذوف</button>
+        </div>
+        {!safetyBackups.length && <p className="text-xs text-slate-600">لا توجد نسخة سابقة على هذا الجهاز حتى الآن. سيُنشئ النظام نسخة تلقائية قبل عمليات الحذف القادمة.</p>}
       </section>
 
       {/* Users & Granular Permissions Matrix */}
@@ -758,6 +806,24 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   <Trash2 className="w-4 h-4" /> {isClearingData ? 'جارٍ المسح...' : 'تحقق وامسح البيانات'}
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isRestoreDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" dir="rtl">
+          <div role="dialog" aria-modal="true" aria-labelledby="restore-safety-title" className="w-full max-w-md space-y-4 rounded-2xl border border-emerald-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-emerald-700"><div className="rounded-xl bg-emerald-100 p-2.5"><RefreshCw className="h-5 w-5"/></div><div><h3 id="restore-safety-title" className="font-black text-slate-900">استعادة نسخة الأمان</h3><p className="mt-1 text-xs text-slate-500">اختر النسخة وأدخل كلمة مرور الأدمن.</p></div></div>
+            <form onSubmit={handleConfirmRestore} className="space-y-3">
+              <label className="block text-xs font-bold text-slate-700">النسخة المحفوظة</label>
+              <select value={selectedBackupId} onChange={(e)=>setSelectedBackupId(e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm" required>
+                {safetyBackups.map((backup)=><option key={backup.id} value={backup.id}>{new Date(backup.created_at).toLocaleString('ar-EG')} — {backup.label} ({backup.movements.length} حركة)</option>)}
+              </select>
+              <label htmlFor="restore-safety-password" className="block text-xs font-bold text-slate-700">كلمة مرور الأدمن</label>
+              <input id="restore-safety-password" type="password" autoFocus autoComplete="current-password" value={restorePassword} onChange={(e)=>{setRestorePassword(e.target.value);setRestoreError(null);}} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-center font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500" required/>
+              {restoreError && <p role="alert" className="text-xs font-bold text-rose-700">{restoreError}</p>}
+              <div className="flex justify-end gap-2 pt-2"><button type="button" disabled={isRestoring} onClick={()=>setIsRestoreDialogOpen(false)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">إلغاء</button><button type="submit" disabled={isRestoring || !safetyBackups.length} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60"><RefreshCw className="h-4 w-4"/>{isRestoring?'جارٍ الاستعادة...':'تحقق واستعد النسخة'}</button></div>
             </form>
           </div>
         </div>

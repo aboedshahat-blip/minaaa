@@ -13,6 +13,10 @@ import {
   getStoredMovements,
   getStoredPayments,
   getStoredSettings,
+  getSafetyBackups,
+  saveSafetyBackup,
+  restoreSafetyBackupToSupabase,
+  OperationalSafetyBackup,
   saveBerths,
   saveCustomers,
   saveMovements,
@@ -95,6 +99,7 @@ const AppContent: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>(getStoredCustomers);
   const [berths, setBerths] = useState<Berth[]>(getStoredBerths);
   const [payments, setPayments] = useState<PaymentReceipt[]>(getStoredPayments);
+  const [safetyBackups, setSafetyBackups] = useState<OperationalSafetyBackup[]>(getSafetyBackups);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
   const [cloudFeedback, setCloudFeedback] = useState<string | null>(null);
 
@@ -106,6 +111,12 @@ const AppContent: React.FC = () => {
       const message = error instanceof Error ? error.message : 'تعذر حفظ التغيير في قاعدة البيانات السحابية.';
       setCloudFeedback(message);
     }
+  };
+
+  const captureSafetyBackup = (label: string) => {
+    const backup = saveSafetyBackup({ label, movements, customers, berths, payments });
+    setSafetyBackups(getSafetyBackups());
+    return backup;
   };
 
   // Initial cloud fetch from Supabase on mount
@@ -286,6 +297,7 @@ const AppContent: React.FC = () => {
       return;
     }
     if (window.confirm('هل أنت متأكد من حذف هذه الحركة من السيستم وقاعدة البيانات؟')) {
+      captureSafetyBackup('قبل حذف حركة');
       const updated = movements.filter((m) => m.id !== id);
       setMovements(updated);
       saveMovements(updated);
@@ -299,6 +311,7 @@ const AppContent: React.FC = () => {
       return;
     }
     if (window.confirm('⚠️ تحذير تصفير السيستم:\nهل أنت متأكد من مسح وتصفير كافة الحركات والشحنات المسجلة؟\nسيتم إفراغ النظام وقاعدة البيانات تماماً لتسليمه للعميل خالي من أي بيانات تجريبية.')) {
+      captureSafetyBackup('قبل مسح كل الحركات');
       setMovements([]);
       saveMovements([]);
       try {
@@ -315,12 +328,23 @@ const AppContent: React.FC = () => {
 
   const handleClearOperationalData = async () => {
     if (!isAdmin) throw new Error('هذه العملية متاحة للمدير العام فقط.');
+    captureSafetyBackup('قبل مسح بيانات التشغيل');
     const resetAt = await clearOperationalDataFromSupabase();
     clearOperationalLocalData(resetAt);
     setMovements([]);
     setCustomers([]);
     setPayments([]);
     setCloudFeedback('تم مسح بيانات التشغيل ومزامنة التصفير مع الأجهزة المرتبطة.');
+  };
+
+  const handleRestoreSafetyBackup = async (backup: OperationalSafetyBackup) => {
+    if (!isAdmin) throw new Error('استعادة البيانات متاحة للمدير العام فقط.');
+    await restoreSafetyBackupToSupabase(backup);
+    setMovements(backup.movements);
+    setCustomers(backup.customers);
+    setBerths(backup.berths);
+    setPayments(backup.payments);
+    setCloudFeedback(`تمت استعادة النسخة المحفوظة: ${backup.label}`);
   };
 
   const handleTogglePaid = (movement: Movement) => {
@@ -397,6 +421,7 @@ const AppContent: React.FC = () => {
       return;
     }
     if (window.confirm('هل أنت متأكد من حذف هذا العميل من المنظومة؟')) {
+      captureSafetyBackup('قبل حذف عميل');
       const updated = customers.filter((c) => c.id !== id);
       setCustomers(updated);
       saveCustomers(updated);
@@ -432,6 +457,7 @@ const AppContent: React.FC = () => {
       return;
     }
     if (window.confirm('هل أنت متأكد من حذف هذا الرصيف؟')) {
+      captureSafetyBackup('قبل حذف رصيف');
       const updated = berths.filter((b) => b.id !== id);
       setBerths(updated);
       saveBerths(updated);
@@ -600,8 +626,10 @@ const AppContent: React.FC = () => {
             customerCount={customers.length}
             berthCount={berths.length}
             paymentCount={payments.length}
+            safetyBackups={safetyBackups}
             onRefreshDataFromCloud={async () => { await refreshDataFromCloud(); }}
             onClearOperationalData={handleClearOperationalData}
+            onRestoreSafetyBackup={handleRestoreSafetyBackup}
           />
         )}
       </main>
