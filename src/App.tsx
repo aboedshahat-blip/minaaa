@@ -25,6 +25,7 @@ import {
   fetchAllFromSupabase,
   syncMovementToSupabase,
   syncCustomerToSupabase,
+  syncImportedBatchToSupabase,
   syncBerthToSupabase,
   syncPaymentToSupabase,
   restoreLocalDataToSupabase,
@@ -468,8 +469,7 @@ const AppContent: React.FC = () => {
       // foreign-key failures that would otherwise leave one device out of date.
       const referencedCustomerIds = new Set(importedBatch.map((movement) => movement.customer_id).filter(Boolean));
       const referencedCustomers = customersAfterImport.filter((customer) => referencedCustomerIds.has(customer.id));
-      await Promise.all(referencedCustomers.map((customer) => syncCustomerToSupabase(customer)));
-      await Promise.all(importedBatch.map((movement) => syncMovementToSupabase(movement)));
+      await syncImportedBatchToSupabase(referencedCustomers, importedBatch);
     })());
   };
 

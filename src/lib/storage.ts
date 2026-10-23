@@ -299,6 +299,19 @@ export const flushPendingSync = async () => {
   }
 };
 
+/** Queue an imported batch atomically before syncing its customer foreign keys. */
+export const syncImportedBatchToSupabase = async (customers: Customer[], movements: Movement[]) => {
+  customers.forEach((customer) => {
+    const cloudCustomer = customerForCloud(customer);
+    setPendingUpsert('customers', cloudCustomer as unknown as Customer);
+  });
+  movements.forEach((movement) => setPendingUpsert('movements', movement));
+
+  // flushPendingSync writes customers before movements and retains every failed
+  // row in the local retry queue, so a transient error cannot strand the batch.
+  await flushPendingSync();
+};
+
 // ---------------- LOCAL STORAGE FALLBACK ----------------
 
 export const getStoredSettings = (): SystemSettings => {
