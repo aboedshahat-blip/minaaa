@@ -599,7 +599,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
 
           {payments.some((payment) => (Number(payment.unallocated_amount) || 0) > 0) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
-              <span className="font-bold text-amber-900">مقدمات لم تُخصم بعد من فواتير الكاشير</span>
+              <span className="font-bold text-amber-900">أرصدة غير موزعة من سندات قديمة (لا تخصم تلقائيًا)</span>
               <span className="font-black text-amber-900">
                 {payments.reduce((sum, payment) => sum + (Number(payment.unallocated_amount) || 0), 0).toLocaleString()} ج.م
               </span>
@@ -615,7 +615,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                     <th className="p-2.5 border border-slate-700">التاريخ</th>
                     <th className="p-2.5 border border-slate-700">العميل</th>
                     <th className="p-2.5 border border-slate-700 text-center">المبلغ المحصل</th>
-                    <th className="p-2.5 border border-slate-700 text-center">نوع السند / رصيد المقدم</th>
+                    <th className="p-2.5 border border-slate-700 text-center">حالة توزيع السند</th>
                     <th className="p-2.5 border border-slate-700">طريقة الدفع</th>
                     <th className="p-2.5 border border-slate-700">ملاحظات</th>
                   </tr>
@@ -638,11 +638,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                       <td className="p-2.5 border border-slate-200 text-center">
                         {(Number(p.unallocated_amount) || 0) > 0 ? (
                           <span className="inline-flex flex-col rounded-lg bg-amber-50 px-2 py-1 text-amber-900 border border-amber-200">
-                            <span className="font-bold">{(Number(p.unallocated_amount) || 0) < (Number(p.amount) || 0) ? 'تم توزيع جزء من المقدم' : 'مقدم قبل الكاشير'}</span>
-                            <span>متبقي كمقدم: {(Number(p.unallocated_amount) || 0).toLocaleString()} ج.م</span>
+                            <span className="font-bold">رصيد قديم غير موزع</span>
+                            <span>المبلغ الباقي: {(Number(p.unallocated_amount) || 0).toLocaleString()} ج.م</span>
                           </span>
                         ) : p.payment_type === 'advance' ? (
-                          <span className="font-bold text-emerald-700">تم توزيع المقدم على الحركات</span>
+                          <span className="font-bold text-emerald-700">سند قديم موزع على الحركات</span>
                         ) : (
                           <span className="text-slate-600">تحصيل مديونية</span>
                         )}

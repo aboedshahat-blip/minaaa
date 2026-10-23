@@ -396,8 +396,11 @@ export const matchCashierEntriesWithMovements = (
     const systemCommission = Number(movement.system_commission ?? defaultSystemCommission);
     const nafezCommission = Number(movement.nafez_commission ?? 0);
     const newTotal = newCashier + systemCommission + nafezCommission;
-    // Each newly linked cashier receipt confirms that amount was paid.
-    const paid = (Number(movement.paid_amount) || 0) + addedCashier;
+    // Cashier invoice is a cost on the movement; only customer receipts count
+    // as money collected from the customer.
+    const paid = movement.customer_paid_amount !== undefined
+      ? Math.max(0, Number(movement.customer_paid_amount) || 0)
+      : Math.max(0, (Number(movement.paid_amount) || 0) - oldCashier);
     const remaining = Math.max(0, newTotal - paid);
     const receiptNumbers = Array.from(new Set([...existingReceiptNumbers, ...newEntries.map((entry) => entry.receipt_no)]));
     const updatedMovement: Movement = {

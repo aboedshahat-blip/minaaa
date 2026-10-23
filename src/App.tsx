@@ -146,14 +146,13 @@ const AppContent: React.FC = () => {
         const mergedMovements = mergePending(cloudData.movements, localMovements, pendingMovements).map((movement) => {
           if (!movement.cashier_receipt_no) return movement;
           const cashierInvoice = Number(movement.cashier_invoice) || 0;
-          const oldPaid = Number(movement.paid_amount) || 0;
           const customerPaid = movement.customer_paid_amount !== undefined
             ? Number(movement.customer_paid_amount) || 0
-            : Math.max(0, oldPaid - cashierInvoice);
+            : Math.max(0, (Number(movement.paid_amount) || 0) - cashierInvoice);
           const total = Number(movement.total_amount) || 0;
-          const paid = cashierInvoice + customerPaid;
+          const paid = customerPaid;
           const remaining = Math.max(0, total - paid);
-          if (movement.customer_paid_amount === customerPaid && oldPaid === paid && Number(movement.remaining_amount) === remaining) return movement;
+          if (movement.customer_paid_amount === customerPaid && Number(movement.paid_amount) === paid && Number(movement.remaining_amount) === remaining) return movement;
           reconciledCashierMovementIds.add(movement.id);
           return {
             ...movement,
@@ -536,14 +535,13 @@ const AppContent: React.FC = () => {
       alert('ليس لديك صلاحية لتسجيل سندات القبض');
       return;
     }
-    const allocation = applyUnallocatedCustomerAdvances(updatedMovements, [payment, ...payments]);
-    setPayments(allocation.payments);
-    savePayments(allocation.payments);
-    setMovements(allocation.movements);
-    saveMovements(allocation.movements);
+    setPayments([payment, ...payments]);
+    savePayments([payment, ...payments]);
+    setMovements(updatedMovements);
+    saveMovements(updatedMovements);
     void runCloudOperation(Promise.all([
-      ...allocation.payments.filter((p) => p.id === payment.id || allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
-      ...allocation.movements.filter((m) => allocation.changedMovementIds.includes(m.id) || updatedMovements.some((updated) => updated.id === m.id && updated !== movements.find((old) => old.id === m.id))).map((m) => syncMovementToSupabase(m)),
+      syncPaymentToSupabase(payment),
+      ...updatedMovements.filter((m) => m !== movements.find((old) => old.id === m.id)).map((m) => syncMovementToSupabase(m)),
     ]));
   };
 
@@ -752,7 +750,6 @@ const AppContent: React.FC = () => {
         onSavePayment={handleSavePayment}
         customers={customers}
         movements={movements}
-        payments={payments}
         initialCustomerId={paymentCustomerId}
       />
     </div>

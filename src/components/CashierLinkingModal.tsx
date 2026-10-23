@@ -69,7 +69,7 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
     const customerPaid = selectedMovement.customer_paid_amount !== undefined
       ? Number(selectedMovement.customer_paid_amount) || 0
       : Math.max(0, (Number(selectedMovement.paid_amount) || 0) - (Number(selectedMovement.cashier_invoice) || 0));
-    const paid = cashierInvoice + customerPaid;
+    const paid = customerPaid;
     const remaining = Math.max(0, newTotal - paid);
 
     const updatedData: Partial<Movement> = {

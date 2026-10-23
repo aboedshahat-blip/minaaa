@@ -141,6 +141,16 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       const text = bucket.items.map((item) => item.str).join('');
       return text.includes('اسم') && text.includes('السائق');
     });
+    const containerHeader = lineBuckets.find((bucket) => {
+      const text = bucket.items.map((item) => item.str).join('');
+      return text.includes('الحاوية') || text.includes('الحاويه');
+    });
+    const findContainerColumnCenter = (keyword: string) => {
+      const item = containerHeader?.items.find((candidate) => candidate.str.includes(keyword));
+      return item ? item.x + (item.width || item.str.length * 5) / 2 : null;
+    };
+    const containerPathCenter = findContainerColumnCenter('مسار');
+    const containerDescCenter = findContainerColumnCenter('وصف');
     let driverColumnCenter = 0;
     let driverColumnWidth = 0;
     if (driverHeader) {
@@ -244,8 +254,15 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       const directionToken = rowTokens
         .map((token) => token.replace(/[\s\u0640]/g, ''))
         .find((token) => ['وارد', 'صادر', 'فارغ'].includes(token));
-      const container_path = directionToken || 'وارد';
-      const container_desc = container_path;
+      const valueAtColumn = (center: number | null) => {
+        if (center == null) return '';
+        const candidates = bucket.items
+          .filter((item) => ['وارد', 'صادر', 'فارغ', 'ترانزيت'].includes(item.str.replace(/[\s\u0640]/g, '')))
+          .sort((a, b) => Math.abs((a.x + (a.width || a.str.length * 5) / 2) - center) - Math.abs((b.x + (b.width || b.str.length * 5) / 2) - center));
+        return candidates[0]?.str.replace(/[\s\u0640]/g, '') || '';
+      };
+      const container_path = valueAtColumn(containerPathCenter) || directionToken || 'وارد';
+      const container_desc = valueAtColumn(containerDescCenter) || directionToken || 'وارد';
 
       // Dynamic weights and axles
       let truck_axles = 20;
@@ -403,18 +420,81 @@ export const matrixToMovements = (matrix: unknown[][]): {
   // Excel cells can be numbers, dates, booleans, or formula results rather than strings.
   const textMatrix = matrix.map((row) => row.map((cell) => cell == null ? '' : String(cell).trim()));
 
+  // If the uploaded sheet has headers, map the source columns by their names.
+  // This preserves container description and path exactly, regardless of
+  // column order or whether both cells happen to contain the same word.
+  const normalizeHeader = (value: string) => value
+    .replace(/[\s\u0640_\-]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .toLowerCase();
+  const headerAliases: Partial<Record<keyof Movement, string[]>> = {
+    container_path: ['مسارالحاوية', 'مسار'],
+    container_desc: ['وصفالحاوية', 'وصفالحاويه', 'وصف'],
+    container_no: ['رقمالحاوية', 'رقمالحاويه', 'الحاوية'],
+    declaration_no: ['رقمالاقرار', 'رقمالإقرار', 'الاقرار'],
+    driver_name: ['اسمالسائق', 'السائق'],
+    trailer_axles: ['محاورالمقطورة'],
+    trailer_weight: ['وزنالمقطورةمنواقعالرخصة', 'وزنالمقطورة'],
+    trailer_no: ['رقمالمقطورة'],
+    truck_axles: ['محاورالشاحنة'],
+    truck_weight: ['وزنالشاحنةمنواقعالرخصة', 'وزنالشاحنة'],
+    truck_no: ['رقمالشاحنة'],
+    seq: ['م', 'مسلسل'],
+  };
+  const headerRowIndex = textMatrix.findIndex((row) =>
+    row.some((cell) => normalizeHeader(cell).includes('السائق')) &&
+    row.some((cell) => normalizeHeader(cell).includes('الحاوية'))
+  );
+  if (headerRowIndex >= 0) {
+    const header = textMatrix[headerRowIndex].map(normalizeHeader);
+    const columnIndexes = new Map<keyof Movement, number>();
+    (Object.keys(headerAliases) as (keyof Movement)[]).forEach((key) => {
+      const aliases = (headerAliases[key] || []).map(normalizeHeader);
+      const index = header.findIndex((cell) => aliases.some((alias) => cell === alias || (alias.length > 2 && cell.includes(alias))));
+      if (index >= 0) columnIndexes.set(key, index);
+    });
+    const read = (row: string[], key: keyof Movement) => {
+      const index = columnIndexes.get(key);
+      const value = index == null ? '' : row[index] || '';
+      return value === '-' || value === '—' ? '' : value;
+    };
+    const rows = textMatrix.slice(headerRowIndex + 1).flatMap((row) => {
+      const containerNo = read(row, 'container_no');
+      const truckNo = read(row, 'truck_no');
+      const driverName = read(row, 'driver_name');
+      if (!containerNo && !truckNo && !driverName) return [];
+      return [{
+        container_path: read(row, 'container_path'),
+        container_desc: read(row, 'container_desc'),
+        container_no: containerNo,
+        declaration_no: read(row, 'declaration_no'),
+        driver_name: driverName,
+        trailer_axles: Number(read(row, 'trailer_axles')) || 30,
+        trailer_weight: Number(read(row, 'trailer_weight').replace(',', '.')) || 11.5,
+        trailer_no: read(row, 'trailer_no'),
+        truck_axles: Number(read(row, 'truck_axles')) || 20,
+        truck_weight: Number(read(row, 'truck_weight').replace(',', '.')) || 7.5,
+        truck_no: truckNo,
+        seq: Number(read(row, 'seq')) || undefined,
+        cashier_invoice: 0,
+      } as Partial<Movement>];
+    }).map((movement, index) => ({ ...movement, seq: movement.seq || index + 1 }));
+    return { rows, headers: STANDARD_HEADERS, rawRowCount: textMatrix.length - headerRowIndex - 1 };
+  }
+
   // When a sheet has headers, use its driver-name column as the source of
   // truth instead of guessing the name from other text in the row.
-  const headerRowIndex = textMatrix.findIndex((row) =>
+  const legacyHeaderRowIndex = textMatrix.findIndex((row) =>
     row.some((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
   );
-  const driverNameColumnIndex = headerRowIndex >= 0
-    ? textMatrix[headerRowIndex].findIndex((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
+  const driverNameColumnIndex = legacyHeaderRowIndex >= 0
+    ? textMatrix[legacyHeaderRowIndex].findIndex((cell) => String(cell || '').replace(/[\s\u0640]/g, '').includes('السائق'))
     : -1;
 
   // Filter out header and empty rows
   const cleanRows = textMatrix.filter((row, rowIndex) => {
-    if (rowIndex === headerRowIndex) return false;
+    if (rowIndex === legacyHeaderRowIndex) return false;
     const text = row.join(' ');
     const headerWords = ['مسار', 'الحاوية', 'المقطورة', 'الشاحنة', 'السائق', 'الرخصة', 'واقع', 'محاور', 'وزن', 'رقم'];
     let hits = 0;

@@ -11,7 +11,6 @@ interface PaymentModalProps {
   ) => void;
   customers: Customer[];
   movements: Movement[];
-  payments: PaymentReceipt[];
   initialCustomerId?: string;
 }
 
@@ -21,7 +20,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onSavePayment,
   customers,
   movements,
-  payments,
   initialCustomerId,
 }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
@@ -29,7 +27,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer' | 'check' | 'other'>('cash');
   const [notes, setNotes] = useState('');
   const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
-  const [paymentType, setPaymentType] = useState<'collection' | 'advance'>('collection');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -41,7 +38,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     setSelectedMovementIds([]);
     setPaymentMethod('cash');
     setNotes('');
-    setPaymentType('collection');
   }, [initialCustomerId, customers, isOpen]);
 
   if (!isOpen) return null;
@@ -49,7 +45,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // Always derive the balance from total minus paid. This keeps installment
   // collection working even when an older record has a stale remaining_amount.
   const clientMovements = movements.filter(
-    (m) => m.customer_id === selectedCustomerId || m.customer_name === customers.find(c => c.id === selectedCustomerId)?.name
+    (m) => (m.customer_id === selectedCustomerId || m.customer_name === customers.find(c => c.id === selectedCustomerId)?.name) && Boolean(m.cashier_receipt_no)
   );
   const getOutstandingCents = (movement: Movement) => Math.max(
     0,
@@ -60,9 +56,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     .sort((a, b) => (a.movement_date || '').localeCompare(b.movement_date || '') || (a.seq || 0) - (b.seq || 0));
   const totalClientDebtCents = unpaidMovements.reduce((sum, m) => sum + getOutstandingCents(m), 0);
   const totalClientDebt = totalClientDebtCents / 100;
-  const existingAdvance = payments
-    .filter((payment) => payment.customer_id === selectedCustomerId)
-    .reduce((sum, payment) => sum + (Number(payment.unallocated_amount) || 0), 0);
   const selectedDebtCents = selectedMovementIds.length
     ? unpaidMovements.filter((m) => selectedMovementIds.includes(m.id)).reduce((sum, m) => sum + getOutstandingCents(m), 0)
     : totalClientDebtCents;
@@ -103,27 +96,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     if (!currentCustomer) return;
 
     const amountCents = Math.round(Number(amount) * 100);
-    if (paymentType === 'advance') {
-      const advanceReceipt: PaymentReceipt = {
-        id: `rec-${Date.now()}`,
-        receipt_no: `REC-${Math.floor(100000 + Math.random() * 900000)}`,
-        date: new Date().toISOString().split('T')[0],
-        customer_id: currentCustomer.id,
-        customer_name: currentCustomer.name,
-        amount: amountCents / 100,
-        payment_method: paymentMethod,
-        payment_type: 'advance',
-        unallocated_amount: amountCents / 100,
-        notes: notes.trim(),
-        movement_ids: [],
-        created_at: new Date().toISOString(),
-      };
-      onSavePayment(advanceReceipt, movements);
-      alert(`تم تسجيل مقدم ${amount.toLocaleString()} ج.م للعميل. سيخصم تلقائياً عند ربط فاتورة الكاشير.`);
-      onClose();
-      return;
-    }
-
     const selectedTargets = unpaidMovements.filter((movement) => selectedMovementIds.includes(movement.id));
     const targetMovements = selectedTargets.length > 0 ? selectedTargets : unpaidMovements;
     const availableDebtCents = targetMovements.reduce((sum, movement) => sum + getOutstandingCents(movement), 0);
@@ -151,12 +123,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       const paymentForThisCents = Math.min(debtCents, remainingToDistributeCents);
       remainingToDistributeCents -= paymentForThisCents;
 
-      const cashierPaidCents = Math.round((Number(m.cashier_invoice) || 0) * 100);
       const currentCustomerPaidCents = m.customer_paid_amount !== undefined
         ? Math.round((Number(m.customer_paid_amount) || 0) * 100)
-        : Math.max(0, Math.round((Number(m.paid_amount) || 0) * 100) - cashierPaidCents);
+        : Math.max(0, Math.round(((Number(m.paid_amount) || 0) - (Number(m.cashier_invoice) || 0)) * 100));
       const newCustomerPaidCents = currentCustomerPaidCents + paymentForThisCents;
-      const newPaidCents = cashierPaidCents + newCustomerPaidCents;
+      const newPaidCents = newCustomerPaidCents;
       const totalCents = Math.max(0, Math.round((Number(m.total_amount) || 0) * 100));
       const newRemainingCents = Math.max(0, totalCents - newPaidCents);
       const newPaid = newPaidCents / 100;
@@ -217,13 +188,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[85vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-            <button type="button" onClick={()=>setPaymentType('collection')} className={`rounded-lg px-3 py-2 text-xs font-bold ${paymentType==='collection'?'bg-white text-blue-800 shadow-sm':'text-slate-600'}`}>سداد مديونية قائمة</button>
-            <button type="button" onClick={()=>{setPaymentType('advance');setSelectedMovementIds([]);}} className={`rounded-lg px-3 py-2 text-xs font-bold ${paymentType==='advance'?'bg-white text-emerald-800 shadow-sm':'text-slate-600'}`}>مقدم قبل الكاشير</button>
-          </div>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-900">يسجل النظام تحصيل العميل بعد ربط فاتورة الكاشير فقط. مبلغ فاتورة الكاشير تكلفة على الحركة وليس دفعة من العميل.</div>
 
           {/* Customer Selection & Balance Card */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 العميل
@@ -251,23 +219,19 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 {totalClientDebt.toLocaleString()} ج.م
               </span>
             </div>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-col justify-center">
-              <span className="text-xs font-semibold text-emerald-700">مقدم غير موزع</span>
-              <span className="text-xl font-black text-emerald-900">{existingAdvance.toLocaleString()} ج.م</span>
-            </div>
           </div>
 
           {/* Amount & Method */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {paymentType === 'advance' ? 'مبلغ المقدم المستلم *' : 'المبلغ المسدد *'}
+                المبلغ المحصل من العميل *
               </label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
-                max={paymentType === 'collection' ? selectedDebtCents / 100 : undefined}
+                max={selectedDebtCents / 100}
                 value={amount || ''}
                 onChange={(e) => setAmount(Number(e.target.value))}
                 placeholder="0.00"
@@ -293,12 +257,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           </div>
 
-          {paymentType === 'advance' ? (
-            <div className="-mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-              <strong>بعد تسجيل المقدم سيصبح رصيد العميل المقدم {(existingAdvance + (Number(amount) || 0)).toLocaleString()} ج.م.</strong>{' '}
-              سيُخصم تلقائيًا من مستحقاته بعد ربط فاتورة الكاشير، وأي رصيد زائد يظل مقدمًا للعميل.
-            </div>
-          ) : <div className="-mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+          <div className="-mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
             <span className="font-bold">
               {amount > 0 && Math.round(amount * 100) < selectedDebtCents ? 'دفعة جزئية' : 'المتبقي بعد الدفعة'}:
             </span>{' '}
@@ -306,10 +265,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             {amount > 0 && Math.round(amount * 100) < selectedDebtCents && (
               <span className="mr-2 text-indigo-700">سيُسجل المبلغ كسند مستقل، ويظل باقي الرصيد مفتوحًا للدفعة التالية.</span>
             )}
-          </div>}
+          </div>
 
           {/* Movement Selection: "والعربيات تتخصم من السيستم" */}
-          {paymentType === 'collection' ? <div className="border border-slate-200 rounded-xl p-4">
+          <div className="border border-slate-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3 border-b pb-2">
               <div>
                 <h3 className="text-xs font-bold text-slate-800">
@@ -374,10 +333,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             ) : (
               <div className="bg-emerald-50 text-emerald-800 p-3 rounded-lg text-xs font-semibold flex items-center gap-2">
                 <Check className="w-4 h-4 text-emerald-600" />
-                <span>هذا العميل خالص الحساب، لا توجد عليه أي شاحنات غير مدفوعة!</span>
+                <span>لا توجد حركات مرتبطة بفاتورة كاشير وبها رصيد مستحق للتحصيل.</span>
               </div>
             )}
-          </div> : <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900">المقدم محفوظ باسم العميل ولن يُحسب سدادًا لحركة قبل اكتمال ربط الكاشير. عند تسجيل فاتورة الكاشير سيخصم النظام المقدم تلقائيًا من أقدم مستحقات العميل.</div>}
+          </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -405,7 +364,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               className="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 shadow"
             >
               <CreditCard className="w-4 h-4" />
-              <span>{paymentType === 'advance' ? 'تسجيل المقدم' : 'اعتماد السند وتحديث السيستم'}</span>
+              <span>اعتماد سند القبض وتحديث الحساب</span>
             </button>
           </div>
         </form>

@@ -131,7 +131,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
         const customerPaid = m.customer_paid_amount !== undefined
           ? Number(m.customer_paid_amount) || 0
           : Math.max(0, (Number(m.paid_amount) || 0) - (Number(m.cashier_invoice) || 0));
-        const paid = cashierVal + customerPaid;
+        const paid = customerPaid;
         return {
           ...m,
           cashier_receipt_no: manualReceiptNo || m.cashier_receipt_no,
