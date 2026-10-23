@@ -52,12 +52,11 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             visibility: visible !important;
           }
           #official-clean-manifest-print-zone {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: 100% !important;
+            max-width: none !important;
             margin: 0 !important;
-            padding: 10mm !important;
+            padding: 0 !important;
             background: white !important;
             box-shadow: none !important;
             border: none !important;
@@ -66,8 +65,14 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             size: landscape;
             margin: 8mm;
           }
-          #official-clean-manifest-print-zone table { table-layout: fixed; width: 100%; }
-          #official-clean-manifest-print-zone th, #official-clean-manifest-print-zone td { overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; padding: 4px 3px !important; font-size: 9px !important; }
+          #official-clean-manifest-print-zone header { padding-bottom: 5mm !important; margin-bottom: 5mm !important; }
+          #official-clean-manifest-print-zone header img { width: 34mm !important; height: 28mm !important; }
+          #official-clean-manifest-print-zone header .manifest-title { font-size: 15pt !important; line-height: 1.5 !important; padding: 3mm 5mm !important; white-space: normal !important; }
+          #official-clean-manifest-print-zone .manifest-meta { font-size: 10pt !important; line-height: 1.7 !important; }
+          #official-clean-manifest-print-zone table { table-layout: fixed; width: 100%; direction: rtl; }
+          #official-clean-manifest-print-zone th, #official-clean-manifest-print-zone td { overflow-wrap: anywhere; word-break: normal; line-height: 1.5; padding: 6px 4px !important; font-size: 10pt !important; }
+          #official-clean-manifest-print-zone th { font-size: 9pt !important; }
+          #official-clean-manifest-print-zone .manifest-stamp { break-inside: avoid; margin-top: 8mm !important; }
           #official-clean-manifest-print-zone tr { break-inside: avoid; }
         }
       `}</style>
@@ -120,19 +125,19 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
         </div>
 
         {/* Printable Paper View */}
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60 print:bg-white print:p-0">
+        <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60 print:overflow-visible print:bg-white print:p-0">
           <div
             id="official-clean-manifest-print-zone"
             className="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200 print:border-none print:shadow-none max-w-5xl mx-auto text-slate-900 font-sans"
           >
             {/* Official Sheet Header */}
-            <div className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
-              <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
+            <header className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
+              <div className="flex items-center justify-between gap-4 text-xs text-slate-600 mb-2">
                 <div className="text-right">
-                  <img src={vibLogoUrl} alt="شعار VIB" className="w-36 h-28 object-contain" />
+                  <img src={vibLogoUrl} alt="شعار مكتب النقل" className="w-28 h-24 object-contain" />
                 </div>
-                <div className="text-center">
-                  <span className="inline-block bg-slate-900 text-white font-bold text-sm px-4 py-1.5 rounded-lg shadow-sm">
+                <div className="text-center flex-1 min-w-0">
+                  <span className="manifest-title inline-block bg-slate-900 text-white font-bold text-base px-5 py-2 rounded-lg shadow-sm">
                     {title}
                   </span>
                   {berthName && (
@@ -141,12 +146,12 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
                     </p>
                   )}
                 </div>
-                <div className="text-left text-xs text-slate-600">
+                <div className="manifest-meta text-left text-xs text-slate-600 min-w-[30mm]">
                   <p>تاريخ الاستخراج: {new Date().toLocaleDateString('ar-EG')}</p>
                   <p className="font-bold text-slate-900">إجمالي الحركات: {movements.length} حركة</p>
                 </div>
               </div>
-            </div>
+            </header>
 
             {/* Exact 12-Column Table (NO COMMISSIONS, NO NAFEZ, NO TOTALS, NO CASHIER) */}
             <div className="overflow-x-auto">
@@ -222,12 +227,10 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             </div>
 
             {/* Official Signatures & Stamp Footer */}
-            <div className="mt-8 pt-6 border-t border-dashed border-slate-300 flex justify-center text-center text-xs text-slate-700">
+            <div className="manifest-stamp mt-8 pt-6 border-t border-dashed border-slate-300 flex justify-center text-center text-xs text-slate-700">
               <div>
-                <p className="font-bold">ختم مكتب النقل</p>
-                <div className="mt-3 w-36 h-20 border-2 border-dashed border-slate-500 rounded-xl mx-auto flex items-center justify-center text-xs font-bold text-slate-600">
-                  ختم مكتب النقل
-                </div>
+                <p className="font-bold text-sm">ختم مكتب النقل</p>
+                <img src={vibLogoUrl} alt="ختم مكتب النقل" className="mx-auto mt-2 h-20 w-28 object-contain" />
               </div>
             </div>
           </div>
