@@ -272,7 +272,6 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Wallet className="w-6 h-6 text-blue-600" />
               <span>الإدارة المالية وحسابات العملاء وعمولات المنظومة</span>
             </h1>
             <p className="text-xs text-slate-500 mt-1">

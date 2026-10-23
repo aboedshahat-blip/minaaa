@@ -24,7 +24,6 @@ export const BerthsPage: React.FC<BerthsPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Anchor className="w-6 h-6 text-blue-600" />
               <span>إدارة وتكويد أرصفة الميناء</span>
             </h1>
             <p className="text-xs text-slate-500 mt-1">

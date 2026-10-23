@@ -32,7 +32,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       {/* Header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
         <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-          <Settings className="w-6 h-6 text-blue-600" />
           <span>إعدادات العمولات المتغيرة والقيم التشغيلية</span>
         </h1>
         <p className="text-xs text-slate-500 mt-1">

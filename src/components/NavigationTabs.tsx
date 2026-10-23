@@ -1,13 +1,5 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import {
-  Truck,
-  Users,
-  Wallet,
-  BarChart3,
-  Anchor,
-  Settings,
-} from 'lucide-react';
 
 export type TabType =
   | 'movements'
@@ -34,51 +26,43 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
   const tabs: {
     id: TabType;
     label: string;
-    icon: React.ReactNode;
     badge?: number | string;
     visible: boolean;
   }[] = [
     {
       id: 'movements',
-      label: 'كشف الحركات (الاسطمبة)',
-      icon: <Truck className="w-4 h-4" />,
+      label: 'الحركات وكشوف التشغيل',
       badge: movementCount,
       visible: true,
     },
     {
       id: 'customers',
-      label: 'تكويد العملاء والعربيات',
-      icon: <Users className="w-4 h-4" />,
+      label: 'العملاء والمركبات',
       visible: true,
     },
     {
       id: 'accounts',
-      label: 'الحسابات والديون والعمولات',
-      icon: <Wallet className="w-4 h-4" />,
+      label: 'الحسابات والتحصيل',
       visible: canViewFinancials, // Hidden for data_entry
     },
     {
       id: 'reports',
-      label: 'التقارير والإحصائيات',
-      icon: <BarChart3 className="w-4 h-4" />,
+      label: 'التقارير والإحصاءات',
       visible: canViewFinancials, // Hidden for data_entry
     },
     {
       id: 'berths',
-      label: 'أرصفة الميناء',
-      icon: <Anchor className="w-4 h-4" />,
+      label: 'إدارة الأرصفة',
       visible: canManageBerths,
     },
     {
       id: 'settings',
-      label: 'إعدادات العمولات',
-      icon: <Settings className="w-4 h-4" />,
+      label: 'الإعدادات المالية',
       visible: canEditCommissions || isAdmin,
     },
     {
       id: 'admin_control',
-      label: 'لوحة تحكم الأدمن والصلاحيات',
-      icon: <span className="text-rose-500 font-bold">🛡️</span>,
+      label: 'إدارة النظام والصلاحيات',
       visible: isAdmin,
     },
   ];
@@ -101,9 +85,6 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  <span className={isActive ? 'text-blue-600' : 'text-slate-500'}>
-                    {tab.icon}
-                  </span>
                   <span>{tab.label}</span>
                   {tab.badge !== undefined && (
                     <span

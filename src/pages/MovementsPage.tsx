@@ -427,12 +427,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Stage tab config
   const stageTabs = [
-    { key: 'stage0_import' as const, icon: '1', label: 'إدخال البيانات' },
-    { key: 'stage1_manifest' as const, icon: '2', label: 'تجميع وطباعة الشيتات' },
-    { key: 'stage2_cashier' as const, icon: '3', label: 'فواتير الكاشير' },
-    ...(canViewFinancials ? [{ key: 'stage3_clients' as const, icon: '4', label: 'حسابات العملاء' }] : []),
-    { key: 'daily' as const, icon: '📊', label: 'لوحة اليوم' },
-    { key: 'all' as const, icon: '☷', label: 'كل الحركات' },
+    { key: 'stage0_import' as const, label: 'إدخال البيانات' },
+    { key: 'stage1_manifest' as const, label: 'كشوف الميناء' },
+    { key: 'stage2_cashier' as const, label: 'فواتير الكاشير' },
+    ...(canViewFinancials ? [{ key: 'stage3_clients' as const, label: 'حسابات العملاء' }] : []),
+    { key: 'daily' as const, label: 'حركات اليوم' },
+    { key: 'all' as const, label: 'سجل الحركات' },
   ];
 
   return (
@@ -440,7 +440,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       <nav className="no-print flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2" aria-label="أقسام الحركات">
         {stageTabs.map((tab) => (
           <button key={tab.key} onClick={() => setActiveStage(tab.key)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${activeStage === tab.key ? 'bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
-            <span className="flex h-5 min-w-5 items-center justify-center rounded bg-white/20 px-1">{tab.icon}</span>{tab.label}
+            {tab.label}
           </button>
         ))}
       </nav>
@@ -533,13 +533,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           <div className="bg-gradient-to-r from-rose-700 to-rose-600 text-white rounded-2xl p-5 shadow-md no-print">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="bg-white/20 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full">
-                    المرحلة الأولى
-                  </span>
-                  <span className="text-rose-200 text-xs">قبل المحاسبة في الميناء</span>
-                </div>
-                <h2 className="text-base font-black">تجميع الشيتات وطباعة كشف الميناء الرسمي</h2>
+                <p className="text-rose-200 text-xs mb-1">قبل المحاسبة في الميناء</p>
+                <h2 className="text-base font-black">إعداد كشوف الحركات للميناء</h2>
                 <p className="text-xs text-rose-100 mt-1 leading-relaxed">
                   كل شيت ترفعه يُحفظ كدفعة مستقلة باسم الملف. يمكنك طباعة الدفعة الحالية وحدها أو طباعة جميع الدفعات السابقة معًا
                   <strong className="text-white"> (بدون عمولات أو مبالغ) </strong>
@@ -552,10 +547,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                   className="bg-white text-rose-700 hover:bg-rose-50 text-xs font-black px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5"
                 >
                   <FileDown className="w-4 h-4" />
-                  <span>طباعة الدفعة المحددة</span>
+                  <span>طباعة الكشف المحدد</span>
                 </button>
                 <button onClick={() => openManifestPrint('all')} className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-white/30">
-                  <Printer className="w-4 h-4"/><span>طباعة كل الدفعات</span>
+                  <Printer className="w-4 h-4"/><span>طباعة جميع الكشوف</span>
                 </button>
               </div>
             </div>
@@ -706,13 +701,13 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             {manifestMovements.length > 0 && (
               <div className="bg-rose-50 border-t border-rose-200 p-3 flex items-center justify-between no-print">
                 <p className="text-xs text-rose-700 font-semibold">
-                  ✅ بعد تنزيل الكشف وإنهاء المحاسبة في الميناء، انتقل للمرحلة التالية لتسجيل فاتورة الكاشير
+                  بعد تنزيل الكشف وإنهاء المحاسبة في الميناء، انتقل إلى تسجيل فواتير الكاشير.
                 </p>
                 <button
                   onClick={() => setActiveStage('stage2_cashier')}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
                 >
-                  <span>المرحلة 2: تسجيل الكاشير</span>
+                  <span>الانتقال إلى فواتير الكاشير</span>
                   <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -728,13 +723,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white rounded-2xl p-5 shadow-md no-print">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="bg-white/20 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full">
-                    المرحلة الثانية
-                  </span>
-                  <span className="text-emerald-200 text-xs">بعد المحاسبة في الميناء</span>
-                </div>
-                <h2 className="text-base font-black">تسجيل وربط فواتير الكاشير</h2>
+                <p className="text-emerald-200 text-xs mb-1">بعد المحاسبة في الميناء</p>
+                <h2 className="text-base font-black">فواتير الكاشير ومطابقتها</h2>
                 <p className="text-xs text-emerald-100 mt-1 leading-relaxed">
                   ارفع تقرير الكاشير الصادر من الميناء (PDF / Excel / Word / صورة) أو ادخل رقم الإيصال والمبلغ يدوياً.
                   سيقوم السيستم بمطابقة كل شاحنة وتسجيل المبلغ تلقائياً.
@@ -879,13 +869,13 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             {filteredMovements.filter(m => m.cashier_receipt_no).length > 0 && canViewFinancials && (
               <div className="bg-emerald-50 border-t border-emerald-200 p-3 flex items-center justify-between no-print">
                 <p className="text-xs text-emerald-700 font-semibold">
-                  ✅ تم ربط {filteredMovements.filter(m => m.cashier_receipt_no).length} إيصال. انتقل للمرحلة التالية لعرض ملخص حسابات كل عميل
+                  تم ربط {filteredMovements.filter(m => m.cashier_receipt_no).length} إيصال. انتقل إلى حسابات العملاء لعرض الملخص.
                 </p>
                 <button
                   onClick={() => setActiveStage('stage3_clients')}
                   className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
                 >
-                  <span>المرحلة 3: حسابات العملاء</span>
+                  <span>الانتقال إلى حسابات العملاء</span>
                   <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -901,11 +891,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           <div className="bg-gradient-to-r from-amber-600 to-amber-500 text-white rounded-2xl p-5 shadow-md no-print">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="bg-white/20 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full">المرحلة الثالثة</span>
-                  <span className="text-amber-100 text-xs">ملخص حسابات ومطالبات كل عميل</span>
-                </div>
-                <h2 className="text-base font-black">حسابات ومطالبات العملاء المجمعة</h2>
+                <p className="text-amber-100 text-xs mb-1">ملخص حسابات ومطالبات العملاء</p>
+                <h2 className="text-base font-black">حسابات العملاء ومطالباتهم</h2>
                 <p className="text-xs text-amber-100 mt-1 leading-relaxed">
                   كل عميل/سائق له بطاقة تجمع جميع شحناته وشاحناته في مكان واحد.
                   يمكنك تطبيق خصم وتنزيل مطالبة PDF للعميل مباشرةً.

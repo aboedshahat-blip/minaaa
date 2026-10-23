@@ -280,7 +280,6 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
               <span>معالج وتفريغ المستندات والشيتات (Excel / Word / PDF)</span>
             </h1>
             <p className="text-xs text-slate-500 mt-1">
@@ -303,10 +302,10 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
           <span className="font-bold text-slate-700">الصيغ المدعومة للتفريغ:</span>
           <span className="bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 rounded-md border border-emerald-300">
-            📊 Excel (.xlsx, .xls, .csv)
+            Excel (.xlsx, .xls, .csv)
           </span>
           <span className="bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-md border border-blue-300">
-            📄 Word (.docx, .doc)
+            Word (.docx, .doc)
           </span>
           <span className="bg-rose-100 text-rose-800 font-bold px-2.5 py-1 rounded-md border border-rose-300">
             📑 PDF (.pdf)
@@ -370,7 +369,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
                 title="معاينة وطباعة وتنزيل الكشف المجمع الرسمي لتقديمه للمكتب والمحاسبة (خالٍ تماماً من أي عمولات أو خدمات أو مبالغ)"
               >
                 <Printer className="w-4 h-4" />
-                <span>1️⃣ معاينة وطباعة / تنزيل كشف المكتب (بدون عمولات)</span>
+                <span>معاينة وطباعة كشف المكتب (بدون مبالغ مالية)</span>
               </button>
 
               <button

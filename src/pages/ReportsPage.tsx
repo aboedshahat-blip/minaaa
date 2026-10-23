@@ -152,7 +152,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <BarChart3 className="w-6 h-6 text-blue-600" />
               <span>التقارير التفصيلية والإحصائية</span>
             </h1>
             <p className="text-xs text-slate-500 mt-1">
