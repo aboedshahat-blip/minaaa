@@ -112,7 +112,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [entryTimeTo, setEntryTimeTo] = useState('');
   const [expandedMovementIds, setExpandedMovementIds] = useState<Set<string>>(new Set());
   const [selectedManifestBatch, setSelectedManifestBatch] = useState('latest');
-  const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all'>('selected');
+  const [selectedManifestBatchIds, setSelectedManifestBatchIds] = useState<string[]>([]);
+  const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all' | 'picked'>('selected');
 
   const importBatches = useMemo(() => {
     const batches = new Map<string, { id: string; name: string; at: string; count: number }>();
@@ -132,7 +133,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   useEffect(() => {
     if (latestBatchId) setSelectedManifestBatch('latest');
   }, [latestBatchId]);
-  const openManifestPrint = (scope: 'selected' | 'all') => {
+  const openManifestPrint = (scope: 'selected' | 'all' | 'picked') => {
     setManifestPrintScope(scope);
     setIsOfficialSheetModalOpen(true);
   };
@@ -240,11 +241,23 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     endDate,
   ]);
 
+  const pickedBatchMovements = useMemo(() => {
+    const selectedIds = new Set(selectedManifestBatchIds);
+    return filteredMovements.filter((movement) => selectedIds.has(getMovementBatch(movement).id));
+  }, [filteredMovements, selectedManifestBatchIds]);
+
   const manifestMovements = useMemo(() => {
     if (selectedManifestBatch === 'all') return filteredMovements;
+    if (selectedManifestBatch === 'picked') return pickedBatchMovements;
     const targetId = selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch;
     return filteredMovements.filter((movement) => getMovementBatch(movement).id === targetId);
-  }, [filteredMovements, selectedManifestBatch, latestBatchId]);
+  }, [filteredMovements, selectedManifestBatch, latestBatchId, pickedBatchMovements]);
+
+  const toggleManifestBatchSelection = (batchId: string) => {
+    setSelectedManifestBatchIds((current) => current.includes(batchId)
+      ? current.filter((id) => id !== batchId)
+      : [...current, batchId]);
+  };
 
   // Group movements by Customer / Driver for Stage 3 (Multi-truck consolidation)
   const customerGroups = useMemo(() => {
@@ -655,14 +668,37 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <div><h3 className="text-sm font-black text-slate-900">دفعات الشيتات</h3><p className="mt-1 text-xs text-slate-500">كل ملف مرفوع محفوظ كمجموعة مستقلة. الافتراضي هو آخر شيت تم رفعه.</p></div>
               <div className="flex flex-wrap gap-2">
                 <select value={selectedManifestBatch} onChange={(e)=>setSelectedManifestBatch(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                  <option value="latest">آخر شيت مرفوع</option><option value="all">كل الشيتات</option>
+                  <option value="latest">آخر شيت مرفوع</option><option value="picked">الشيتات المحددة ({selectedManifestBatchIds.length})</option><option value="all">كل الشيتات</option>
                   {importBatches.map((batch)=><option key={batch.id} value={batch.id}>{batch.name} ({batch.count} حركة)</option>)}
                 </select>
                 <button onClick={()=>openManifestPrint('selected')} disabled={!manifestMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة المعروض ({manifestMovements.length})</button>
                 <button onClick={()=>openManifestPrint('all')} disabled={!filteredMovements.length} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة الكل ({filteredMovements.length})</button>
               </div>
             </div>
-            {importBatches.length > 0 && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">{importBatches.map((batch)=><button key={batch.id} onClick={()=>setSelectedManifestBatch(batch.id)} className={`rounded-xl border p-3 text-right transition ${((selectedManifestBatch==='latest'&&batch.id===latestBatchId)||selectedManifestBatch===batch.id)?'border-blue-400 bg-blue-50 ring-1 ring-blue-200':'border-slate-200 bg-slate-50 hover:border-slate-300'}`}><span className="block truncate text-xs font-black text-slate-800">{batch.name}</span><span className="mt-1 flex justify-between text-[11px] text-slate-500"><span>{batch.count} حركة</span><span>{Number.isNaN(new Date(batch.at).getTime())?'وقت غير مسجل':new Date(batch.at).toLocaleString('ar-EG')}</span></span></button>)}</div>}
+            {importBatches.length > 0 && <>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {importBatches.map((batch)=>{
+                  const isSelectedForView = (selectedManifestBatch==='latest' && batch.id===latestBatchId) || selectedManifestBatch===batch.id;
+                  const isCheckedForCombine = selectedManifestBatchIds.includes(batch.id);
+                  return <div key={batch.id} className={`flex items-stretch gap-2 rounded-xl border p-3 transition ${isSelectedForView?'border-blue-400 bg-blue-50 ring-1 ring-blue-200':'border-slate-200 bg-slate-50'}`}>
+                    <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-[11px] font-bold text-slate-700 hover:bg-white" title="اختيار هذا الشيت للتجميع والطباعة">
+                      <input type="checkbox" checked={isCheckedForCombine} onChange={()=>toggleManifestBatchSelection(batch.id)} className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500" />
+                      ضم
+                    </label>
+                    <button onClick={()=>setSelectedManifestBatch(batch.id)} className="min-w-0 flex-1 text-right">
+                      <span className="block truncate text-xs font-black text-slate-800">{batch.name}</span>
+                      <span className="mt-1 flex justify-between gap-2 text-[11px] text-slate-500"><span>{batch.count} حركة</span><span>{Number.isNaN(new Date(batch.at).getTime())?'وقت غير مسجل':new Date(batch.at).toLocaleString('ar-EG')}</span></span>
+                    </button>
+                  </div>;
+                })}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3">
+                <span className="me-auto text-xs font-bold text-slate-700">تم اختيار {selectedManifestBatchIds.length} شيت ({pickedBatchMovements.length} حركة)</span>
+                <button onClick={()=>setSelectedManifestBatch('picked')} disabled={!selectedManifestBatchIds.length} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800 disabled:opacity-50">عرض التجميع المحدد</button>
+                <button onClick={()=>openManifestPrint('picked')} disabled={!pickedBatchMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة الشيتات المحددة ({pickedBatchMovements.length})</button>
+                <button onClick={()=>setSelectedManifestBatchIds([])} disabled={!selectedManifestBatchIds.length} className="rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white disabled:opacity-50">إلغاء التحديد</button>
+              </div>
+            </>}
           </div>
 
           {/* Clean 12-Column Table (NO financials) */}
@@ -1295,9 +1331,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <OfficialSheetPrintModal
           isOpen={isOfficialSheetModalOpen}
           onClose={() => setIsOfficialSheetModalOpen(false)}
-          movements={manifestPrintScope === 'all' ? filteredMovements : manifestMovements}
+          movements={manifestPrintScope === 'all' ? filteredMovements : manifestPrintScope === 'picked' ? pickedBatchMovements : manifestMovements}
           title={manifestPrintScope === 'all'
             ? 'كشف جميع دفعات الحركات المجمع (الاسطمبة الرسمية)'
+            : manifestPrintScope === 'picked'
+            ? `كشف الشيتات المحددة (${selectedManifestBatchIds.length} شيت)`
             : `كشف دفعة: ${importBatches.find((batch) => batch.id === (selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch))?.name || 'الشيت المحدد'}`}
           berthName={
             selectedBerth
