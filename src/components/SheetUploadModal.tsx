@@ -92,6 +92,11 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (parsedRows.length > 0 && !await confirmAction(`سيتم استبدال الملف الحالي (${fileName}) بالملف (${file.name}) وحذف بياناته من المعاينة فقط. هل تريد الاستبدال؟`, 'نعم، استبدل الملف')) {
+      e.target.value = '';
+      return;
+    }
+
     setIsLoading(true);
     setFileName(file.name);
 
@@ -108,6 +113,20 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDiscardSheet = async () => {
+    if (!parsedRows.length && !fileName) return;
+    if (!await confirmAction(`سيتم إلغاء الملف ${fileName ? `(${fileName})` : 'الحالي'} وحذف ${parsedRows.length} صف من المعاينة فقط. لن تُضاف أي بيانات للنظام. هل تريد الإلغاء؟`, 'نعم، ألغِ الشيت')) return;
+    setParsedRows([]);
+    setOriginalHeaders([]);
+    setFileName('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleCancelUpload = async () => {
+    if (parsedRows.length > 0 && !await confirmAction(`سيتم إغلاق شاشة الرفع وإلغاء ${parsedRows.length} صف غير معتمد من المعاينة. هل تريد الإغلاق؟`, 'نعم، أغلق وألغِ الشيت')) return;
+    onClose();
   };
 
   const handleProcessAndSave = async () => {
@@ -251,8 +270,9 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     );
   };
 
-  const handleExportProcessedDirectly = () => {
+  const handleExportProcessedDirectly = async () => {
     if (parsedRows.length === 0) return;
+    if (!await confirmAction(`سيتم إنشاء وتنزيل ملف Excel يحتوي على ${parsedRows.length} حركة من الشيت الحالي. هل تريد المتابعة؟`, 'نعم، نزّل Excel')) return;
     const tempMovements: Movement[] = parsedRows.map((r, i) => ({
       ...r,
       id: `temp-${i}`,
@@ -289,6 +309,15 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
         {/* Header */}
         <div className="bg-gradient-to-l from-emerald-900 to-teal-800 text-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {parsedRows.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDiscardSheet}
+                className="px-4 py-2 rounded-lg border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-50 transition"
+              >
+                إزالة الشيت الخاطئ
+              </button>
+            )}
             <div className="bg-emerald-600 p-2 rounded-lg">
               <Filter className="w-5 h-5 text-white" />
             </div>
@@ -302,7 +331,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCancelUpload}
             className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
           >
             <X className="w-5 h-5" />
@@ -511,7 +540,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCancelUpload}
               className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition"
             >
               إلغاء

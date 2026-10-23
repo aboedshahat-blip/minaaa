@@ -29,11 +29,13 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
   };
 
   const handleExportPdf = async () => {
+    if (!await confirmAction(`سيتم إنشاء وتنزيل كشف PDF يحتوي على ${movements.length} حركة. هل تريد المتابعة؟`, 'نعم، نزّل PDF')) return;
     const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
     await exportMovementsToOfficialPdf(movements, title, berthName);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    if (!await confirmAction(`سيتم إنشاء وتنزيل ملف Excel يحتوي على ${movements.length} حركة. هل تريد المتابعة؟`, 'نعم، نزّل Excel')) return;
     exportTemplateToExcel(
       movements,
       `كشف_الحركات_المجمع_للمكتب_${new Date().toISOString().split('T')[0]}.xlsx`
@@ -230,7 +232,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             <div className="manifest-stamp mt-8 pt-6 border-t border-dashed border-slate-300 flex justify-center text-center text-xs text-slate-700">
               <div>
                 <p className="font-bold text-sm">ختم مكتب النقل</p>
-                <img src={vibLogoUrl} alt="ختم مكتب النقل" className="mx-auto mt-2 h-20 w-28 object-contain" />
+                <div aria-label="مساحة ختم مكتب النقل" className="mx-auto mt-2 h-20 w-36 rounded border border-dashed border-slate-400" />
               </div>
             </div>
           </div>

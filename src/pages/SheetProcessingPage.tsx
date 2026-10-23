@@ -89,6 +89,15 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     setRows(rows.filter((_, i) => i !== index));
   };
 
+  const handleDiscardSheet = async () => {
+    if (!rows.length && !fileName) return;
+    if (!await confirmAction(`سيتم إلغاء الملف ${fileName ? `(${fileName})` : 'الحالي'} وحذف ${rows.length} صف من المعاينة فقط. لن تُضاف أي بيانات للنظام. هل تريد الإلغاء؟`, 'نعم، ألغِ الشيت')) return;
+    setRows([]);
+    setFileName('');
+    setFileType('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSaveToSystem = async () => {
     if (rows.length === 0) {
       alert('لا توجد بيانات للاستيراد');
@@ -231,8 +240,9 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     setIsOfficialSheetModalOpen(true);
   };
 
-  const handleExportProcessedSheet = () => {
+  const handleExportProcessedSheet = async () => {
     if (rows.length === 0) return;
+    if (!await confirmAction(`سيتم إنشاء وتنزيل ملف Excel يحتوي على ${rows.length} حركة من الشيت الحالي. هل تريد المتابعة؟`, 'نعم، نزّل Excel')) return;
     const tempMovements: Movement[] = rows.map((r, i) => ({
       ...r,
       id: `temp-${i}`,
@@ -348,6 +358,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleDiscardSheet}
+                className="bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold px-3.5 py-2 rounded-lg border border-rose-200 transition"
+              >
+                إلغاء الشيت وإزالته
+              </button>
               <button
                 onClick={() => setIsOfficialSheetModalOpen(true)}
                 className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-black px-4 py-2.5 rounded-xl shadow-md transition flex items-center gap-2 border border-rose-600/30"

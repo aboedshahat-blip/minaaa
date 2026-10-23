@@ -140,7 +140,7 @@ export async function exportMovementsToOfficialPdf(
     <div style="margin-top: 25px; display: flex; justify-content: center; align-items: center; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 14px; color: #475569;">
       <div style="text-align: center;">
         <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
-        <img src="${vibLogoUrl}" alt="ختم مكتب النقل" style="display:block;margin:8px auto 0;width:120px;height:85px;object-fit:contain;" />
+        <div aria-label="مساحة ختم مكتب النقل" style="margin:8px auto 0;width:140px;height:78px;border:1px dashed #94a3b8;border-radius:6px;"></div>
       </div>
     </div>
   `;
