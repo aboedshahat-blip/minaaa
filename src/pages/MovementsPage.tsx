@@ -1,19 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Berth, Customer, Movement } from '../types';
+import { Berth, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
+import { exportTemplateToExcel } from '../lib/excelUtils';
 import {
   Search,
   Filter,
   Download,
   Printer,
-  Plus,
   Trash2,
   Edit2,
-  FileSpreadsheet,
   CheckCircle,
   Clock,
-  DollarSign,
   Truck,
   RotateCcw,
   FileText,
@@ -23,7 +20,6 @@ import {
   User,
   Percent,
   ArrowLeft,
-  ArrowRight,
   Layers,
   Sparkles,
   CalendarDays,
@@ -38,15 +34,11 @@ import { SystemSettings } from '../types';
 
 interface MovementsPageProps {
   movements: Movement[];
-  customers: Customer[];
   berths: Berth[];
   settings?: SystemSettings;
-  onOpenAddModal: () => void;
-  onOpenUploadModal: () => void;
   onEditMovement: (movement: Movement) => void;
   onDeleteMovement: (id: string) => void;
   onClearAllMovements?: () => void;
-  onTogglePaid: (movement: Movement) => void;
   onOpenPaymentModal?: (customerId?: string) => void;
   onUndoLatestDeletion?: () => Promise<void>;
   canUndoLatestDeletion?: boolean;
@@ -74,15 +66,11 @@ const getMovementBatch = (movement: Movement) => {
 
 export const MovementsPage: React.FC<MovementsPageProps> = ({
   movements,
-  customers,
   berths,
   settings,
-  onOpenAddModal,
-  onOpenUploadModal,
   onEditMovement,
   onDeleteMovement,
   onClearAllMovements,
-  onTogglePaid,
   onOpenPaymentModal,
   onUndoLatestDeletion,
   canUndoLatestDeletion = false,
@@ -102,7 +90,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState('');
   const [selectedBerth, setSelectedBerth] = useState('');
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -180,10 +167,9 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       const fields = [m.truck_no, m.trailer_no, m.driver_name, m.container_no, m.declaration_no, m.customer_name, m.cashier_receipt_no];
       if (!fields.some((value) => value?.toLocaleLowerCase().includes(term))) return false;
     }
-    if (selectedCustomer && m.customer_id !== selectedCustomer && m.customer_name !== selectedCustomer) return false;
     if (canViewFinancials && selectedPaymentStatus && m.payment_status !== selectedPaymentStatus) return false;
     return true;
-  }), [movements, entryDate, entryTimeFrom, entryTimeTo, searchTerm, selectedCustomer, selectedPaymentStatus, canViewFinancials]);
+  }), [movements, entryDate, entryTimeFrom, entryTimeTo, searchTerm, selectedPaymentStatus, canViewFinancials]);
 
   const dashboardTotals = useMemo(() => dashboardMovements.reduce((totals, m) => {
     totals.due += Number(m.total_amount) || 0;
@@ -211,11 +197,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         if (!matchSearch) return false;
       }
 
-      // Customer filter
-      if (selectedCustomer && m.customer_id !== selectedCustomer && m.customer_name !== selectedCustomer) {
-        return false;
-      }
-
       // Berth filter
       if (selectedBerth && m.berth_id !== selectedBerth && m.berth_name !== selectedBerth) {
         return false;
@@ -235,7 +216,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   }, [
     movements,
     searchTerm,
-    selectedCustomer,
     selectedBerth,
     selectedPaymentStatus,
     startDate,
@@ -415,23 +395,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     exportTemplateToExcel(filteredMovements, `كشف_حركات_الميناء_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const handleExportPdf = async () => {
-    const selectedBerthObj = berths.find((b) => b.id === selectedBerth || b.name === selectedBerth);
-    const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
-    await exportMovementsToOfficialPdf(
-      filteredMovements,
-      'كشف حركات الشاحنات والحاويات (الاسطمبة الرسمية)',
-      selectedBerthObj?.name
-    );
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedCustomer('');
     setSelectedBerth('');
     setSelectedPaymentStatus('');
     setStartDate('');
@@ -550,9 +515,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <div><p className="text-xs text-blue-200">متابعة التشغيل والتحصيل</p><h2 className="mt-1 text-xl font-black">لوحة الحركات اليومية</h2><p className="mt-1 text-xs text-blue-100">الحركات معروضة حسب وقت إدخالها للنظام، ويمكنك البحث بالتاريخ والساعة.</p></div>
               <div className="flex flex-wrap gap-2">
                 {canUndoLatestDeletion && <button onClick={()=>void runUndoLatestDeletion()} className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950"><RotateCcw className="h-4 w-4"/>تراجع عن آخر حذف (Ctrl+Z)</button>}
-                <button onClick={onOpenAddModal} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-900"><Plus className="h-4 w-4"/>تسجيل حركة</button>
-                <button onClick={onOpenUploadModal} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white"><FileSpreadsheet className="h-4 w-4"/>رفع شيت</button>
-                {canViewFinancials && <button onClick={() => setActiveStage('stage2_cashier')} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950"><Receipt className="h-4 w-4"/>فواتير الكاشير</button>}
               </div>
             </div>
           </div>
@@ -575,9 +537,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <label className="relative"><CalendarDays className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input type="date" value={entryDate} onChange={(e)=>setEntryDate(e.target.value)} className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-2 text-sm" title="تاريخ الإدخال"/></label>
               <input type="time" aria-label="من الساعة" value={entryTimeFrom} onChange={(e)=>setEntryTimeFrom(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/>
               <input type="time" aria-label="إلى الساعة" value={entryTimeTo} onChange={(e)=>setEntryTimeTo(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/>
-              <select value={selectedCustomer} onChange={(e)=>setSelectedCustomer(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-2 text-sm"><option value="">كل العملاء</option>{customers.map((c)=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
               {canViewFinancials && <select value={selectedPaymentStatus} onChange={(e)=>setSelectedPaymentStatus(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-2 py-2 text-sm"><option value="">كل حالات الدفع</option><option value="unpaid">لم يدفع</option><option value="partial">دفع جزئي</option><option value="paid">مدفوع</option></select>}
-              <button onClick={()=>{setEntryDate('');setEntryTimeFrom('');setEntryTimeTo('');setSearchTerm('');setSelectedCustomer('');setSelectedPaymentStatus('');}} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200">عرض كل الأيام ومسح البحث</button>
+              <button onClick={()=>{setEntryDate('');setEntryTimeFrom('');setEntryTimeTo('');setSearchTerm('');setSelectedPaymentStatus('');}} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200">عرض كل الأيام ومسح البحث</button>
             </div>
             <p className="mt-2 text-xs text-slate-500">توقيت الإدخال: التوقيت المحلي للجهاز. تاريخ الحركة التشغيلي يظهر في تفاصيل كل حركة.</p>
           </div>
@@ -620,20 +581,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 shrink-0">
-                <button
-                  onClick={onOpenAddModal}
-                  className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-white/30"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>إضافة حركة يدوية</span>
-                </button>
-                <button
-                  onClick={onOpenUploadModal}
-                  className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-white/30"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>رفع شيت وتجميعه</span>
-                </button>
                 <button
                   onClick={() => openManifestPrint('selected')}
                   className="bg-white text-rose-700 hover:bg-rose-50 text-xs font-black px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5"
@@ -1174,8 +1121,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 جدول السيد — جميع الأعمدة والبيانات ({movements.length} حركة)
               </h2>
               <div className="flex flex-wrap gap-2">
-                <button onClick={onOpenAddModal} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Plus className="w-4 h-4" /><span>إضافة يدوية</span></button>
-                <button onClick={onOpenUploadModal} className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><FileSpreadsheet className="w-4 h-4" /><span>رفع شيت</span></button>
                 <button onClick={() => setIsOfficialSheetModalOpen(true)} className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Printer className="w-4 h-4" /><span>طباعة كشف الميناء</span></button>
                 <button onClick={handleExportExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Download className="w-4 h-4" /><span>Excel</span></button>
                 {canViewFinancials && onBatchUpdateMovements && (
@@ -1196,12 +1141,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2">
               <div className="md:col-span-2 relative">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-                <input type="text" placeholder="بحث برقم الشاحنة، السائق، الحاوية..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
+                <input type="text" placeholder="بحث باسم العميل أو السائق أو رقم الشاحنة والحاوية..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
               </div>
-              <select value={selectedCustomer} onChange={(e) => setSelectedCustomer(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
-                <option value="">جميع العملاء</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>[{c.code}] {c.name}</option>)}
-              </select>
               <select value={selectedBerth} onChange={(e) => setSelectedBerth(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
                 <option value="">جميع الأرصفة</option>
                 {berths.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}

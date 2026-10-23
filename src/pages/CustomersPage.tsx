@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
-  Wallet,
 } from 'lucide-react';
 
 interface CustomersPageProps {
@@ -36,26 +35,35 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const { canViewFinancials } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 24;
 
-  const filteredCustomers = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phone.includes(searchTerm)
-  );
+  const filteredCustomers = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase('ar-EG');
+    return customers
+      .filter((customer) => !query || [customer.name, customer.code, customer.phone, ...(customer.trucks || []).map((truck) => truck.truck_no)]
+        .some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(query)))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }, [customers, searchTerm]);
+  const pageCount = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
+  const safePage = Math.min(currentPage, pageCount);
+  const visibleCustomers = filteredCustomers.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  // Calculate customer financials
-  const getCustomerStats = (customer: Customer) => {
-    const custMovements = movements.filter(
-      (m) => m.customer_id === customer.id || m.customer_name === customer.name
-    );
-    const count = custMovements.length;
-    const totalBilled = custMovements.reduce((sum, m) => sum + (m.total_amount || 0), 0);
-    const totalPaid = custMovements.reduce((sum, m) => sum + (m.paid_amount || 0), 0);
-    const totalRemaining = custMovements.reduce((sum, m) => sum + (m.remaining_amount || 0), 0);
-
-    return { count, totalBilled, totalPaid, totalRemaining };
-  };
+  const customerStats = useMemo(() => {
+    const byId = new Map(customers.map((customer) => [customer.id, customer.id]));
+    const byName = new Map(customers.map((customer) => [customer.name.trim().toLocaleLowerCase('ar-EG'), customer.id]));
+    const stats = new Map(customers.map((customer) => [customer.id, { count: 0, totalBilled: 0, totalPaid: 0, totalRemaining: 0 }]));
+    movements.forEach((movement) => {
+      const customerId = byId.get(movement.customer_id || '') || byName.get((movement.customer_name || '').trim().toLocaleLowerCase('ar-EG'));
+      const current = customerId ? stats.get(customerId) : undefined;
+      if (!current) return;
+      current.count += 1;
+      current.totalBilled += Number(movement.total_amount) || 0;
+      current.totalPaid += Number(movement.paid_amount) || 0;
+      current.totalRemaining += Number(movement.remaining_amount) || 0;
+    });
+    return stats;
+  }, [customers, movements]);
 
   const toggleExpand = (id: string) => {
     setExpandedCustomerId(expandedCustomerId === id ? null : id);
@@ -94,16 +102,26 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
             type="text"
             placeholder="بحث باسم العميل، كود العميل، أو رقم الهاتف..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs focus:ring-1 focus:ring-blue-500"
           />
+        </div>
+        <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs font-semibold text-slate-600">
+            {filteredCustomers.length === 0 ? 'لا يوجد عملاء مطابقون' : `عرض ${((safePage - 1) * pageSize) + 1}–${Math.min(safePage * pageSize, filteredCustomers.length)} من ${filteredCustomers.length} عميل`}
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={safePage <= 1} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">السابق</button>
+            <span className="min-w-20 text-center text-xs text-slate-600">صفحة {safePage} من {pageCount}</span>
+            <button type="button" onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))} disabled={safePage >= pageCount} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">التالي</button>
+          </div>
         </div>
       </div>
 
       {/* Customer Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredCustomers.map((customer) => {
-          const stats = getCustomerStats(customer);
+        {visibleCustomers.map((customer) => {
+          const stats = customerStats.get(customer.id) || { count: 0, totalBilled: 0, totalPaid: 0, totalRemaining: 0 };
           const isExpanded = expandedCustomerId === customer.id;
 
           return (
@@ -247,6 +265,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           );
         })}
       </div>
+      {visibleCustomers.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+          لا يوجد عميل يطابق البحث الحالي.
+        </div>
+      )}
     </div>
   );
 };

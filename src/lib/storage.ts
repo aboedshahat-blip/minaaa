@@ -61,13 +61,16 @@ export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBac
   const writes: Array<[string, Record<string, unknown>[]]> = [
     ['customers', backup.customers.map(customerForCloud)],
     ['berths', backup.berths.map((row) => ({ ...row }))],
-    ['movements', backup.movements.map(movementForCloud)],
-    ['payments', backup.payments.map(paymentForCloud)],
   ];
   for (const [table, rows] of writes) {
     if (!rows.length) continue;
     const { error } = await supabase.from(table).upsert(rows as never);
     if (error) throw new Error(`تعذرت استعادة ${table}: ${error.message}`);
+  }
+  await upsertMovementsWithCustomerRepair(supabase, backup.movements);
+  if (backup.payments.length) {
+    const { error } = await supabase.from('payments').upsert(backup.payments.map(paymentForCloud) as never);
+    if (error) throw new Error(`تعذرت استعادة payments: ${error.message}`);
   }
 
   const { error: markerError } = await supabase.from('customers').upsert({
@@ -517,6 +520,22 @@ const ensureMovementCustomer = async (movement: Movement, supabase: NonNullable<
   return { ...movement, customer_code: customerCode, customer_name: name };
 };
 
+const upsertMovementsWithCustomerRepair = async (
+  supabase: NonNullable<ReturnType<typeof getSupabaseClient>>,
+  movements: Movement[],
+) => {
+  if (!movements.length) return;
+  const repaired: Movement[] = [];
+  for (const movement of movements) {
+    const resolved = await ensureMovementCustomer(movement, supabase);
+    setPendingUpsert('movements', resolved);
+    repaired.push(resolved);
+  }
+  const { error } = await supabase.from('movements').upsert(repaired.map(movementForCloud) as never);
+  if (error) throw new Error(`تعذرت مزامنة movements: ${error.message}`);
+  repaired.forEach((movement) => clearPendingUpsert('movements', movement.id));
+};
+
 export const syncCustomerToSupabase = async (customer: Customer) => {
   const cloudCustomer = customerForCloud(customer);
   setPendingUpsert('customers', cloudCustomer as unknown as Customer);
@@ -581,15 +600,17 @@ export const restoreLocalDataToSupabase = async (data: {
   const orderedWrites = [
     ['customers', data.customers.map(customerForCloud)],
     ['berths', data.berths],
-    ['movements', data.movements.map(movementForCloud)],
-    ['payments', data.payments.map(paymentForCloud)],
   ] as const;
   for (const [table, rows] of orderedWrites) {
     if (!rows.length) continue;
     const { error } = await supabase.from(table).upsert(rows as never);
     if (error) throw new Error(`تعذرت استعادة البيانات إلى Supabase: ${error.message}`);
   }
-  for (const row of data.movements) clearPendingUpsert('movements', row.id);
+  await upsertMovementsWithCustomerRepair(supabase, data.movements);
+  if (data.payments.length) {
+    const { error } = await supabase.from('payments').upsert(data.payments.map(paymentForCloud) as never);
+    if (error) throw new Error(`تعذرت استعادة البيانات إلى Supabase: ${error.message}`);
+  }
   for (const row of data.customers) clearPendingUpsert('customers', row.id);
   for (const row of data.berths) clearPendingUpsert('berths', row.id);
   for (const row of data.payments) clearPendingUpsert('payments', row.id);
@@ -678,15 +699,22 @@ export const syncWithSupabase = async () => {
     }
 
     // Seed initial data to Supabase if empty
-    const { count } = await supabase.from('movements').select('*', { count: 'exact', head: true });
+    const { count, error: countError } = await supabase.from('movements').select('*', { count: 'exact', head: true });
+    if (countError) throw new Error(`تعذر فحص بيانات الحركات: ${countError.message}`);
     if (count === 0) {
       const localMovements = getStoredMovements();
       const localCustomers = getStoredCustomers();
       const localBerths = getStoredBerths();
 
-      if (localBerths.length > 0) await supabase.from('berths').upsert(localBerths);
-      if (localCustomers.length > 0) await supabase.from('customers').upsert(localCustomers.map(customerForCloud));
-      if (localMovements.length > 0) await supabase.from('movements').upsert(localMovements.map(movementForCloud));
+      if (localBerths.length > 0) {
+        const { error } = await supabase.from('berths').upsert(localBerths);
+        if (error) throw new Error(`تعذرت مزامنة الأرصفة: ${error.message}`);
+      }
+      if (localCustomers.length > 0) {
+        const { error } = await supabase.from('customers').upsert(localCustomers.map(customerForCloud));
+        if (error) throw new Error(`تعذرت مزامنة العملاء: ${error.message}`);
+      }
+      await upsertMovementsWithCustomerRepair(supabase, localMovements);
     }
 
     return { success: true, message: 'تم الاتصال بقاعدة بيانات Supabase ومزامنة البيانات بنجاح تام!' };

@@ -59,11 +59,6 @@ import { BerthModal } from './components/BerthModal';
 import { PaymentModal } from './components/PaymentModal';
 import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
 
-const mergeCloudAndLocal = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
-  const cloudIds = new Set(cloudRows.map((row) => row.id));
-  return [...cloudRows, ...localRows.filter((row) => !cloudIds.has(row.id))];
-};
-
 const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
   const cloudIds = new Set(cloudRows.map((row) => row.id));
   return localRows.filter((row) => !cloudIds.has(row.id));
@@ -92,7 +87,6 @@ const AppContent: React.FC = () => {
     canDeleteCustomers,
     canManageBerths,
     canManagePayments,
-    canEditCommissions,
     isAdmin,
   } = useAuth();
 
@@ -417,27 +411,6 @@ const AppContent: React.FC = () => {
     setCloudFeedback(`تم التراجع واستعادة البيانات السابقة: ${latestBackup.label}`);
   };
 
-  const handleTogglePaid = (movement: Movement) => {
-    const isNowPaid = movement.payment_status === 'paid';
-    const newStatus = isNowPaid ? 'unpaid' : 'paid';
-    const newPaid = isNowPaid ? 0 : movement.total_amount;
-    const newRemaining = isNowPaid ? movement.total_amount : 0;
-
-    const updatedMovement = {
-      ...movement,
-      payment_status: newStatus as any,
-      paid_amount: newPaid,
-      remaining_amount: newRemaining,
-    };
-
-    const updated = movements.map((m) =>
-      m.id === movement.id ? updatedMovement : m
-    );
-    setMovements(updated);
-    saveMovements(updated);
-    void runCloudOperation(syncMovementToSupabase(updatedMovement));
-  };
-
   const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
     const batchAt = new Date().toISOString();
     const batchName = importedMovements[0]?.notes?.match(/(?:شيت|ملف):\s*(.+)$/)?.[1]?.trim()
@@ -613,14 +586,8 @@ const AppContent: React.FC = () => {
         {activeTab === 'movements' && (
           <MovementsPage
             movements={movements}
-            customers={customers}
             berths={berths}
             settings={settings}
-            onOpenAddModal={() => {
-              setEditingMovement(null);
-              setIsMovementModalOpen(true);
-            }}
-            onOpenUploadModal={() => setIsSheetUploadOpen(true)}
             onEditMovement={(m) => {
               setEditingMovement(m);
               setIsMovementModalOpen(true);
@@ -629,7 +596,6 @@ const AppContent: React.FC = () => {
             onClearAllMovements={handleClearAllMovements}
             onUndoLatestDeletion={handleUndoLatestDeletion}
             canUndoLatestDeletion={safetyBackups.length > 0}
-            onTogglePaid={handleTogglePaid}
             onOpenPaymentModal={(cId) => {
               setPaymentCustomerId(cId);
               setIsPaymentModalOpen(true);
