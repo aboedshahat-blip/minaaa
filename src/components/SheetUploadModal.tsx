@@ -3,6 +3,7 @@ import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from
 import { Customer, Berth, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
+import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
 import {
   Upload,
   FileSpreadsheet,
@@ -42,7 +43,6 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const [fileName, setFileName] = useState('');
   const [parsedRows, setParsedRows] = useState<Partial<Movement>[]>([]);
   const [originalHeaders, setOriginalHeaders] = useState<string[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashierInvoice, setDefaultCashierInvoice] = useState<number>(0);
   const [applyDefaultCommissions, setApplyDefaultCommissions] = useState<boolean>(true);
@@ -79,6 +79,10 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       created_at: '',
     }));
   }, [parsedRows, selectedBerthId, berths]);
+  const customerMatchSummary = useMemo(
+    () => summarizeImportedCustomers(parsedRows, customers),
+    [parsedRows, customers],
+  );
 
   if (!isOpen) return null;
 
@@ -110,7 +114,6 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       return;
     }
 
-    const targetCustomer = customers.find((c) => c.id === selectedCustomerId);
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
     const now = new Date().toISOString().split('T')[0];
@@ -125,12 +128,12 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       seqCounter += 1;
       const cashier = row.cashier_invoice || defaultCashierInvoice || 0;
       const cleanDriver = (row.driver_name || '').trim();
-      let rowCustomer = targetCustomer;
+      let rowCustomer: Customer | undefined;
 
-      if (cleanDriver) {
-        const existing =
-          customers.find((c) => c.name.trim().toLowerCase() === cleanDriver.toLowerCase()) ||
-          newCustomersMap.get(cleanDriver.toLowerCase());
+      const normalizedDriver = normalizeCustomerName(cleanDriver);
+      if (normalizedDriver) {
+        const existing = customers.find((c) => normalizeCustomerName(c.name) === normalizedDriver) ||
+          newCustomersMap.get(normalizedDriver);
 
         if (existing) {
           rowCustomer = existing;
@@ -153,9 +156,11 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
             system_commission: defaultSysComm,
             nafez_commission: defaultNafezComm,
           };
-          newCustomersMap.set(cleanDriver.toLowerCase(), newCust);
+          newCustomersMap.set(normalizedDriver, newCust);
           rowCustomer = newCust;
         }
+      } else {
+        rowCustomer = undefined;
       }
 
       const systemCommission = applyDefaultCommissions
@@ -353,22 +358,14 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                   </span>
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      ربط جميع السجلات بالعميل
-                    </label>
-                    <select
-                      value={selectedCustomerId}
-                      onChange={(e) => setSelectedCustomerId(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800"
-                    >
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          [{c.code}] {c.name}
-                        </option>
-                      ))}
-                    </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                    <span className="block text-xs font-bold text-blue-900">ربط العملاء تلقائيًا بالاسم</span>
+                    <span className="mt-1 block text-[11px] text-blue-800">
+                      موجود: {customerMatchSummary.existingCount} — جديد: {customerMatchSummary.newCount}
+                      {customerMatchSummary.rowsWithoutName > 0 ? ` — بدون اسم: ${customerMatchSummary.rowsWithoutName}` : ''}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-blue-700">الاسم الموجود يُربط بسجله، والاسم الجديد يُسجل مرة واحدة تلقائيًا.</span>
                   </div>
 
                   <div>

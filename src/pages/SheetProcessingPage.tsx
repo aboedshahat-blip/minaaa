@@ -3,6 +3,7 @@ import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
+import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
 import {
   FileSpreadsheet,
   Upload,
@@ -39,11 +40,14 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   const [fileType, setFileType] = useState<'excel' | 'word' | 'pdf' | ''>('');
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<Partial<Movement>[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashier, setDefaultCashier] = useState<number>(0);
   const [applyCommission, setApplyCommission] = useState(true);
   const [isOfficialSheetModalOpen, setIsOfficialSheetModalOpen] = useState(false);
+  const customerMatchSummary = useMemo(
+    () => summarizeImportedCustomers(rows, customers),
+    [rows, customers],
+  );
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -87,7 +91,6 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       return;
     }
 
-    const targetCustomer = customers.find((c) => c.id === selectedCustomerId);
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
     const now = new Date().toISOString().split('T')[0];
@@ -103,12 +106,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       const cashier = r.cashier_invoice || defaultCashier || 0;
       // Smart Driver = Customer mapping
       const cleanDriver = (r.driver_name || '').trim();
-      let rowCustomer = targetCustomer;
+      let rowCustomer: Customer | undefined;
 
-      if (cleanDriver) {
-        const existing =
-          customers.find((c) => c.name.trim().toLowerCase() === cleanDriver.toLowerCase()) ||
-          newCustomersMap.get(cleanDriver.toLowerCase());
+      const normalizedDriver = normalizeCustomerName(cleanDriver);
+      if (normalizedDriver) {
+        const existing = customers.find((c) => normalizeCustomerName(c.name) === normalizedDriver) ||
+          newCustomersMap.get(normalizedDriver);
 
         if (existing) {
           rowCustomer = existing;
@@ -131,7 +134,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
             system_commission: defaultSysComm,
             nafez_commission: defaultNafezComm,
           };
-          newCustomersMap.set(cleanDriver.toLowerCase(), newCust);
+          newCustomersMap.set(normalizedDriver, newCust);
           rowCustomer = newCust;
         }
       }
@@ -367,22 +370,14 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
           </div>
 
           {/* Batch Settings Bar */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                تخصيص للعميل
-              </label>
-              <select
-                value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold"
-              >
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    [{c.code}] {c.name}
-                  </option>
-                ))}
-              </select>
+              <span className="block text-xs font-bold text-slate-800 mb-1">ربط العميل تلقائيًا بالاسم</span>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-900">
+                موجود: {customerMatchSummary.existingCount} — جديد: {customerMatchSummary.newCount}
+                {customerMatchSummary.rowsWithoutName > 0 ? ` — بدون اسم: ${customerMatchSummary.rowsWithoutName}` : ''}
+                <span className="mt-1 block text-[10px]">يربط الاسم بسجله إن وُجد، أو يسجل عميلًا جديدًا مرة واحدة.</span>
+              </div>
             </div>
 
             <div>
