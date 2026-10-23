@@ -151,6 +151,28 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     };
     const containerPathCenter = findContainerColumnCenter('مسار');
     const containerDescCenter = findContainerColumnCenter('وصف');
+    const containerHeaderCells = (containerHeader?.items || []).filter((item) => item.str.includes('الحاوية'));
+    const containerNoHeaderCell = containerHeaderCells.find((item) =>
+      containerDescCenter != null && item.x > containerDescCenter
+    );
+    const containerNoCenter = containerNoHeaderCell
+      ? containerNoHeaderCell.x + (containerNoHeaderCell.width || containerNoHeaderCell.str.length * 5) / 2
+      : null;
+    const containerFieldCenters = [containerPathCenter, containerDescCenter, containerNoCenter]
+      .filter((center): center is number => center != null)
+      .sort((a, b) => a - b);
+    const getContainerFieldBounds = (center: number | null) => {
+      if (center == null) return null;
+      const index = containerFieldCenters.indexOf(center);
+      return {
+        left: index > 0 ? (containerFieldCenters[index - 1] + center) / 2 : Number.NEGATIVE_INFINITY,
+        right: index >= 0 && index < containerFieldCenters.length - 1
+          ? (center + containerFieldCenters[index + 1]) / 2
+          : Number.POSITIVE_INFINITY,
+      };
+    };
+    const containerPathBounds = getContainerFieldBounds(containerPathCenter);
+    const containerDescBounds = getContainerFieldBounds(containerDescCenter);
     let driverColumnCenter = 0;
     let driverColumnWidth = 0;
     if (driverHeader) {
@@ -251,18 +273,25 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
 
       // Direction/condition belongs to its own cell and may appear anywhere
       // in PDF.js token order, especially when RTL text is split into fragments.
-      const directionToken = rowTokens
-        .map((token) => token.replace(/[\s\u0640]/g, ''))
-        .find((token) => ['وارد', 'صادر', 'فارغ'].includes(token));
-      const valueAtColumn = (center: number | null) => {
-        if (center == null) return '';
-        const candidates = bucket.items
-          .filter((item) => ['وارد', 'صادر', 'فارغ', 'ترانزيت'].includes(item.str.replace(/[\s\u0640]/g, '')))
-          .sort((a, b) => Math.abs((a.x + (a.width || a.str.length * 5) / 2) - center) - Math.abs((b.x + (b.width || b.str.length * 5) / 2) - center));
-        return candidates[0]?.str.replace(/[\s\u0640]/g, '') || '';
+      const valueAtColumn = (bounds: { left: number; right: number } | null) => {
+        if (!bounds) return '';
+        const fragments = bucket.items
+          .filter((item) => item.str.trim() && (item.width || 0) < 80)
+          .filter((item) => {
+            const center = item.x + (item.width || item.str.length * 5) / 2;
+            return center >= bounds.left && center < bounds.right;
+          })
+          .sort((a, b) => a.x - b.x);
+        // Arabic words can be split into visual fragments in PDF text data.
+        // Reverse fragment order for RTL runs, then match only known source values.
+        const orderedFragments = fragments.length > 1 && fragments.every((item) => item.dir === 'rtl')
+          ? [...fragments].reverse()
+          : fragments;
+        const text = orderedFragments.map((item) => item.str.replace(/[\s\u0640]/g, '')).join('');
+        return ['وارد', 'صادر', 'فارغ', 'ترانزيت'].find((value) => value === text) || '';
       };
-      const container_path = valueAtColumn(containerPathCenter) || directionToken || 'وارد';
-      const container_desc = valueAtColumn(containerDescCenter) || directionToken || 'وارد';
+      const container_path = valueAtColumn(containerPathBounds);
+      const container_desc = valueAtColumn(containerDescBounds);
 
       // Dynamic weights and axles
       let truck_axles = 20;
@@ -510,8 +539,8 @@ export const matrixToMovements = (matrix: unknown[][]): {
     let driver_name = '';
     let truck_no = '';
     let trailer_no = '';
-    let container_path = 'وارد';
-    let container_desc = 'وارد';
+    let container_path = '';
+    let container_desc = '';
     let truck_weight = 7.5;
     let truck_axles = 20;
     let trailer_weight = 11.5;
@@ -570,10 +599,8 @@ export const matrixToMovements = (matrix: unknown[][]): {
         return;
       }
 
-      if (['وارد', 'صادر', 'فارغ', 'ترانزيت'].includes(s)) {
-        container_path = s;
-        container_desc = s;
-      }
+      // The exact source columns are mapped above when headers exist. For
+      // headerless legacy sheets, never infer these fields from another column.
     });
 
     if (plateNumbers.length > 0 && plateLetters.length > 0) {
