@@ -160,6 +160,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     const dataRowYs: number[] = [];
     const dataRowMovementIndexes: number[][] = [];
     let lastMovementIndex: number | null = null;
+    let lastContainerAnchor: { x: number; y: number } | null = null;
 
     lineBuckets.forEach((bucket) => {
       // Sort items on the line left to right (by X)
@@ -223,12 +224,16 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       if (
         containerNumbers.length > 0 &&
         !afterDec.some((token) => token === '7.5' || token === '7,5') &&
-        lastMovementIndex != null
+        lastMovementIndex != null &&
+        lastContainerAnchor
       ) {
         const continuationMovement = lastMovementIndex == null ? undefined : allMovements[lastMovementIndex];
-        const continuationTruckDigits = extractPlateDigits(continuationMovement?.truck_no || '');
-        const rowTruckDigits = extractPlateDigits(rowTokens.join(' '));
-        if (continuationMovement && continuationTruckDigits && continuationTruckDigits === rowTruckDigits) {
+        const containerItem = bucket.items[containerIdx];
+        const isSameMergedContainerCell = containerItem &&
+          Math.abs(containerItem.x - lastContainerAnchor.x) <= 4 &&
+          lastContainerAnchor.y - bucket.y > 0 &&
+          lastContainerAnchor.y - bucket.y <= 32;
+        if (continuationMovement && isSameMergedContainerCell) {
           const existingContainers = extractContainerNumbers(continuationMovement.container_no || '');
           continuationMovement.container_no = Array.from(new Set([...existingContainers, ...containerNumbers])).join(' / ');
           return;
@@ -285,10 +290,14 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       // Tokens after '7.5' are the truck plate number and letters
       let truck_no = '';
       if (sevenIdx !== -1 && sevenIdx < afterDec.length - 1) {
-        const truckTokens = afterDec
-          .slice(sevenIdx + 1)
-          .filter((t) => !/^\d{1,2}$/.test(t)); // Filter out sequence number
-        truck_no = truckTokens.join(' ');
+        const truckItems = afterDecItems.slice(sevenIdx + 1)
+          .filter((item) => !/^\d{1,2}$/.test(item.str)); // Filter out sequence number
+        const truckDigitsToken = truckItems.find((item) => extractPlateDigits(item.str));
+        const truckLetterItems = truckItems.filter((item) => /[ء-ي]/.test(item.str));
+        const truckLetters = truckLetterItems.length > 1 && truckLetterItems.every((item) => item.dir === 'rtl')
+          ? [...truckLetterItems].sort((a, b) => b.x - a.x).map((item) => item.str).join(' ')
+          : truckLetterItems.map((item) => item.str).join(' ');
+        truck_no = [truckDigitsToken?.str || '', truckLetters].filter(Boolean).join(' ');
       }
 
       const movementBase: Partial<Movement> = {
@@ -312,6 +321,8 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         container_no: containerNumbers.join(' / ') || container_no,
       });
       lastMovementIndex = allMovements.length - 1;
+      const containerItem = containerIdx === -1 ? undefined : bucket.items[containerIdx];
+      lastContainerAnchor = containerItem ? { x: containerItem.x, y: bucket.y } : null;
       dataRowMovementIndexes.push(rowMovementIndexes);
       dataRowYs.push(bucket.y);
     });
