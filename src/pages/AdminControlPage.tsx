@@ -434,7 +434,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             <p className="mt-1 text-xs leading-6 text-emerald-800">يحفظ النظام تلقائيًا آخر 10 نسخ قبل حذف الحركات أو العميل أو مسح بيانات التشغيل. النسخ محفوظة على هذا الجهاز، والاستعادة تتطلب كلمة مرور الأدمن.</p>
             {safetyBackups[0] && <p className="mt-1 text-xs font-bold text-emerald-900">آخر نسخة: {new Date(safetyBackups[0].created_at).toLocaleString('ar-EG')} — {safetyBackups[0].label}</p>}
           </div>
-          <button type="button" disabled={!safetyBackups.length} onClick={openLatestUndo} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>تراجع عن آخر حذف (Ctrl+Z)</button>
+          <button type="button" disabled={!safetyBackups.length} onClick={openLatestUndo} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>استعادة نسخة أمان</button>
         </div>
         {!safetyBackups.length && <p className="text-xs text-slate-600">لا توجد نسخة سابقة على هذا الجهاز حتى الآن. سيُنشئ النظام نسخة تلقائية قبل عمليات الحذف القادمة.</p>}
       </section>

@@ -347,6 +347,17 @@ const AppContent: React.FC = () => {
     setCloudFeedback(`تمت استعادة النسخة المحفوظة: ${backup.label}`);
   };
 
+  const handleUndoLatestDeletion = async () => {
+    const latestBackup = getSafetyBackups()[0];
+    if (!latestBackup) throw new Error('لا توجد نسخة أمان سابقة على هذا الجهاز.');
+    await restoreSafetyBackupToSupabase(latestBackup);
+    setMovements(latestBackup.movements);
+    setCustomers(latestBackup.customers);
+    setBerths(latestBackup.berths);
+    setPayments(latestBackup.payments);
+    setCloudFeedback(`تم التراجع واستعادة البيانات السابقة: ${latestBackup.label}`);
+  };
+
   const handleTogglePaid = (movement: Movement) => {
     const isNowPaid = movement.payment_status === 'paid';
     const newStatus = isNowPaid ? 'unpaid' : 'paid';
@@ -535,6 +546,8 @@ const AppContent: React.FC = () => {
             }}
             onDeleteMovement={handleDeleteMovement}
             onClearAllMovements={handleClearAllMovements}
+            onUndoLatestDeletion={handleUndoLatestDeletion}
+            canUndoLatestDeletion={safetyBackups.length > 0}
             onTogglePaid={handleTogglePaid}
             onOpenPaymentModal={(cId) => {
               setPaymentCustomerId(cId);

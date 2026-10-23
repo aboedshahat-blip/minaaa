@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Berth, Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
@@ -48,6 +48,8 @@ interface MovementsPageProps {
   onClearAllMovements?: () => void;
   onTogglePaid: (movement: Movement) => void;
   onOpenPaymentModal?: (customerId?: string) => void;
+  onUndoLatestDeletion?: () => Promise<void>;
+  canUndoLatestDeletion?: boolean;
   onBatchUpdateMovements?: (updatedMovements: Movement[]) => void;
 }
 
@@ -63,6 +65,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onClearAllMovements,
   onTogglePaid,
   onOpenPaymentModal,
+  onUndoLatestDeletion,
+  canUndoLatestDeletion = false,
   onBatchUpdateMovements,
 }) => {
   const { canViewFinancials, isAdmin, canManagePayments } = useAuth();
@@ -88,6 +92,32 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [entryTimeFrom, setEntryTimeFrom] = useState('');
   const [entryTimeTo, setEntryTimeTo] = useState('');
   const [expandedMovementIds, setExpandedMovementIds] = useState<Set<string>>(new Set());
+
+  const runUndoLatestDeletion = async () => {
+    if (!canUndoLatestDeletion || !onUndoLatestDeletion) return;
+    const confirmed = window.confirm('سيتم إرجاع البيانات كما كانت قبل آخر حذف، وقد تُستبدل أي تغييرات أُدخلت بعده. هل تريد التراجع؟');
+    if (!confirmed) return;
+    try {
+      await onUndoLatestDeletion();
+      window.alert('تم التراجع عن آخر حذف واستعادة البيانات.');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر التراجع عن الحذف.');
+    }
+  };
+
+  useEffect(() => {
+    if (activeStage !== 'daily' || !canUndoLatestDeletion) return;
+    const handleUndoShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = target?.matches('input, textarea, select, [contenteditable="true"]');
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !isTyping) {
+        event.preventDefault();
+        void runUndoLatestDeletion();
+      }
+    };
+    window.addEventListener('keydown', handleUndoShortcut);
+    return () => window.removeEventListener('keydown', handleUndoShortcut);
+  }, [activeStage, canUndoLatestDeletion, onUndoLatestDeletion]);
 
   const getEntryDateTime = (movement: Movement) => {
     const date = new Date(movement.created_at);
@@ -437,6 +467,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div><p className="text-xs text-blue-200">متابعة التشغيل والتحصيل</p><h2 className="mt-1 text-xl font-black">لوحة الحركات اليومية</h2><p className="mt-1 text-xs text-blue-100">الحركات معروضة حسب وقت إدخالها للنظام، ويمكنك البحث بالتاريخ والساعة.</p></div>
               <div className="flex flex-wrap gap-2">
+                {canUndoLatestDeletion && <button onClick={()=>void runUndoLatestDeletion()} className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-bold text-slate-950"><RotateCcw className="h-4 w-4"/>تراجع عن آخر حذف (Ctrl+Z)</button>}
                 <button onClick={onOpenAddModal} className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-blue-900"><Plus className="h-4 w-4"/>تسجيل حركة</button>
                 <button onClick={onOpenUploadModal} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white"><FileSpreadsheet className="h-4 w-4"/>رفع شيت</button>
                 {canViewFinancials && <button onClick={() => setActiveStage('stage2_cashier')} className="inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950"><Receipt className="h-4 w-4"/>فواتير الكاشير</button>}
