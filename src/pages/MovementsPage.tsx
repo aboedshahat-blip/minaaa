@@ -20,7 +20,6 @@ import {
   Percent,
   ArrowLeft,
   Layers,
-  Sparkles,
   CalendarDays,
   ChevronDown,
   ChevronUp,
@@ -529,33 +528,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       {/* ===== STAGE 1: تجميع الشيتات وكشف الميناء ===== */}
       {activeStage === 'stage1_manifest' && (
         <div className="space-y-4">
-          {/* Stage 1 Header Banner */}
-          <div className="bg-gradient-to-r from-rose-700 to-rose-600 text-white rounded-2xl p-5 shadow-md no-print">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <p className="text-rose-200 text-xs mb-1">قبل المحاسبة في الميناء</p>
-                <h2 className="text-base font-black">إعداد كشوف الحركات للميناء</h2>
-                <p className="text-xs text-rose-100 mt-1 leading-relaxed">
-                  كل شيت ترفعه يُحفظ كدفعة مستقلة باسم الملف. يمكنك طباعة الدفعة الحالية وحدها أو طباعة جميع الدفعات السابقة معًا
-                  <strong className="text-white"> (بدون عمولات أو مبالغ) </strong>
-                  وخذه لتحاسب به في مكتب الكاشير.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 shrink-0">
-                <button
-                  onClick={() => openManifestPrint('selected')}
-                  className="bg-white text-rose-700 hover:bg-rose-50 text-xs font-black px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5"
-                >
-                  <FileDown className="w-4 h-4" />
-                  <span>طباعة الكشف المحدد</span>
-                </button>
-                <button onClick={() => openManifestPrint('all')} className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-white/30">
-                  <Printer className="w-4 h-4"/><span>طباعة جميع الكشوف</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
           {/* Filter Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print">
             <div className="flex flex-wrap items-center gap-3">
@@ -719,37 +691,16 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       {/* ===== STAGE 2: تسجيل فواتير الكاشير ===== */}
       {activeStage === 'stage2_cashier' && (
         <div className="space-y-4">
-          {/* Stage 2 Header Banner */}
-          <div className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white rounded-2xl p-5 shadow-md no-print">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <p className="text-emerald-200 text-xs mb-1">بعد المحاسبة في الميناء</p>
-                <h2 className="text-base font-black">فواتير الكاشير ومطابقتها</h2>
-                <p className="text-xs text-emerald-100 mt-1 leading-relaxed">
-                  ارفع تقرير الكاشير الصادر من الميناء (PDF / Excel / Word / صورة) أو ادخل رقم الإيصال والمبلغ يدوياً.
-                  سيقوم السيستم بمطابقة كل شاحنة وتسجيل المبلغ تلقائياً.
-                </p>
-              </div>
-              {canViewFinancials && onBatchUpdateMovements && (
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  <button
-                    onClick={() => setIsCashierReportModalOpen(true)}
-                    className="bg-white text-emerald-700 hover:bg-emerald-50 text-xs font-black px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>رفع تقرير الكاشير آلياً</span>
-                  </button>
-                  <button
-                    onClick={() => { setLinkingMovement(null); setIsCashierModalOpen(true); }}
-                    className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-white/30"
-                  >
-                    <Link2 className="w-4 h-4" />
-                    <span>ربط يدوي لإيصال</span>
-                  </button>
-                </div>
-              )}
+          {canViewFinancials && onBatchUpdateMovements && (
+            <div className="flex flex-wrap justify-end gap-2 no-print">
+              <button onClick={() => setIsCashierReportModalOpen(true)} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-800">
+                رفع تقرير الكاشير
+              </button>
+              <button onClick={() => { setLinkingMovement(null); setIsCashierModalOpen(true); }} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                ربط إيصال يدويًا
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Filter Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print">
@@ -887,29 +838,16 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       {/* ===== STAGE 3: حسابات ومطالبات العملاء ===== */}
       {activeStage === 'stage3_clients' && canViewFinancials && (
         <div className="space-y-4">
-          {/* Stage 3 Header Banner */}
-          <div className="bg-gradient-to-r from-amber-600 to-amber-500 text-white rounded-2xl p-5 shadow-md no-print">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <p className="text-amber-100 text-xs mb-1">ملخص حسابات ومطالبات العملاء</p>
-                <h2 className="text-base font-black">حسابات العملاء ومطالباتهم</h2>
-                <p className="text-xs text-amber-100 mt-1 leading-relaxed">
-                  كل عميل/سائق له بطاقة تجمع جميع شحناته وشاحناته في مكان واحد.
-                  يمكنك تطبيق خصم وتنزيل مطالبة PDF للعميل مباشرةً.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 shrink-0">
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute right-3 top-2.5 text-amber-200" />
-                  <input
-                    type="text"
-                    placeholder="بحث باسم العميل أو السائق..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-white/20 placeholder-amber-200 text-white text-xs border border-white/30 rounded-xl pr-9 pl-3 py-2 focus:outline-none focus:ring-2 focus:ring-white/40 min-w-[200px]"
-                  />
-                </div>
-              </div>
+          <div className="no-print rounded-xl border border-slate-200 bg-white p-3">
+            <div className="relative max-w-md">
+              <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="ابحث باسم العميل أو السائق"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pr-9 pl-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           </div>
 
