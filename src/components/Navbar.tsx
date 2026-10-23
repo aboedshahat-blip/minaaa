@@ -1,16 +1,14 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Anchor, ShieldCheck, UserCheck, Lock, LogOut, Plus, Upload } from 'lucide-react';
+import { Anchor, ShieldCheck, UserCheck, Lock, LogOut, Plus } from 'lucide-react';
 
 interface NavbarProps {
   onOpenQuickAdd: () => void;
-  onOpenUpload: () => void;
   onExportTemplate: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenQuickAdd,
-  onOpenUpload,
   onExportTemplate,
 }) => {
   const { currentUser, users, setCurrentUserId, canViewFinancials, logout } = useAuth();
@@ -44,15 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onOpenQuickAdd}
             className="inline-flex items-center gap-1 sm:gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-2.5 sm:py-2 rounded-lg shadow-sm transition min-h-11 sm:min-h-0"
           >
-            <Plus className="w-4 h-4" /><span className="hidden sm:inline">تسجيل حركة</span>
-          </button>
-
-          <button
-            onClick={onOpenUpload}
-            className="inline-flex items-center gap-1 sm:gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-2.5 sm:py-2 rounded-lg shadow-sm transition min-h-11 sm:min-h-0"
-          >
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">رفع شيت</span>
+            <Plus className="w-4 h-4" /><span>إدخال يدوي</span>
           </button>
 
           <button

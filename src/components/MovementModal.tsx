@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { X, Calculator, Truck, FileText, Check } from 'lucide-react';
@@ -25,6 +25,27 @@ export const MovementModal: React.FC<MovementModalProps> = ({
   nextSeq,
 }) => {
   const { canViewFinancials } = useAuth();
+
+  const normalizeDigits = (value: string) => value.replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
+  const vehicleNumberMessage = (value: string, label: string) => {
+    if (!value.trim()) return '';
+    const digitCount = normalizeDigits(value).replace(/\D/g, '').length;
+    return digitCount >= 3 && digitCount <= 4 ? '' : `رقم ${label} المعتاد يحتوي على 3 أو 4 أرقام؛ راجع الرقم المدخل.`;
+  };
+  const containerNumberMessage = (value: string) => {
+    if (!value.trim()) return '';
+    const entries = value.split(/[\/,،؛\n]+/).map((part) => part.trim()).filter(Boolean);
+    const valid = entries.every((entry) => {
+      const normalized = normalizeDigits(entry).replace(/[\s-]/g, '').toUpperCase();
+      return /^[A-Z]{4}\d{7}$/.test(normalized);
+    });
+    return valid ? '' : 'رقم الحاوية المعتاد يتكون من 4 حروف و7 أرقام. افصل الحاويتين بعلامة /.';
+  };
+
+  const draftKey = useMemo(
+    () => `movement-form-draft:${editingMovement?.id ?? 'new'}`,
+    [editingMovement?.id],
+  );
 
   const [formData, setFormData] = useState<Partial<Movement>>({
     seq: nextSeq,
@@ -56,6 +77,25 @@ export const MovementModal: React.FC<MovementModalProps> = ({
   });
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    // Restore a recent draft before starting a blank form. This also protects
+    // edits if the page reloads while the modal is open.
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved) as { savedAt?: number; formData?: Partial<Movement> };
+        const isRecent = typeof draft.savedAt === 'number' && Date.now() - draft.savedAt < 24 * 60 * 60 * 1000;
+        if (isRecent && draft.formData) {
+          setFormData(draft.formData);
+          return;
+        }
+        localStorage.removeItem(draftKey);
+      }
+    } catch {
+      localStorage.removeItem(draftKey);
+    }
+
     if (editingMovement) {
       setFormData(editingMovement);
     } else {
@@ -88,7 +128,19 @@ export const MovementModal: React.FC<MovementModalProps> = ({
         notes: '',
       });
     }
-  }, [editingMovement, isOpen, nextSeq, settings, berths, customers]);
+  // Initialize on open / when switching to another movement only. Sync updates
+  // to customers, berths, or settings must not wipe fields being entered.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, draftKey]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ savedAt: Date.now(), formData }));
+    } catch {
+      // Keep the in-memory form usable if browser storage is unavailable.
+    }
+  }, [draftKey, formData, isOpen]);
 
   // Recalculate totals whenever cashier, system_commission, nafez_commission, or discount change
   useEffect(() => {
@@ -154,7 +206,20 @@ export const MovementModal: React.FC<MovementModalProps> = ({
       alert('برجاء إدخال رقم الشاحنة أو رقم الحاوية على الأقل');
       return;
     }
+    const invalidNumber = vehicleNumberMessage(formData.truck_no || '', 'الشاحنة') ||
+      vehicleNumberMessage(formData.trailer_no || '', 'المقطورة') ||
+      containerNumberMessage(formData.container_no || '');
+    if (invalidNumber) {
+      alert(invalidNumber);
+      return;
+    }
     onSave(formData);
+    localStorage.removeItem(draftKey);
+    onClose();
+  };
+
+  const handleClose = () => {
+    localStorage.removeItem(draftKey);
     onClose();
   };
 
@@ -177,7 +242,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
           >
             <X className="w-5 h-5" />
@@ -266,9 +331,12 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   placeholder="مثال: ط ر ج ٤٥٢١"
                   value={formData.truck_no || ''}
                   onChange={(e) => setFormData({ ...formData, truck_no: e.target.value })}
+                  maxLength={24}
+                  aria-invalid={Boolean(vehicleNumberMessage(formData.truck_no || '', 'الشاحنة'))}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-medium"
                   required
                 />
+                {vehicleNumberMessage(formData.truck_no || '', 'الشاحنة') && <p className="mt-1 text-[11px] font-semibold text-rose-600">{vehicleNumberMessage(formData.truck_no || '', 'الشاحنة')}</p>}
               </div>
 
               <div>
@@ -305,8 +373,11 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   placeholder="مثال: م ق د ٨٩٢"
                   value={formData.trailer_no || ''}
                   onChange={(e) => setFormData({ ...formData, trailer_no: e.target.value })}
+                  maxLength={24}
+                  aria-invalid={Boolean(vehicleNumberMessage(formData.trailer_no || '', 'المقطورة'))}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm"
                 />
+                {vehicleNumberMessage(formData.trailer_no || '', 'المقطورة') && <p className="mt-1 text-[11px] font-semibold text-rose-600">{vehicleNumberMessage(formData.trailer_no || '', 'المقطورة')}</p>}
               </div>
 
               <div>
@@ -387,8 +458,11 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   placeholder="مثال: MSKU-1234567"
                   value={formData.container_no || ''}
                   onChange={(e) => setFormData({ ...formData, container_no: e.target.value })}
+                  maxLength={30}
+                  aria-invalid={Boolean(containerNumberMessage(formData.container_no || ''))}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono"
                 />
+                {containerNumberMessage(formData.container_no || '') && <p className="mt-1 text-[11px] font-semibold text-rose-600">{containerNumberMessage(formData.container_no || '')}</p>}
               </div>
 
               <div>
@@ -600,7 +674,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition"
             >
               إلغاء

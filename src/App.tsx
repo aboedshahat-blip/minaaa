@@ -53,7 +53,6 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AdminControlPage } from './pages/AdminControlPage';
 import { LoginPage } from './components/LoginPage';
 import { MovementModal } from './components/MovementModal';
-import { SheetUploadModal } from './components/SheetUploadModal';
 import { CustomerModal } from './components/CustomerModal';
 import { BerthModal } from './components/BerthModal';
 import { PaymentModal } from './components/PaymentModal';
@@ -283,7 +282,6 @@ const AppContent: React.FC = () => {
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [editingMovement, setEditingMovement] = useState<Movement | null>(null);
 
-  const [isSheetUploadOpen, setIsSheetUploadOpen] = useState(false);
 
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -563,7 +561,6 @@ const AppContent: React.FC = () => {
           setEditingMovement(null);
           setIsMovementModalOpen(true);
         }}
-        onOpenUpload={() => setIsSheetUploadOpen(true)}
         onExportTemplate={() => exportTemplateToExcel(movements)}
       />
 
@@ -705,16 +702,6 @@ const AppContent: React.FC = () => {
         berths={berths}
         settings={settings}
         nextSeq={currentMaxSeq + 1}
-      />
-
-      <SheetUploadModal
-        isOpen={isSheetUploadOpen}
-        onClose={() => setIsSheetUploadOpen(false)}
-        onImportMovements={handleImportMovements}
-        customers={customers}
-        berths={berths}
-        settings={settings}
-        currentMaxSeq={currentMaxSeq}
       />
 
       <CustomerModal

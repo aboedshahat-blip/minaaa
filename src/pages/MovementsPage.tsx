@@ -93,7 +93,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [entryDate, setEntryDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [entryDateFrom, setEntryDateFrom] = useState(new Date().toLocaleDateString('en-CA'));
+  const [entryDateTo, setEntryDateTo] = useState(new Date().toLocaleDateString('en-CA'));
   const [entryTimeFrom, setEntryTimeFrom] = useState('');
   const [entryTimeTo, setEntryTimeTo] = useState('');
   const [dailyPage, setDailyPage] = useState(1);
@@ -160,9 +161,14 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   const dashboardMovements = useMemo(() => movements.filter((m) => {
     const created = getEntryDateTime(m);
-    if (entryDate && (!created || created.toLocaleDateString('en-CA') !== entryDate)) return false;
-    if (entryTimeFrom && (!created || created.toTimeString().slice(0, 5) < entryTimeFrom)) return false;
-    if (entryTimeTo && (!created || created.toTimeString().slice(0, 5) > entryTimeTo)) return false;
+    const createdDate = created?.toLocaleDateString('en-CA');
+    if (entryDateFrom && (!createdDate || createdDate < entryDateFrom)) return false;
+    if (entryDateTo && (!createdDate || createdDate > entryDateTo)) return false;
+    if (created && (entryDateFrom || entryDateTo || entryTimeFrom || entryTimeTo)) {
+      const start = entryDateFrom ? new Date(`${entryDateFrom}T${entryTimeFrom || '00:00'}`).getTime() : Number.NEGATIVE_INFINITY;
+      const end = entryDateTo ? new Date(`${entryDateTo}T${entryTimeTo || '23:59'}`).getTime() : Number.POSITIVE_INFINITY;
+      if (created.getTime() < start || created.getTime() > end) return false;
+    }
     if (searchTerm) {
       const term = searchTerm.toLocaleLowerCase();
       const fields = [m.truck_no, m.trailer_no, m.driver_name, m.container_no, m.declaration_no, m.customer_name, m.cashier_receipt_no];
@@ -170,7 +176,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     }
     if (canViewFinancials && selectedPaymentStatus && m.payment_status !== selectedPaymentStatus) return false;
     return true;
-  }), [movements, entryDate, entryTimeFrom, entryTimeTo, searchTerm, selectedPaymentStatus, canViewFinancials]);
+  }), [movements, entryDateFrom, entryDateTo, entryTimeFrom, entryTimeTo, searchTerm, selectedPaymentStatus, canViewFinancials]);
 
   const dashboardTotals = useMemo(() => dashboardMovements.reduce((totals, m) => {
     totals.due += Number(m.total_amount) || 0;
@@ -453,20 +459,26 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
               <div className="relative"><Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setDailyPage(1); }} placeholder="ابحث بالعميل، السائق، الشاحنة أو الحاوية" className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-3 text-sm"/></div>
-              <label className="relative"><CalendarDays className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input type="date" value={entryDate} onChange={(e) => { setEntryDate(e.target.value); setDailyPage(1); }} className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-2 text-sm" aria-label="تاريخ إدخال الحركة"/></label>
               <div className="flex gap-2">
-                <button onClick={() => { setEntryDate(new Date().toLocaleDateString('en-CA')); setDailyPage(1); }} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">اليوم</button>
-                <button onClick={() => { setEntryDate(''); setDailyPage(1); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">كل الأيام</button>
+                <button onClick={() => { const today = new Date().toLocaleDateString('en-CA'); setEntryDateFrom(today); setEntryDateTo(today); setEntryTimeFrom(''); setEntryTimeTo(''); setDailyPage(1); }} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">اليوم</button>
+                <button onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 6); setEntryDateFrom(from.toLocaleDateString('en-CA')); setEntryDateTo(to.toLocaleDateString('en-CA')); setEntryTimeFrom(''); setEntryTimeTo(''); setDailyPage(1); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">آخر 7 أيام</button>
+                <button onClick={() => { setEntryDateFrom(''); setEntryDateTo(''); setEntryTimeFrom(''); setEntryTimeTo(''); setDailyPage(1); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">كل الأيام</button>
               </div>
             </div>
             <details className="mt-3 border-t border-slate-100 pt-2">
-              <summary className="cursor-pointer text-xs font-bold text-slate-600">فلاتر إضافية: الوقت وحالة الدفع</summary>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <label className="text-xs text-slate-500">من الساعة<input type="time" value={entryTimeFrom} onChange={(e) => { setEntryTimeFrom(e.target.value); setDailyPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/></label>
-                <label className="text-xs text-slate-500">إلى الساعة<input type="time" value={entryTimeTo} onChange={(e) => { setEntryTimeTo(e.target.value); setDailyPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"/></label>
-                {canViewFinancials && <label className="text-xs text-slate-500">حالة الدفع<select value={selectedPaymentStatus} onChange={(e) => { setSelectedPaymentStatus(e.target.value); setDailyPage(1); }} className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"><option value="">كل الحالات</option><option value="unpaid">لم يدفع</option><option value="partial">دفع جزئي</option><option value="paid">مدفوع</option></select></label>}
+              <summary className="cursor-pointer text-xs font-bold text-slate-600">تحديد فترة البحث بالتاريخ والوقت وحالة الدفع</summary>
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="text-xs font-semibold text-slate-600">من تاريخ<input type="date" value={entryDateFrom} onChange={(e) => { setEntryDateFrom(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
+                  <label className="text-xs font-semibold text-slate-600">من وقت<input type="time" value={entryTimeFrom} onChange={(e) => { setEntryTimeFrom(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
+                  <label className="text-xs font-semibold text-slate-600">إلى تاريخ<input type="date" value={entryDateTo} onChange={(e) => { setEntryDateTo(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
+                  <label className="text-xs font-semibold text-slate-600">إلى وقت<input type="time" value={entryTimeTo} onChange={(e) => { setEntryTimeTo(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
+                  {canViewFinancials && <label className="text-xs font-semibold text-slate-600">حالة الدفع<select value={selectedPaymentStatus} onChange={(e) => { setSelectedPaymentStatus(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"><option value="">كل الحالات</option><option value="unpaid">لم يدفع</option><option value="partial">دفع جزئي</option><option value="paid">مدفوع</option></select></label>}
               </div>
-              <button onClick={() => { setEntryTimeFrom(''); setEntryTimeTo(''); setSelectedPaymentStatus(''); setSearchTerm(''); setDailyPage(1); }} className="mt-2 text-xs font-bold text-blue-700">مسح البحث والفلاتر</button>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                <span className="text-xs text-slate-600">الفترة: <b dir="ltr">{entryDateFrom || 'بلا بداية'}{entryTimeFrom ? ` ${entryTimeFrom}` : ''}</b> — <b dir="ltr">{entryDateTo || 'بلا نهاية'}{entryTimeTo ? ` ${entryTimeTo}` : ''}</b></span>
+                <button onClick={() => { setEntryDateFrom(''); setEntryDateTo(''); setEntryTimeFrom(''); setEntryTimeTo(''); setSelectedPaymentStatus(''); setSearchTerm(''); setDailyPage(1); }} className="rounded-lg px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">مسح البحث والفلاتر</button>
+              </div></div>
             </details>
           </div>
 

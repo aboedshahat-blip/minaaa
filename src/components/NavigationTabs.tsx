@@ -49,7 +49,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
     },
     {
       id: 'sheet_import',
-      label: 'رفع وتصفية شيت',
+      label: 'رفع الشيتات · المرحلة 1',
       icon: <FileSpreadsheet className="w-4 h-4" />,
       visible: true,
     },
