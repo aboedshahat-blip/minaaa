@@ -38,6 +38,7 @@ import {
   deleteCustomerFromSupabase,
   deleteBerthFromSupabase,
 } from './lib/storage';
+import { getSupabaseClient } from './lib/supabase';
 import { exportTemplateToExcel } from './lib/excelUtils';
 import { Navbar } from './components/Navbar';
 import { NavigationTabs, TabType } from './components/NavigationTabs';
@@ -121,7 +122,7 @@ const AppContent: React.FC = () => {
   };
 
   // Initial cloud fetch from Supabase on mount
-  const refreshDataFromCloud = async () => {
+  const refreshDataFromCloud = async (restoreDeviceOnlyData = false, quiet = false) => {
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
@@ -139,7 +140,9 @@ const AppContent: React.FC = () => {
         const pendingPayments = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<PaymentReceipt>('payments');
         const mergePending = <T extends { id: string }>(cloud: T[], local: T[], pending: { upserts: T[]; deletes: string[] }) => {
           const merged = new Map(cloud.map((row) => [row.id, row]));
-          for (const row of local) if (!merged.has(row.id)) merged.set(row.id, row);
+          if (restoreDeviceOnlyData) {
+            for (const row of local) if (!merged.has(row.id)) merged.set(row.id, row);
+          }
           for (const id of pending.deletes) merged.delete(id);
           for (const row of pending.upserts) merged.set(row.id, row);
           return Array.from(merged.values());
@@ -185,10 +188,10 @@ const AppContent: React.FC = () => {
         // Retry queued edits/deletes before reporting sync complete.
         await flushPendingSync();
 
-        const movementsToRestore = getLocalOnlyRows(cloudData.movements, localMovements);
-        const customersToRestore = getLocalOnlyRows(cloudData.customers, localCustomers);
-        const berthsToRestore = getLocalOnlyRows(cloudData.berths, localBerths);
-        const paymentsToRestore = getLocalOnlyRows(cloudData.payments, localPayments);
+        const movementsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.movements, localMovements) : [];
+        const customersToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.customers, localCustomers) : [];
+        const berthsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.berths, localBerths) : [];
+        const paymentsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.payments, localPayments) : [];
         const restoredCount = movementsToRestore.length + customersToRestore.length + berthsToRestore.length + paymentsToRestore.length;
         const shouldRestoreLocalData = restoredCount > 0;
         if (shouldRestoreLocalData) {
@@ -207,11 +210,13 @@ const AppContent: React.FC = () => {
         if (allocatedPayments.length > 0) {
           await Promise.all(allocatedPayments.map((payment) => syncPaymentToSupabase(payment)));
         }
-        setCloudFeedback(resetDetected
-          ? 'تم مسح البيانات المحلية القديمة بعد تجهيز النظام للتسليم.'
-          : restoredCount > 0
-          ? 'استعدنا البيانات المحفوظة على هذا الجهاز وأعدنا مزامنتها مع السحابة.'
-          : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.');
+        if (!quiet || resetDetected || restoredCount > 0) {
+          setCloudFeedback(resetDetected
+            ? 'تم مسح البيانات المحلية القديمة بعد تجهيز النظام للتسليم.'
+            : restoredCount > 0
+            ? 'استعدنا البيانات المحفوظة على هذا الجهاز وأعدنا مزامنتها مع السحابة.'
+            : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.');
+        }
       }
     } catch (e) {
       console.warn('Cloud sync error:', e);
@@ -229,7 +234,39 @@ const AppContent: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    refreshDataFromCloud();
+    void refreshDataFromCloud(true);
+
+    const storedSettings = getStoredSettings();
+    const supabase = getSupabaseClient(storedSettings.supabase_url, storedSettings.supabase_anon_key);
+    let debounceTimer: number | undefined;
+    const requestRefresh = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => void refreshDataFromCloud(false, true), 800);
+    };
+    let channel = supabase?.channel(`pls-live-sync-${Math.random().toString(36).slice(2)}`);
+    if (channel) {
+      for (const table of ['movements', 'customers', 'payments', 'berths']) {
+        channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, requestRefresh);
+      }
+      channel.subscribe();
+    }
+
+    // Realtime is supplemented by a quiet refresh for devices where database
+    // change feeds are unavailable, and whenever the app returns to the screen.
+    const pollId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
+    }, 30_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.clearInterval(pollId);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (channel) void supabase?.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -414,19 +451,26 @@ const AppContent: React.FC = () => {
     const updatedMovements = [...importedBatch, ...movements];
     setMovements(updatedMovements);
     saveMovements(updatedMovements);
-    void runCloudOperation(Promise.all(importedBatch.map((m) => syncMovementToSupabase(m))));
-
+    let filteredNew: Customer[] = [];
+    let customersAfterImport = customers;
     if (newCustomers && newCustomers.length > 0) {
       // Merge unique customers by name
       const existingIds = new Set(customers.map((c) => c.id));
-      const filteredNew = newCustomers.filter((c) => !existingIds.has(c.id));
+      filteredNew = newCustomers.filter((c) => !existingIds.has(c.id));
       if (filteredNew.length > 0) {
-        const updatedCustomers = [...filteredNew, ...customers];
-        setCustomers(updatedCustomers);
-        saveCustomers(updatedCustomers);
-        void runCloudOperation(Promise.all(filteredNew.map((c) => syncCustomerToSupabase(c))));
+        customersAfterImport = [...filteredNew, ...customers];
+        setCustomers(customersAfterImport);
+        saveCustomers(customersAfterImport);
       }
     }
+    void runCloudOperation((async () => {
+      // Customer rows are referenced by movements, so sync them first to avoid
+      // foreign-key failures that would otherwise leave one device out of date.
+      const referencedCustomerIds = new Set(importedBatch.map((movement) => movement.customer_id).filter(Boolean));
+      const referencedCustomers = customersAfterImport.filter((customer) => referencedCustomerIds.has(customer.id));
+      await Promise.all(referencedCustomers.map((customer) => syncCustomerToSupabase(customer)));
+      await Promise.all(importedBatch.map((movement) => syncMovementToSupabase(movement)));
+    })());
   };
 
   const handleBatchUpdateMovements = (updatedMovements: Movement[]) => {
