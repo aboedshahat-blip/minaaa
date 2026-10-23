@@ -26,17 +26,52 @@ const normalizePlateDigits = (value: string) => value
   .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
 
 const PlateInput: React.FC<PlateInputProps> = ({ value, onChange, required = false, label }) => {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
   const letters = (value.match(/\p{L}/gu) || []).slice(0, 3);
   const digits = normalizePlateDigits(value).replace(/\D/g, '').slice(0, 4);
+  const slots = [...letters, ...digits.split('')];
+  const commit = (next: string[]) => onChange(`${next.slice(0, 3).filter(Boolean).join(' ')} ${next.slice(3).filter(Boolean).join('')}`.trim());
   return (
-    <SegmentedCodeInput
-      value={[letters.join(''), digits].filter(Boolean).join(' ')}
-      onChange={(next) => onChange(`${(next.match(/\p{L}/gu) || []).join(' ')} ${(normalizePlateDigits(next).match(/\d/g) || []).join('')}`.trim())}
-      letterCount={3}
-      digitCount={4}
-      label={label}
-      required={required}
-    />
+    <div dir="rtl" aria-label={label} className="flex w-full min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+      {Array.from({ length: 7 }, (_, index) => {
+        const isLetter = index < 3;
+        return <input
+          key={index}
+          ref={(element) => { refs.current[index] = element; }}
+          type="text"
+          inputMode={isLetter ? 'text' : 'numeric'}
+          maxLength={1}
+          value={slots[index] || ''}
+          onChange={(event) => {
+            const raw = event.target.value;
+            const enteredLetters = raw.match(/\p{L}/gu) || [];
+            const enteredDigits = normalizePlateDigits(raw).replace(/\D/g, '').split('');
+            if (enteredLetters.length + enteredDigits.length > 1) {
+              const next = [...slots];
+              enteredLetters.slice(0, 3).forEach((character, slot) => { next[slot] = character; });
+              enteredDigits.slice(0, 4).forEach((character, slot) => { next[slot + 3] = character; });
+              commit(next);
+              refs.current[Math.min(enteredLetters.length, 2) + 3]?.focus();
+              return;
+            }
+            const character = isLetter ? enteredLetters[0] : enteredDigits[0];
+            const next = [...slots];
+            next[index] = character || '';
+            commit(next);
+            if (character && index < 6) refs.current[index + 1]?.focus();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Backspace' && !slots[index] && index > 0) refs.current[index - 1]?.focus();
+            if (event.key === 'ArrowLeft' && index < 6) refs.current[index + 1]?.focus();
+            if (event.key === 'ArrowRight' && index > 0) refs.current[index - 1]?.focus();
+          }}
+          placeholder={isLetter ? 'ح' : '•'}
+          aria-label={`${isLetter ? `الحرف ${index + 1}` : `الرقم ${index - 2}`} من لوحة ${label}`}
+          required={required && index === 0}
+          className={`h-10 min-w-0 flex-1 border-0 bg-white p-0 text-center text-base font-semibold text-slate-800 outline-none placeholder:text-slate-300 focus:bg-blue-50 ${index > 0 ? 'border-r border-slate-200' : ''} ${index === 3 ? 'border-r-2 border-r-slate-300' : ''}`}
+        />;
+      })}
+    </div>
   );
 };
 
