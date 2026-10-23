@@ -60,7 +60,7 @@ export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBac
   const writes: Array<[string, Record<string, unknown>[]]> = [
     ['customers', backup.customers.map(customerForCloud)],
     ['berths', backup.berths.map((row) => ({ ...row }))],
-    ['movements', backup.movements.map((row) => ({ ...row }))],
+    ['movements', backup.movements.map(movementForCloud)],
     ['payments', backup.payments.map((row) => ({ ...row }))],
   ];
   for (const [table, rows] of writes) {
@@ -89,6 +89,33 @@ export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBac
 };
 
 const CUSTOMER_FEE_MARKER = /\n?\[\[VIB_CUSTOMER_FEES:(\{.*?\})\]\]/;
+const MOVEMENT_BATCH_MARKER = /\n?\[\[VIB_IMPORT_BATCH:(\{.*?\})\]\]/;
+
+const movementForApp = (row: Movement): Movement => {
+  const notes = row.notes || '';
+  const marker = notes.match(MOVEMENT_BATCH_MARKER);
+  let batch: { id?: string; name?: string; at?: string } = {};
+  if (marker?.[1]) {
+    try { batch = JSON.parse(marker[1]); } catch { /* keep the row usable if metadata is malformed */ }
+  }
+  return {
+    ...row,
+    notes: notes.replace(MOVEMENT_BATCH_MARKER, '').trim(),
+    import_batch_id: row.import_batch_id ?? batch.id,
+    import_batch_name: row.import_batch_name ?? batch.name,
+    import_batch_at: row.import_batch_at ?? batch.at,
+  };
+};
+
+const movementForCloud = (row: Movement): Record<string, unknown> => {
+  const movement = movementForApp(row);
+  const { import_batch_id, import_batch_name, import_batch_at, ...cloudRow } = movement;
+  if (!import_batch_id) return cloudRow;
+  return {
+    ...cloudRow,
+    notes: `${cloudRow.notes || ''}\n[[VIB_IMPORT_BATCH:${JSON.stringify({ id: import_batch_id, name: import_batch_name, at: import_batch_at })}]]`.trim(),
+  };
+};
 
 // Preserve per-customer defaults in the existing notes column so this feature
 // works with the deployed Supabase schema without requiring new columns.
@@ -223,7 +250,9 @@ export const flushPendingSync = async () => {
   // Upsert referenced records before dependent rows so foreign keys remain valid.
   for (const table of ['customers', 'berths', 'movements', 'payments'] as const) {
     for (const row of Object.values(pending.upserts[table] || {})) {
-      const cloudRow = table === 'customers' ? customerForCloud(row as Customer) : row;
+      const cloudRow = table === 'customers'
+        ? customerForCloud(row as Customer)
+        : table === 'movements' ? movementForCloud(row as Movement) : row;
       const { error } = await supabase.from(table).upsert(cloudRow as Record<string, unknown>);
       if (error) throw new Error(`تعذرت مزامنة ${table}: ${error.message}`);
       clearPendingUpsert(table, (row as { id: string }).id);
@@ -362,7 +391,7 @@ export const fetchAllFromSupabase = async () => {
     }
 
     return {
-      movements: (movementsRes.data || []) as Movement[],
+      movements: ((movementsRes.data || []) as Movement[]).map(movementForApp),
       customers: (customersRes.data || [])
         .filter((customer) => !['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__'].includes(customer.id))
         .map((customer) => customerForApp(customer as Customer)),
@@ -382,7 +411,7 @@ export const syncMovementToSupabase = async (movement: Movement) => {
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
-    const { error } = await supabase.from('movements').upsert(movement);
+    const { error } = await supabase.from('movements').upsert(movementForCloud(movement));
     if (error) throw error;
     clearPendingUpsert('movements', movement.id);
   } catch (e) {
@@ -455,7 +484,7 @@ export const restoreLocalDataToSupabase = async (data: {
   const orderedWrites = [
     ['customers', data.customers.map(customerForCloud)],
     ['berths', data.berths],
-    ['movements', data.movements],
+    ['movements', data.movements.map(movementForCloud)],
     ['payments', data.payments],
   ] as const;
   for (const [table, rows] of orderedWrites) {
@@ -560,7 +589,7 @@ export const syncWithSupabase = async () => {
 
       if (localBerths.length > 0) await supabase.from('berths').upsert(localBerths);
       if (localCustomers.length > 0) await supabase.from('customers').upsert(localCustomers.map(customerForCloud));
-      if (localMovements.length > 0) await supabase.from('movements').upsert(localMovements);
+      if (localMovements.length > 0) await supabase.from('movements').upsert(localMovements.map(movementForCloud));
     }
 
     return { success: true, message: 'تم الاتصال بقاعدة بيانات Supabase ومزامنة البيانات بنجاح تام!' };

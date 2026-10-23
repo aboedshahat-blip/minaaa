@@ -94,6 +94,10 @@ export interface Movement {
   
   notes?: string;
   created_at: string;
+  /** Upload batch metadata is stored inside notes for compatibility with existing cloud schema. */
+  import_batch_id?: string;
+  import_batch_name?: string;
+  import_batch_at?: string;
 }
 
 export interface PaymentReceipt {

@@ -380,10 +380,20 @@ const AppContent: React.FC = () => {
   };
 
   const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
-    const updatedMovements = [...importedMovements, ...movements];
+    const batchAt = new Date().toISOString();
+    const batchName = importedMovements[0]?.notes?.match(/(?:شيت|ملف):\s*(.+)$/)?.[1]?.trim()
+      || `دفعة ${new Date(batchAt).toLocaleString('ar-EG')}`;
+    const batchId = `batch-${Date.now()}-${crypto.randomUUID()}`;
+    const importedBatch = importedMovements.map((movement) => ({
+      ...movement,
+      import_batch_id: batchId,
+      import_batch_name: batchName,
+      import_batch_at: batchAt,
+    }));
+    const updatedMovements = [...importedBatch, ...movements];
     setMovements(updatedMovements);
     saveMovements(updatedMovements);
-    void runCloudOperation(Promise.all(importedMovements.map((m) => syncMovementToSupabase(m))));
+    void runCloudOperation(Promise.all(importedBatch.map((m) => syncMovementToSupabase(m))));
 
     if (newCustomers && newCustomers.length > 0) {
       // Merge unique customers by name

@@ -53,6 +53,25 @@ interface MovementsPageProps {
   onBatchUpdateMovements?: (updatedMovements: Movement[]) => void;
 }
 
+const getMovementBatch = (movement: Movement) => {
+  if (movement.import_batch_id) {
+    return {
+      id: movement.import_batch_id,
+      name: movement.import_batch_name || 'دفعة شيت',
+      at: movement.import_batch_at || movement.created_at,
+    };
+  }
+  const source = movement.notes?.match(/مستورد(?: ومصفى)? من (?:شيت|ملف):\s*(.+)$/)?.[1]?.trim();
+  if (source) {
+    return {
+      id: `legacy-${movement.created_at?.slice(0, 10) || movement.movement_date || 'unknown'}-${source}`,
+      name: `${source} — شيت سابق`,
+      at: movement.created_at,
+    };
+  }
+  return { id: 'legacy-unassigned', name: 'حركات سابقة بدون شيت محدد', at: movement.created_at };
+};
+
 export const MovementsPage: React.FC<MovementsPageProps> = ({
   movements,
   customers,
@@ -92,6 +111,31 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [entryTimeFrom, setEntryTimeFrom] = useState('');
   const [entryTimeTo, setEntryTimeTo] = useState('');
   const [expandedMovementIds, setExpandedMovementIds] = useState<Set<string>>(new Set());
+  const [selectedManifestBatch, setSelectedManifestBatch] = useState('latest');
+  const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all'>('selected');
+
+  const importBatches = useMemo(() => {
+    const batches = new Map<string, { id: string; name: string; at: string; count: number }>();
+    movements.forEach((movement) => {
+      const batch = getMovementBatch(movement);
+      const existing = batches.get(batch.id);
+      if (existing) {
+        existing.count += 1;
+        if (new Date(batch.at).getTime() > new Date(existing.at).getTime()) existing.at = batch.at;
+      } else {
+        batches.set(batch.id, { ...batch, count: 1 });
+      }
+    });
+    return Array.from(batches.values()).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [movements]);
+  const latestBatchId = (importBatches.find((batch) => batch.id !== 'legacy-unassigned') || importBatches[0])?.id || '';
+  useEffect(() => {
+    if (latestBatchId) setSelectedManifestBatch('latest');
+  }, [latestBatchId]);
+  const openManifestPrint = (scope: 'selected' | 'all') => {
+    setManifestPrintScope(scope);
+    setIsOfficialSheetModalOpen(true);
+  };
 
   const runUndoLatestDeletion = async () => {
     if (!canUndoLatestDeletion || !onUndoLatestDeletion) return;
@@ -195,6 +239,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     startDate,
     endDate,
   ]);
+
+  const manifestMovements = useMemo(() => {
+    if (selectedManifestBatch === 'all') return filteredMovements;
+    const targetId = selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch;
+    return filteredMovements.filter((movement) => getMovementBatch(movement).id === targetId);
+  }, [filteredMovements, selectedManifestBatch, latestBatchId]);
 
   // Group movements by Customer / Driver for Stage 3 (Multi-truck consolidation)
   const customerGroups = useMemo(() => {
@@ -532,7 +582,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 </div>
                 <h2 className="text-base font-black">تجميع الشيتات وطباعة كشف الميناء الرسمي</h2>
                 <p className="text-xs text-rose-100 mt-1 leading-relaxed">
-                  ارفع شيتات الوارد (Excel / Word / PDF) وسيتم تجميعها آلياً. بعد التجميع، نزّل كشف PDF المجمع للمكتب
+                  كل شيت ترفعه يُحفظ كدفعة مستقلة باسم الملف. يمكنك طباعة الدفعة الحالية وحدها أو طباعة جميع الدفعات السابقة معًا
                   <strong className="text-white"> (بدون عمولات أو مبالغ) </strong>
                   وخذه لتحاسب به في مكتب الكاشير.
                 </p>
@@ -553,11 +603,14 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                   <span>رفع شيت وتجميعه</span>
                 </button>
                 <button
-                  onClick={() => setIsOfficialSheetModalOpen(true)}
+                  onClick={() => openManifestPrint('selected')}
                   className="bg-white text-rose-700 hover:bg-rose-50 text-xs font-black px-4 py-2.5 rounded-xl shadow transition flex items-center gap-1.5"
                 >
                   <FileDown className="w-4 h-4" />
-                  <span>تنزيل كشف الميناء PDF</span>
+                  <span>طباعة الدفعة المحددة</span>
+                </button>
+                <button onClick={() => openManifestPrint('all')} className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-white/30">
+                  <Printer className="w-4 h-4"/><span>طباعة كل الدفعات</span>
                 </button>
               </div>
             </div>
@@ -592,9 +645,24 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <span>إلغاء الفلاتر</span>
               </button>
               <span className="text-xs text-slate-500 font-semibold mr-auto">
-                {filteredMovements.length} حركة مجمعة
+                {manifestMovements.length} حركة في الدفعة المحددة
               </span>
             </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div><h3 className="text-sm font-black text-slate-900">دفعات الشيتات</h3><p className="mt-1 text-xs text-slate-500">كل ملف مرفوع محفوظ كمجموعة مستقلة. الافتراضي هو آخر شيت تم رفعه.</p></div>
+              <div className="flex flex-wrap gap-2">
+                <select value={selectedManifestBatch} onChange={(e)=>setSelectedManifestBatch(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                  <option value="latest">آخر شيت مرفوع</option><option value="all">كل الشيتات</option>
+                  {importBatches.map((batch)=><option key={batch.id} value={batch.id}>{batch.name} ({batch.count} حركة)</option>)}
+                </select>
+                <button onClick={()=>openManifestPrint('selected')} disabled={!manifestMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة المعروض ({manifestMovements.length})</button>
+                <button onClick={()=>openManifestPrint('all')} disabled={!filteredMovements.length} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة الكل ({filteredMovements.length})</button>
+              </div>
+            </div>
+            {importBatches.length > 0 && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">{importBatches.map((batch)=><button key={batch.id} onClick={()=>setSelectedManifestBatch(batch.id)} className={`rounded-xl border p-3 text-right transition ${((selectedManifestBatch==='latest'&&batch.id===latestBatchId)||selectedManifestBatch===batch.id)?'border-blue-400 bg-blue-50 ring-1 ring-blue-200':'border-slate-200 bg-slate-50 hover:border-slate-300'}`}><span className="block truncate text-xs font-black text-slate-800">{batch.name}</span><span className="mt-1 flex justify-between text-[11px] text-slate-500"><span>{batch.count} حركة</span><span>{Number.isNaN(new Date(batch.at).getTime())?'وقت غير مسجل':new Date(batch.at).toLocaleString('ar-EG')}</span></span></button>)}</div>}
           </div>
 
           {/* Clean 12-Column Table (NO financials) */}
@@ -608,7 +676,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 </span>
               </h3>
               <button
-                onClick={() => setIsOfficialSheetModalOpen(true)}
+              onClick={() => openManifestPrint('selected')}
                 className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
               >
                 <FileDown className="w-3.5 h-3.5" />
@@ -635,7 +703,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
-                  {filteredMovements.length > 0 ? filteredMovements.map((m, i) => (
+                  {manifestMovements.length > 0 ? manifestMovements.map((m, i) => (
                     <tr key={m.id} className="hover:bg-rose-50/30 transition">
                       <td className="p-2 border border-slate-100 text-center font-bold text-rose-800 bg-slate-50">{m.seq || i + 1}</td>
                       <td className="p-2 border border-slate-100 font-bold text-slate-900 whitespace-nowrap">
@@ -666,7 +734,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               </table>
             </div>
             {/* Next Step Banner */}
-            {filteredMovements.length > 0 && (
+            {manifestMovements.length > 0 && (
               <div className="bg-rose-50 border-t border-rose-200 p-3 flex items-center justify-between no-print">
                 <p className="text-xs text-rose-700 font-semibold">
                   ✅ بعد تنزيل الكشف وإنهاء المحاسبة في الميناء، انتقل للمرحلة التالية لتسجيل فاتورة الكاشير
@@ -1227,8 +1295,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <OfficialSheetPrintModal
           isOpen={isOfficialSheetModalOpen}
           onClose={() => setIsOfficialSheetModalOpen(false)}
-          movements={filteredMovements}
-          title="كشف حركات وتفريغ الشاحنات والحاويات المجمع (الاسطمبة الرسمية)"
+          movements={manifestPrintScope === 'all' ? filteredMovements : manifestMovements}
+          title={manifestPrintScope === 'all'
+            ? 'كشف جميع دفعات الحركات المجمع (الاسطمبة الرسمية)'
+            : `كشف دفعة: ${importBatches.find((batch) => batch.id === (selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch))?.name || 'الشيت المحدد'}`}
           berthName={
             selectedBerth
               ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name
