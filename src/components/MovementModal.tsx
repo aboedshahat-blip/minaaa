@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { X, Calculator, Truck, FileText, Check } from 'lucide-react';
@@ -27,50 +27,69 @@ const normalizePlateDigits = (value: string) => value
 
 const PlateInput: React.FC<PlateInputProps> = ({ value, onChange, required = false, label }) => {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
-  const letters = (value.match(/\p{L}/gu) || []).slice(0, 3);
-  const digits = normalizePlateDigits(value).replace(/\D/g, '').slice(0, 4);
-  const slots = [...letters, ...digits.split('')];
-  const commit = (next: string[]) => onChange(`${next.slice(0, 3).filter(Boolean).join(' ')} ${next.slice(3).filter(Boolean).join('')}`.trim());
+  const parseSlots = (plate: string) => {
+    const letters = (plate.match(/\p{L}/gu) || []).slice(0, 3);
+    const digits = normalizePlateDigits(plate).replace(/\D/g, '').slice(0, 4).split('');
+    return [...letters, ...Array(3 - letters.length).fill(''), ...digits, ...Array(4 - digits.length).fill('')];
+  };
+  const [slots, setSlots] = useState<string[]>(() => parseSlots(value));
+  const lastEmittedValue = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastEmittedValue.current === value) {
+      lastEmittedValue.current = null;
+      return;
+    }
+    setSlots(parseSlots(value));
+  }, [value]);
+  const commit = (next: string[]) => {
+    setSlots(next);
+    const serialized = `${next.slice(0, 3).filter(Boolean).join(' ')} ${next.slice(3).filter(Boolean).join('')}`.trim();
+    lastEmittedValue.current = serialized;
+    onChange(serialized);
+  };
+  const renderSlot = (index: number) => {
+    const isLetter = index < 3;
+    return <input
+      key={index}
+      ref={(element) => { refs.current[index] = element; }}
+      type="text"
+      inputMode={isLetter ? 'text' : 'numeric'}
+      maxLength={1}
+      value={slots[index] || ''}
+      onChange={(event) => {
+        const raw = event.target.value;
+        const enteredLetters = raw.match(/\p{L}/gu) || [];
+        const enteredDigits = normalizePlateDigits(raw).replace(/\D/g, '').split('');
+        if (enteredLetters.length + enteredDigits.length > 1) {
+          const next = [...slots];
+          enteredLetters.slice(0, 3).forEach((character, slot) => { next[slot] = character; });
+          enteredDigits.slice(0, 4).forEach((character, slot) => { next[slot + 3] = character; });
+          commit(next);
+          refs.current[Math.min(enteredLetters.length, 2) + 3]?.focus();
+          return;
+        }
+        const character = isLetter ? enteredLetters[0] : enteredDigits[0];
+        const next = [...slots];
+        next[index] = character || '';
+        commit(next);
+        if (character && index < 6) refs.current[index + 1]?.focus();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Backspace' && !slots[index] && index > 0) refs.current[index - 1]?.focus();
+        if (event.key === 'ArrowLeft' && index < 6) refs.current[index + 1]?.focus();
+        if (event.key === 'ArrowRight' && index > 0) refs.current[index - 1]?.focus();
+      }}
+      placeholder={isLetter ? 'ح' : '•'}
+      aria-label={`${isLetter ? `الحرف ${index + 1}` : `الرقم ${index - 2}`} من لوحة ${label}`}
+      required={required && index === 0}
+      className="h-10 min-w-0 flex-1 border-0 bg-white p-0 text-center text-base font-semibold text-slate-800 outline-none placeholder:text-slate-300 focus:bg-blue-50"
+    />;
+  };
   return (
     <div dir="rtl" aria-label={label} className="flex w-full min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
-      {Array.from({ length: 7 }, (_, index) => {
-        const isLetter = index < 3;
-        return <input
-          key={index}
-          ref={(element) => { refs.current[index] = element; }}
-          type="text"
-          inputMode={isLetter ? 'text' : 'numeric'}
-          maxLength={1}
-          value={slots[index] || ''}
-          onChange={(event) => {
-            const raw = event.target.value;
-            const enteredLetters = raw.match(/\p{L}/gu) || [];
-            const enteredDigits = normalizePlateDigits(raw).replace(/\D/g, '').split('');
-            if (enteredLetters.length + enteredDigits.length > 1) {
-              const next = [...slots];
-              enteredLetters.slice(0, 3).forEach((character, slot) => { next[slot] = character; });
-              enteredDigits.slice(0, 4).forEach((character, slot) => { next[slot + 3] = character; });
-              commit(next);
-              refs.current[Math.min(enteredLetters.length, 2) + 3]?.focus();
-              return;
-            }
-            const character = isLetter ? enteredLetters[0] : enteredDigits[0];
-            const next = [...slots];
-            next[index] = character || '';
-            commit(next);
-            if (character && index < 6) refs.current[index + 1]?.focus();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Backspace' && !slots[index] && index > 0) refs.current[index - 1]?.focus();
-            if (event.key === 'ArrowLeft' && index < 6) refs.current[index + 1]?.focus();
-            if (event.key === 'ArrowRight' && index > 0) refs.current[index - 1]?.focus();
-          }}
-          placeholder={isLetter ? 'ح' : '•'}
-          aria-label={`${isLetter ? `الحرف ${index + 1}` : `الرقم ${index - 2}`} من لوحة ${label}`}
-          required={required && index === 0}
-          className={`h-10 min-w-0 flex-1 border-0 bg-white p-0 text-center text-base font-semibold text-slate-800 outline-none placeholder:text-slate-300 focus:bg-blue-50 ${index > 0 ? 'border-r border-slate-200' : ''} ${index === 3 ? 'border-r-2 border-r-slate-300' : ''}`}
-        />;
-      })}
+      <div className="flex min-w-0 flex-[3] divide-x divide-x-reverse divide-slate-200">{[0, 1, 2].map(renderSlot)}</div>
+      <span className="w-0.5 shrink-0 bg-slate-300" />
+      <div dir="ltr" className="flex min-w-0 flex-[4] divide-x divide-slate-200">{[3, 4, 5, 6].map(renderSlot)}</div>
     </div>
   );
 };
@@ -97,22 +116,49 @@ const ContainerNumberInput: React.FC<ContainerNumberInputProps> = ({ value, onCh
       {[0, 1].map((index) => (
         <label key={index} className="block text-[10px] font-semibold text-slate-500">
           {index === 0 ? 'رقم الحاوية' : 'رقم الحاوية الثانية (اختياري)'}
-          <input
-            type="text"
-            inputMode="text"
-            dir="ltr"
-            maxLength={12}
-            value={containers[index] || ''}
-            onChange={(event) => updateContainer(index, formatContainer(event.target.value))}
-            placeholder="MSKU 1234567"
-            aria-label={`${index === 0 ? 'الحاوية الأولى' : 'الحاوية الثانية'}`}
-            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-left font-mono text-sm font-semibold tracking-wide text-slate-800 shadow-sm placeholder:text-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          />
+          <ContainerNumberField value={containers[index] || ''} onChange={(next) => updateContainer(index, next)} format={formatContainer} label={index === 0 ? 'الحاوية الأولى' : 'الحاوية الثانية'} />
         </label>
       ))}
       <p className="text-[10px] text-slate-500">اكتب 4 أحرف ثم 7 أرقام؛ تُضاف المسافة تلقائيًا. اترك الحاوية الثانية فارغة إن لم توجد.</p>
     </div>
   );
+};
+
+interface ContainerNumberFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  format: (value: string) => string;
+  label: string;
+}
+
+const ContainerNumberField: React.FC<ContainerNumberFieldProps> = ({ value, onChange, format, label }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const caretAfterRender = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (caretAfterRender.current === null || !inputRef.current) return;
+    inputRef.current.setSelectionRange(caretAfterRender.current, caretAfterRender.current);
+    caretAfterRender.current = null;
+  }, [value]);
+  return <input
+    ref={inputRef}
+    type="text"
+    inputMode="text"
+    dir="ltr"
+    maxLength={12}
+    value={value}
+    onChange={(event) => {
+      const input = event.currentTarget;
+      const raw = input.value;
+      const caret = input.selectionStart ?? raw.length;
+      const validCharsBeforeCaret = (raw.slice(0, caret).match(/[A-Za-z0-9٠-٩۰-۹]/g) || []).length;
+      const next = format(raw);
+      caretAfterRender.current = validCharsBeforeCaret + (validCharsBeforeCaret >= 4 && next.length > 4 ? 1 : 0);
+      onChange(next);
+    }}
+    placeholder="MSKU 1234567"
+    aria-label={label}
+    className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-left font-mono text-sm font-semibold tracking-wide text-slate-800 shadow-sm placeholder:text-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+  />;
 };
 
 interface SegmentedCodeInputProps {
