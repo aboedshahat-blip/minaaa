@@ -81,21 +81,36 @@ interface ContainerNumberInputProps {
 }
 
 const ContainerNumberInput: React.FC<ContainerNumberInputProps> = ({ value, onChange }) => {
-  const containers = value.split(/[\/,،؛\n]+/).map((item) => item.trim()).filter(Boolean).slice(0, 2);
+  const containers = value.split(/[\/,،؛\n]+/).map((item) => item.trim()).slice(0, 2);
   const updateContainer = (index: number, nextValue: string) => {
     const next = [...containers];
     next[index] = nextValue;
     onChange(next.map((item) => item.trim()).filter(Boolean).join(' / '));
   };
+  const formatContainer = (raw: string) => {
+    const letters = (raw.match(/[A-Za-z]/g) || []).join('').toUpperCase().slice(0, 4);
+    const digits = normalizePlateDigits(raw).replace(/\D/g, '').slice(0, 7);
+    return `${letters}${digits ? ` ${digits}` : ''}`;
+  };
   return (
     <div className="space-y-2">
       {[0, 1].map((index) => (
-        <div key={index} className="flex items-center gap-2">
-          <span className="w-16 shrink-0 text-[10px] font-semibold text-slate-500">{index === 0 ? 'الحاوية 1' : 'الحاوية 2'}</span>
-          <SegmentedCodeInput value={containers[index] || ''} onChange={(next) => updateContainer(index, next)} letterCount={4} digitCount={7} label={`الحاوية ${index + 1}`} />
-        </div>
+        <label key={index} className="block text-[10px] font-semibold text-slate-500">
+          {index === 0 ? 'رقم الحاوية' : 'رقم الحاوية الثانية (اختياري)'}
+          <input
+            type="text"
+            inputMode="text"
+            dir="ltr"
+            maxLength={12}
+            value={containers[index] || ''}
+            onChange={(event) => updateContainer(index, formatContainer(event.target.value))}
+            placeholder="MSKU 1234567"
+            aria-label={`${index === 0 ? 'الحاوية الأولى' : 'الحاوية الثانية'}`}
+            className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-left font-mono text-sm font-semibold tracking-wide text-slate-800 shadow-sm placeholder:text-slate-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
       ))}
-      <p className="text-[10px] text-slate-500">أربع خانات للحروف، ثم خانة الأرقام السبعة. اترك الحاوية الثانية فارغة إن لم توجد.</p>
+      <p className="text-[10px] text-slate-500">اكتب 4 أحرف ثم 7 أرقام؛ تُضاف المسافة تلقائيًا. اترك الحاوية الثانية فارغة إن لم توجد.</p>
     </div>
   );
 };
