@@ -476,9 +476,14 @@ const ensureMovementCustomer = async (movement: Movement, supabase: NonNullable<
   if (idLookupError) throw new Error(`تعذر التحقق من عميل الحركة: ${idLookupError.message}`);
   if (byId) return movement;
 
-  const name = (movement.customer_name || movement.driver_name || '').trim();
+  const name = [movement.customer_name, movement.driver_name]
+    .map((value) => (value || '').trim())
+    .find((value) => {
+      const normalized = normalizeCustomerName(value);
+      return normalized && !['عميل عام', 'غير محدد'].includes(normalized);
+    }) || '';
   const normalizedName = normalizeCustomerName(name);
-  if (!normalizedName || ['عميل عام', 'غير محدد'].includes(normalizedName)) {
+  if (!normalizedName) {
     return { ...movement, customer_id: null as unknown as string, customer_code: '' };
   }
 
