@@ -141,9 +141,9 @@ export async function exportMovementsToOfficialPdf(
         <p style="margin-top: 35px; border-bottom: 1px solid #94a3b8; width: 180px;"></p>
       </div>
       <div style="text-align: center;">
-        <p style="margin: 0; font-weight: bold;">ختم المحطة / المكتب:</p>
-        <div style="margin-top: 10px; width: 90px; height: 50px; border: 1px dashed #94a3b8; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 10px;">
-          ختم رسمي
+        <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
+        <div style="margin: 8px auto 0; width: 125px; height: 62px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
+          ختم مكتب النقل
         </div>
       </div>
       <div style="text-align: left;">
@@ -261,13 +261,13 @@ export async function exportCustomerStatementPdf(
     .join('');
 
   container.innerHTML = `
-    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
-      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:120px;object-fit:contain;flex:none;" />
-      <div style="text-align: center;">
-        <span style="display: inline-block; background-color: #1e3a8a; color: #ffffff; padding: 6px 20px; border-radius: 8px; font-size: 14px; font-weight: bold;">
+    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 155px minmax(0,1fr) 175px; align-items: center; gap: 16px;">
+      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:120px;object-fit:contain;justify-self:center;" />
+      <div style="text-align: center; min-width:0; overflow-wrap:anywhere;">
+        <span style="display: inline-block; max-width:100%; white-space:normal; overflow-wrap:anywhere; background-color: #1e3a8a; color: #ffffff; padding: 7px 16px; border-radius: 8px; font-size: 16px; line-height:1.5; font-weight: bold;">
           فاتورة ومطالبة حساب عميل / سائق
         </span>
-        <p style="font-size: 11px; color: #475569; margin: 4px 0 0 0;">${escapeHtml(placeName)}</p>
+        <p style="font-size: 14px; line-height:1.6; font-weight:700; color: #334155; margin: 6px auto 0; max-width:100%; overflow-wrap:anywhere;">${escapeHtml(placeName)}</p>
       </div>
       <div style="text-align: left; font-size: 11px; color: #475569;">
         <p style="margin: 0;"><strong>تاريخ الفاتورة:</strong> ${dateStr}</p>
@@ -371,9 +371,9 @@ export async function exportCustomerStatementPdf(
         <p style="margin-top: 30px; border-bottom: 1px solid #94a3b8; width: 160px;"></p>
       </div>
       <div style="text-align: center;">
-        <p style="margin: 0; font-weight: bold;">ختم المنظومة:</p>
-        <div style="margin-top: 8px; width: 80px; height: 45px; border: 1px dashed #94a3b8; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 9px;">
-          ختم رسمي
+        <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
+        <div style="margin: 8px auto 0; width: 125px; height: 62px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
+          ختم مكتب النقل
         </div>
       </div>
       <div style="text-align: left;">

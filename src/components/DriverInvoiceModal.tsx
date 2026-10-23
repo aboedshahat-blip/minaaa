@@ -104,6 +104,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             align-items: center;
           }
           .title { font-size: 20px; font-weight: 900; margin: 0 0 4px 0; color: #1e3a8a; }
+          .office-name { max-width: 620px; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
           .brand-logo { width: 82px; height: 82px; object-fit: contain; border-radius: 8px; }
           .subtitle { font-size: 13px; font-weight: bold; color: #475569; margin: 0; }
           .meta-box {
@@ -162,6 +163,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             border-top: 1px dashed #94a3b8;
           }
           .sign-col { text-align: center; width: 30%; font-size: 12px; font-weight: bold; }
+          .transport-stamp { width: 125px; height: 58px; margin: 14px auto 0; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 800; }
           .sign-line { margin-top: 45px; border-top: 1px solid #64748b; }
           .footer-note { text-align: center; font-size: 10px; color: #64748b; margin-top: 25px; }
           @media print { body { padding: 0; font-size: 10px; } th, td { padding: 4px 3px !important; } tr { break-inside: avoid; } }
@@ -240,7 +242,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             <div className="header-box border-b-2 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <img src={vibLogoUrl} alt="شعار VIB" className="brand-logo h-20 w-20 rounded-lg object-contain" />
               <div>
-                <h1 className="title text-xl font-black text-blue-900">{placeName}</h1>
+                <h1 className="title office-name text-xl font-black text-blue-900">{placeName}</h1>
                 <p className="subtitle text-xs font-bold text-slate-600 mt-1">
                   إدارة الحركة والتشغيل — فاتورة ومطالبة مجمعة لحساب سائق
                 </p>
@@ -363,8 +365,8 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
                 <div className="sign-line mt-10 border-t border-slate-400 w-32 mx-auto"></div>
               </div>
               <div className="sign-col text-center w-1/3">
-                <span>اعتماد مدير المحطة / الختم</span>
-                <div className="sign-line mt-10 border-t border-slate-400 w-32 mx-auto"></div>
+                <span>ختم مكتب النقل</span>
+                <div className="transport-stamp">ختم مكتب النقل</div>
               </div>
             </div>
 

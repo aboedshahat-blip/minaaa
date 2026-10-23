@@ -226,9 +226,9 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
                 <div className="mt-10 border-b border-slate-400 w-36 mx-auto"></div>
               </div>
               <div>
-                <p className="font-bold">ختم المحطة / المنظومة</p>
+                <p className="font-bold">ختم مكتب النقل</p>
                 <div className="mt-3 w-24 h-14 border border-dashed border-slate-400 rounded-lg mx-auto flex items-center justify-center text-[10px] text-slate-400">
-                  ختم رسمي
+                  ختم مكتب النقل
                 </div>
               </div>
               <div>
