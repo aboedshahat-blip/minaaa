@@ -569,7 +569,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
           isOpen={isOfficialSheetModalOpen}
           onClose={() => setIsOfficialSheetModalOpen(false)}
           movements={previewMovements}
-          title="كشف حركات وتفريغ الشاحنات والحاويات المجمع (الاسطمبة الرسمية)"
+          title="شيت تسجيل حجز الشاحنات"
           berthName={berths.find((b) => b.id === selectedBerthId)?.name}
         />
       )}

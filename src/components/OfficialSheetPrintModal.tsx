@@ -16,7 +16,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
   isOpen,
   onClose,
   movements,
-  title = 'كشف حركات الشاحنات والحاويات المجمع (الاسطمبة الرسمية المعتمدة)',
+  title = 'شيت تسجيل حجز الشاحنات',
   berthName,
 }) => {
   if (!isOpen) return null;
@@ -220,20 +220,12 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             </div>
 
             {/* Official Signatures & Stamp Footer */}
-            <div className="mt-8 pt-6 border-t border-dashed border-slate-300 grid grid-cols-3 gap-4 text-center text-xs text-slate-700">
-              <div>
-                <p className="font-bold">توقيع مسؤول الحركة والتشغيل</p>
-                <div className="mt-10 border-b border-slate-400 w-36 mx-auto"></div>
-              </div>
+            <div className="mt-8 pt-6 border-t border-dashed border-slate-300 flex justify-center text-center text-xs text-slate-700">
               <div>
                 <p className="font-bold">ختم مكتب النقل</p>
-                <div className="mt-3 w-24 h-14 border border-dashed border-slate-400 rounded-lg mx-auto flex items-center justify-center text-[10px] text-slate-400">
+                <div className="mt-3 w-36 h-20 border-2 border-dashed border-slate-500 rounded-xl mx-auto flex items-center justify-center text-xs font-bold text-slate-600">
                   ختم مكتب النقل
                 </div>
-              </div>
-              <div>
-                <p className="font-bold">توقيع مستلم الكشف (مكتب الميناء)</p>
-                <div className="mt-10 border-b border-slate-400 w-36 mx-auto"></div>
               </div>
             </div>
           </div>

@@ -256,7 +256,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     setIsExportingPickedPdf(true);
     try {
       const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
-      const title = `كشف الشيتات المحددة (${selectedManifestBatchIds.length} شيت)`;
+      const title = `شيت تسجيل حجز الشاحنات — ${selectedManifestBatchIds.length} شيت محدد`;
       const berthName = selectedBerth
         ? berths.find((berth) => berth.id === selectedBerth || berth.name === selectedBerth)?.name
         : undefined;
@@ -1249,10 +1249,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           onClose={() => setIsOfficialSheetModalOpen(false)}
           movements={manifestPrintScope === 'all' ? filteredMovements : manifestPrintScope === 'picked' ? pickedBatchMovements : manifestMovements}
           title={manifestPrintScope === 'all'
-            ? 'كشف جميع دفعات الحركات المجمع (الاسطمبة الرسمية)'
+            ? 'شيت تسجيل حجز الشاحنات'
             : manifestPrintScope === 'picked'
-            ? `كشف الشيتات المحددة (${selectedManifestBatchIds.length} شيت)`
-            : `كشف دفعة: ${importBatches.find((batch) => batch.id === (selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch))?.name || 'الشيت المحدد'}`}
+            ? `شيت تسجيل حجز الشاحنات — ${selectedManifestBatchIds.length} شيت محدد`
+            : `شيت تسجيل حجز الشاحنات — ${importBatches.find((batch) => batch.id === (selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch))?.name || 'الشيت المحدد'}`}
           berthName={
             selectedBerth
               ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name

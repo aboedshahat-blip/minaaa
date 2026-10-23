@@ -135,20 +135,12 @@ export async function exportMovementsToOfficialPdf(
       </tbody>
     </table>
 
-    <div style="margin-top: 25px; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 12px; color: #475569;">
-      <div>
-        <p style="margin: 0; font-weight: bold;">توقيع واعتماد مسؤول الحركة:</p>
-        <p style="margin-top: 35px; border-bottom: 1px solid #94a3b8; width: 180px;"></p>
-      </div>
+    <div style="margin-top: 25px; display: flex; justify-content: center; align-items: flex-end; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 12px; color: #475569;">
       <div style="text-align: center;">
         <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
-        <div style="margin: 8px auto 0; width: 125px; height: 62px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
+        <div style="margin: 8px auto 0; width: 145px; height: 78px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
           ختم مكتب النقل
         </div>
-      </div>
-      <div style="text-align: left;">
-        <p style="margin: 0; font-weight: bold;">توقيع مستلم الكشف (مكتب التخليص):</p>
-        <p style="margin-top: 35px; border-bottom: 1px solid #94a3b8; width: 180px;"></p>
       </div>
     </div>
   `;
@@ -365,20 +357,12 @@ export async function exportCustomerStatementPdf(
     </div>
 
     <!-- Signatures and Stamp Footer -->
-    <div style="margin-top: 30px; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 11px; color: #475569;">
-      <div>
-        <p style="margin: 0; font-weight: bold;">توقيع المحاسب / مسؤول الإدارة:</p>
-        <p style="margin-top: 30px; border-bottom: 1px solid #94a3b8; width: 160px;"></p>
-      </div>
+    <div style="margin-top: 30px; display: flex; justify-content: center; align-items: flex-end; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 11px; color: #475569;">
       <div style="text-align: center;">
         <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
-        <div style="margin: 8px auto 0; width: 125px; height: 62px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
+        <div style="margin: 8px auto 0; width: 145px; height: 78px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
           ختم مكتب النقل
         </div>
-      </div>
-      <div style="text-align: left;">
-        <p style="margin: 0; font-weight: bold;">توقيع واستلام العميل / السائق:</p>
-        <p style="margin-top: 30px; border-bottom: 1px solid #94a3b8; width: 160px;"></p>
       </div>
     </div>
   `;

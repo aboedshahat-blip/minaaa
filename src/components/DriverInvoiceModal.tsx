@@ -355,16 +355,8 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             </div>
 
             {/* Signatures & Stamps */}
-            <div className="signatures flex justify-between items-center pt-8 border-t border-dashed border-slate-300 mt-6 text-xs font-bold text-slate-700">
-              <div className="sign-col text-center w-1/3">
-                <span>توقيع السائق / المستلم</span>
-                <div className="sign-line mt-10 border-t border-slate-400 w-32 mx-auto"></div>
-              </div>
-              <div className="sign-col text-center w-1/3">
-                <span>المحاسب المختص</span>
-                <div className="sign-line mt-10 border-t border-slate-400 w-32 mx-auto"></div>
-              </div>
-              <div className="sign-col text-center w-1/3">
+            <div className="flex justify-center items-center pt-6 border-t border-dashed border-slate-300 mt-6 text-xs font-bold text-slate-700">
+              <div className="text-center">
                 <span>ختم مكتب النقل</span>
                 <div className="transport-stamp">ختم مكتب النقل</div>
               </div>
