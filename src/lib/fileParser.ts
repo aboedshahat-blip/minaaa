@@ -88,14 +88,6 @@ const extractContainerNumbers = (text: string): string[] => {
   return Array.from(new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase())));
 };
 
-const extractPlateDigits = (text: string): string => {
-  const western = text.replace(/[٠-٩۰-۹]/g, (digit) => {
-    const index = '٠١٢٣٤٥٦٧٨٩'.indexOf(digit);
-    return String(index >= 0 ? index : '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit));
-  });
-  return western.match(/\b\d{3,4}\b/)?.[0] || '';
-};
-
 /**
  * Extracts structured movements from PDF documents (Page-by-Page with anchor awareness)
  */
@@ -302,14 +294,23 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       // Tokens after '7.5' are the truck plate number and letters
       let truck_no = '';
       if (sevenIdx !== -1 && sevenIdx < afterDec.length - 1) {
-        const truckItems = afterDecItems.slice(sevenIdx + 1)
-          .filter((item) => !/^\d{1,2}$/.test(item.str)); // Filter out sequence number
-        const truckDigitsToken = truckItems.find((item) => extractPlateDigits(item.str));
+        // Some booking PDFs split the plate digits into adjacent text items
+        // (e.g. "7" + "487" for 7487). The row sequence is on a separate
+        // baseline, so keep and join all digit fragments in the truck cell.
+        const truckItems = afterDecItems.slice(sevenIdx + 1);
+        const truckDigits = truckItems
+          .map((item) => item.str.replace(/[٠-٩۰-۹]/g, (digit) => {
+            const index = '٠١٢٣٤٥٦٧٨٩'.indexOf(digit);
+            return String(index >= 0 ? index : '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit));
+          }).replace(/\D/g, ''))
+          .join('');
         const truckLetterItems = truckItems.filter((item) => /[ء-ي]/.test(item.str));
         const truckLetters = truckLetterItems.length > 1 && truckLetterItems.every((item) => item.dir === 'rtl')
           ? [...truckLetterItems].sort((a, b) => b.x - a.x).map((item) => item.str).join(' ')
           : truckLetterItems.map((item) => item.str).join(' ');
-        truck_no = [truckDigitsToken?.str || '', truckLetters].filter(Boolean).join(' - ');
+        truck_no = [truckDigits.length >= 3 && truckDigits.length <= 4 ? truckDigits : '', truckLetters]
+          .filter(Boolean)
+          .join(' - ');
       }
 
       const movementBase: Partial<Movement> = {
