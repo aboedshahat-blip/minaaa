@@ -393,8 +393,8 @@ export const matchCashierEntriesWithMovements = (
     const addedCashier = newEntries.reduce((sum, entry) => sum + Math.max(0, Number(entry.amount) || 0), 0);
     const oldCashier = Number(movement.cashier_invoice) || 0;
     const newCashier = oldCashier + addedCashier;
-    const systemCommission = Number(movement.system_commission) || defaultSystemCommission;
-    const nafezCommission = Number(movement.nafez_commission) || 0;
+    const systemCommission = Number(movement.system_commission ?? defaultSystemCommission);
+    const nafezCommission = Number(movement.nafez_commission ?? 0);
     const newTotal = newCashier + systemCommission + nafezCommission;
     // Each newly linked cashier receipt confirms that amount was paid.
     const paid = (Number(movement.paid_amount) || 0) + addedCashier;

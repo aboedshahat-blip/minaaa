@@ -13,6 +13,33 @@ const KEYS = {
   DATA_RESET_AT: 'pls_data_reset_at',
 };
 
+const CUSTOMER_FEE_MARKER = /\n?\[\[VIB_CUSTOMER_FEES:(\{.*?\})\]\]/;
+
+// Preserve per-customer defaults in the existing notes column so this feature
+// works with the deployed Supabase schema without requiring new columns.
+const customerForApp = (row: Customer): Customer => {
+  const notes = row.notes || '';
+  const marker = notes.match(CUSTOMER_FEE_MARKER);
+  let storedProfile: { system_commission?: number; nafez_commission?: number } = {};
+  if (marker?.[1]) {
+    try { storedProfile = JSON.parse(marker[1]); } catch { /* use any fields already on the row */ }
+  }
+  return {
+    ...row,
+    notes: notes.replace(CUSTOMER_FEE_MARKER, '').trim(),
+    system_commission: row.system_commission ?? storedProfile.system_commission,
+    nafez_commission: row.nafez_commission ?? storedProfile.nafez_commission,
+  };
+};
+
+const customerForCloud = (row: Customer): Record<string, unknown> => {
+  const customer = customerForApp(row);
+  const { system_commission, nafez_commission, ...cloudRow } = customer;
+  if (system_commission === undefined && nafez_commission === undefined) return cloudRow;
+  const profile = JSON.stringify({ system_commission, nafez_commission });
+  return { ...cloudRow, notes: `${cloudRow.notes || ''}\n[[VIB_CUSTOMER_FEES:${profile}]]`.trim() };
+};
+
 type SyncTable = 'movements' | 'customers' | 'berths' | 'payments';
 type PendingSync = {
   upserts: Partial<Record<SyncTable, Record<string, unknown>>>;
@@ -121,7 +148,8 @@ export const flushPendingSync = async () => {
   // Upsert referenced records before dependent rows so foreign keys remain valid.
   for (const table of ['customers', 'berths', 'movements', 'payments'] as const) {
     for (const row of Object.values(pending.upserts[table] || {})) {
-      const { error } = await supabase.from(table).upsert(row as Record<string, unknown>);
+      const cloudRow = table === 'customers' ? customerForCloud(row as Customer) : row;
+      const { error } = await supabase.from(table).upsert(cloudRow as Record<string, unknown>);
       if (error) throw new Error(`تعذرت مزامنة ${table}: ${error.message}`);
       clearPendingUpsert(table, (row as { id: string }).id);
     }
@@ -197,7 +225,7 @@ export const saveBerths = (berths: Berth[]) => {
 export const getStoredCustomers = (): Customer[] => {
   try {
     const raw = localStorage.getItem(KEYS.CUSTOMERS);
-    if (raw) return JSON.parse(raw);
+    if (raw) return (JSON.parse(raw) as Customer[]).map(customerForApp);
   } catch (e) {
     console.error(e);
   }
@@ -206,7 +234,7 @@ export const getStoredCustomers = (): Customer[] => {
 };
 
 export const saveCustomers = (customers: Customer[]) => {
-  localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers));
+  localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers.map(customerForApp)));
 };
 
 export const getStoredMovements = (): Movement[] => {
@@ -260,7 +288,9 @@ export const fetchAllFromSupabase = async () => {
 
     return {
       movements: (movementsRes.data || []) as Movement[],
-      customers: (customersRes.data || []).filter((customer) => !['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__'].includes(customer.id)) as Customer[],
+      customers: (customersRes.data || [])
+        .filter((customer) => !['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__'].includes(customer.id))
+        .map((customer) => customerForApp(customer as Customer)),
       berths: (berthsRes.data || []) as Berth[],
       payments: (paymentsRes.data || []) as PaymentReceipt[],
       dataResetAt: (customersRes.data || []).find((customer) => customer.id === '__SYSTEM_HANDOFF_RESET__')?.created_at as string | undefined,
@@ -287,12 +317,13 @@ export const syncMovementToSupabase = async (movement: Movement) => {
 };
 
 export const syncCustomerToSupabase = async (customer: Customer) => {
-  setPendingUpsert('customers', customer);
+  const cloudCustomer = customerForCloud(customer);
+  setPendingUpsert('customers', cloudCustomer as unknown as Customer);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
-    const { error } = await supabase.from('customers').upsert(customer);
+    const { error } = await supabase.from('customers').upsert(cloudCustomer);
     if (error) throw error;
     clearPendingUpsert('customers', customer.id);
   } catch (e) {
@@ -338,7 +369,7 @@ export const restoreLocalDataToSupabase = async (data: {
   payments: PaymentReceipt[];
 }) => {
   data.movements.forEach((row) => setPendingUpsert('movements', row));
-  data.customers.forEach((row) => setPendingUpsert('customers', row));
+  data.customers.forEach((row) => setPendingUpsert('customers', customerForCloud(row) as unknown as Customer));
   data.berths.forEach((row) => setPendingUpsert('berths', row));
   data.payments.forEach((row) => setPendingUpsert('payments', row));
   const settings = getStoredSettings();
@@ -347,7 +378,7 @@ export const restoreLocalDataToSupabase = async (data: {
 
   // Restore parent rows before rows that reference them through foreign keys.
   const orderedWrites = [
-    ['customers', data.customers],
+    ['customers', data.customers.map(customerForCloud)],
     ['berths', data.berths],
     ['movements', data.movements],
     ['payments', data.payments],
@@ -453,7 +484,7 @@ export const syncWithSupabase = async () => {
       const localBerths = getStoredBerths();
 
       if (localBerths.length > 0) await supabase.from('berths').upsert(localBerths);
-      if (localCustomers.length > 0) await supabase.from('customers').upsert(localCustomers);
+      if (localCustomers.length > 0) await supabase.from('customers').upsert(localCustomers.map(customerForCloud));
       if (localMovements.length > 0) await supabase.from('movements').upsert(localMovements);
     }
 

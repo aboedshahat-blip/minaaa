@@ -91,8 +91,8 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
     const now = new Date().toISOString().split('T')[0];
-    const sysComm = settings.default_system_commission ?? 200;
-    const nafezComm = settings.default_nafez_commission ?? 0;
+    const defaultSysComm = settings.default_system_commission ?? 200;
+    const defaultNafezComm = settings.default_nafez_commission ?? 0;
 
     let seqCounter = currentMaxSeq;
     const newCustomersMap = new Map<string, Customer>();
@@ -101,10 +101,6 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     const finalizedMovements: Movement[] = rows.map((r) => {
       seqCounter += 1;
       const cashier = r.cashier_invoice || defaultCashier || 0;
-      const systemCommission = applyCommission ? sysComm : 0;
-      const nafezCommission = applyCommission ? nafezComm : 0;
-      const total = cashier + systemCommission + nafezCommission;
-
       // Smart Driver = Customer mapping
       const cleanDriver = (r.driver_name || '').trim();
       let rowCustomer = targetCustomer;
@@ -132,11 +128,21 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
             ],
             created_at: new Date().toISOString(),
             notes: 'تم إنشاؤه تلقائياً كعميل/سائق من كشف الحركات',
+            system_commission: defaultSysComm,
+            nafez_commission: defaultNafezComm,
           };
           newCustomersMap.set(cleanDriver.toLowerCase(), newCust);
           rowCustomer = newCust;
         }
       }
+
+      const systemCommission = applyCommission
+        ? (rowCustomer?.system_commission ?? defaultSysComm)
+        : 0;
+      const nafezCommission = applyCommission
+        ? (rowCustomer?.nafez_commission ?? defaultNafezComm)
+        : 0;
+      const total = cashier + systemCommission + nafezCommission;
 
       return {
         id: `m-imp-${Date.now()}-${seqCounter}`,

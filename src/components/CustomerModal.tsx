@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, CustomerTruck } from '../types';
 import { X, Users, Plus, Trash2, Truck, Check } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface CustomerModalProps {
   onSave: (customer: Customer) => void;
   editingCustomer?: Customer | null;
   existingCount: number;
+  defaultSystemCommission: number;
+  defaultNafezCommission: number;
 }
 
 export const CustomerModal: React.FC<CustomerModalProps> = ({
@@ -16,12 +19,17 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   onSave,
   editingCustomer,
   existingCount,
+  defaultSystemCommission,
+  defaultNafezCommission,
 }) => {
+  const { canEditCommissions } = useAuth();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
+  const [systemCommission, setSystemCommission] = useState(defaultSystemCommission);
+  const [nafezCommission, setNafezCommission] = useState(defaultNafezCommission);
   const [trucks, setTrucks] = useState<CustomerTruck[]>([]);
 
   // New truck entry form
@@ -37,6 +45,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       setEmail(editingCustomer.email || '');
       setNotes(editingCustomer.notes || '');
       setTrucks(editingCustomer.trucks || []);
+      setSystemCommission(editingCustomer.system_commission ?? defaultSystemCommission);
+      setNafezCommission(editingCustomer.nafez_commission ?? defaultNafezCommission);
     } else {
       setCode(`C-${100 + existingCount + 1}`);
       setName('');
@@ -44,8 +54,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       setEmail('');
       setNotes('');
       setTrucks([]);
+      setSystemCommission(defaultSystemCommission);
+      setNafezCommission(defaultNafezCommission);
     }
-  }, [editingCustomer, isOpen, existingCount]);
+  }, [editingCustomer, isOpen, existingCount, defaultSystemCommission, defaultNafezCommission]);
 
   if (!isOpen) return null;
 
@@ -86,6 +98,12 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       email: email.trim(),
       trucks,
       notes: notes.trim(),
+      system_commission: canEditCommissions
+        ? Math.max(0, systemCommission)
+        : (editingCustomer?.system_commission ?? defaultSystemCommission),
+      nafez_commission: canEditCommissions
+        ? Math.max(0, nafezCommission)
+        : (editingCustomer?.nafez_commission ?? defaultNafezCommission),
       created_at: editingCustomer ? editingCustomer.created_at : new Date().toISOString(),
     };
 
@@ -175,6 +193,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               />
             </div>
           </div>
+
+          {canEditCommissions && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+            <div className="mb-3">
+              <h3 className="text-sm font-bold text-slate-900">عمولات هذا العميل لكل حركة</h3>
+              <p className="mt-1 text-[11px] text-slate-600">تُستخدم تلقائيًا عند تسجيل أو استيراد حركة جديدة، وتظل الحركات القديمة بقيمها المحفوظة.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="text-xs font-semibold text-blue-900">
+                عمولة المنظومة (ج.م)
+                <input type="number" min="0" step="0.01" value={systemCommission} onChange={(e) => setSystemCommission(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold" />
+              </label>
+              <label className="text-xs font-semibold text-teal-900">
+                رسوم نافذ (ج.م)
+                <input type="number" min="0" step="0.01" value={nafezCommission} onChange={(e) => setNafezCommission(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm font-bold" />
+              </label>
+            </div>
+          </section>}
 
           {/* Trucks Section: "كل عميل عندو اكتر من عربيه" */}
           <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">

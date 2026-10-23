@@ -42,6 +42,9 @@ export interface Customer {
   trucks: CustomerTruck[];
   created_at: string;
   notes?: string;
+  /** Default per-movement fees for this customer; snapshot onto each new movement. */
+  system_commission?: number;
+  nafez_commission?: number;
 }
 
 export interface Berth {

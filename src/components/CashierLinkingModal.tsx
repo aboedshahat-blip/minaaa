@@ -63,8 +63,8 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
     }
 
     const cashierInvoice = Number(amount) || 0;
-    const sysComm = Number(selectedMovement.system_commission) || 200;
-    const nafezComm = Number(selectedMovement.nafez_commission) || 0;
+    const sysComm = Number(selectedMovement.system_commission ?? 200);
+    const nafezComm = Number(selectedMovement.nafez_commission ?? 0);
     const newTotal = cashierInvoice + sysComm + nafezComm;
     const paid = Math.max(Number(selectedMovement.paid_amount) || 0, cashierInvoice);
     const remaining = Math.max(0, newTotal - paid);
@@ -251,10 +251,10 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
               <div className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-center">
                 <span className="text-[11px] text-slate-500">الإجمالي الجديد بعد العمولات</span>
                 <span className="text-base font-black text-indigo-900">
-                  {((amount || 0) + (selectedMovement?.system_commission || 200) + (selectedMovement?.nafez_commission || 0)).toLocaleString()} ج.م
+                  {((amount || 0) + (selectedMovement?.system_commission ?? 200) + (selectedMovement?.nafez_commission ?? 0)).toLocaleString()} ج.م
                 </span>
                 <span className="text-[10px] text-slate-400">
-                  شامل عمولة المنظومة ({selectedMovement?.system_commission || 200} ج)
+                  شامل عمولة المنظومة ({selectedMovement?.system_commission ?? 200} ج)
                 </span>
               </div>
             </div>

@@ -636,6 +636,8 @@ const AppContent: React.FC = () => {
         onSave={handleSaveCustomer}
         editingCustomer={editingCustomer}
         existingCount={customers.length}
+        defaultSystemCommission={settings.default_system_commission ?? 200}
+        defaultNafezCommission={settings.default_nafez_commission ?? 0}
       />
 
       <BerthModal

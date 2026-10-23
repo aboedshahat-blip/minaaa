@@ -33,7 +33,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <span>إعدادات العمولات المتغيرة والقيم التشغيلية</span>
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          تحديد قيمة عمولة المنظومة، وعمولة نافذ، والقيم الافتراضية لأوزان ومحاور الشاحنات
+                تحديد القيم الافتراضية للعملاء الجدد، مع إمكانية تخصيص عمولة المنظومة ونافذ لكل عميل من شاشة بيانات العميل
         </p>
       </div>
 
@@ -47,7 +47,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 العمولات المتغيرة لحساب كل حركة شاحنة
               </h2>
               <p className="text-xs text-slate-500">
-                هذه المبالغ تُحسب وتُضاف آلياً على كل حركة شاحنة مسجلة بالنظام
+                تُستخدم هذه القيم كافتراضي للعملاء الجدد أو العملاء الذين لم تُحدد لهم عمولة خاصة
               </p>
             </div>
           </div>
@@ -67,7 +67,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 required
               />
               <span className="text-[11px] text-blue-600 mt-1 block">
-                مبلغ عمولة المنظومة المستحق عن كل شاحنة (افتراضياً: 200 ج.م)
+                قيمة افتراضية فقط؛ يمكن تحديد قيمة مختلفة لكل عميل من شاشة تعديل بياناته.
               </span>
             </div>
 
@@ -85,7 +85,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 required
               />
               <span className="text-[11px] text-indigo-600 mt-1 block">
-                مبلغ عمولة نافذ المضاف على كل حركة شاحنة (افتراضياً: 50 ج.م)
+                قيمة افتراضية فقط؛ يمكن أن تكون رسوم نافذ مختلفة لكل عميل أو صفرًا.
               </span>
             </div>
           </div>

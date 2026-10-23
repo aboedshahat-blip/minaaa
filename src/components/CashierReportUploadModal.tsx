@@ -118,8 +118,9 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       return;
     }
 
-    const sysComm = settings.default_system_commission ?? 200;
-    const nafezComm = settings.default_nafez_commission ?? 0;
+    const selectedMovement = movements.find((movement) => movement.id === selectedMovementId);
+    const sysComm = selectedMovement?.system_commission ?? settings.default_system_commission ?? 200;
+    const nafezComm = selectedMovement?.nafez_commission ?? settings.default_nafez_commission ?? 0;
     const cashierVal = Number(manualAmount);
     const newTotal = cashierVal + sysComm + nafezComm;
 
@@ -134,8 +135,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
           cashier_invoice: cashierVal,
           paid_amount: paid,
           booking_category: manualCategory || m.booking_category,
-          system_commission: m.system_commission || sysComm,
-          nafez_commission: m.nafez_commission || nafezComm,
+          system_commission: m.system_commission ?? sysComm,
+          nafez_commission: m.nafez_commission ?? nafezComm,
           total_amount: newTotal,
           remaining_amount: Math.max(0, newTotal - paid),
           payment_status: paid >= newTotal && newTotal > 0 ? ('paid' as const) : paid > 0 ? ('partial' as const) : ('unpaid' as const),

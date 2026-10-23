@@ -114,8 +114,8 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
     const now = new Date().toISOString().split('T')[0];
-    const sysComm = settings.default_system_commission ?? 200;
-    const nafezComm = settings.default_nafez_commission ?? 0;
+    const defaultSysComm = settings.default_system_commission ?? 200;
+    const defaultNafezComm = settings.default_nafez_commission ?? 0;
 
     let seqCounter = currentMaxSeq;
     const newCustomersMap = new Map<string, Customer>();
@@ -124,10 +124,6 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     const finalizedMovements: Movement[] = parsedRows.map((row) => {
       seqCounter += 1;
       const cashier = row.cashier_invoice || defaultCashierInvoice || 0;
-      const systemCommission = applyDefaultCommissions ? sysComm : 0;
-      const nafezCommission = applyDefaultCommissions ? nafezComm : 0;
-      const total = cashier + systemCommission + nafezCommission;
-
       const cleanDriver = (row.driver_name || '').trim();
       let rowCustomer = targetCustomer;
 
@@ -154,11 +150,21 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
             ],
             created_at: new Date().toISOString(),
             notes: 'تم إنشاؤه تلقائياً كعميل/سائق من كشف الشيت المرفوع',
+            system_commission: defaultSysComm,
+            nafez_commission: defaultNafezComm,
           };
           newCustomersMap.set(cleanDriver.toLowerCase(), newCust);
           rowCustomer = newCust;
         }
       }
+
+      const systemCommission = applyDefaultCommissions
+        ? (rowCustomer?.system_commission ?? defaultSysComm)
+        : 0;
+      const nafezCommission = applyDefaultCommissions
+        ? (rowCustomer?.nafez_commission ?? defaultNafezComm)
+        : 0;
+      const total = cashier + systemCommission + nafezCommission;
 
       return {
         id: `m-imp-${Date.now()}-${seqCounter}`,

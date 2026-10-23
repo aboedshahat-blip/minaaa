@@ -79,9 +79,9 @@ export const MovementModal: React.FC<MovementModalProps> = ({
         container_desc: '',
         container_path: '',
         cashier_invoice: 0,
-        system_commission: settings.default_system_commission ?? 200,
-        nafez_commission: settings.default_nafez_commission ?? 0,
-        total_amount: (settings.default_system_commission ?? 200) + (settings.default_nafez_commission ?? 0),
+        system_commission: customers[0]?.system_commission ?? settings.default_system_commission ?? 200,
+        nafez_commission: customers[0]?.nafez_commission ?? settings.default_nafez_commission ?? 0,
+        total_amount: (customers[0]?.system_commission ?? settings.default_system_commission ?? 200) + (customers[0]?.nafez_commission ?? settings.default_nafez_commission ?? 0),
         payment_status: 'unpaid',
         paid_amount: 0,
         remaining_amount: (settings.default_system_commission ?? 200) + (settings.default_nafez_commission ?? 0),
@@ -128,6 +128,8 @@ export const MovementModal: React.FC<MovementModalProps> = ({
         customer_id: cust.id,
         customer_code: cust.code,
         customer_name: cust.name,
+        system_commission: cust.system_commission ?? settings.default_system_commission ?? 200,
+        nafez_commission: cust.nafez_commission ?? settings.default_nafez_commission ?? 0,
         truck_no: firstTruck ? firstTruck.truck_no : prev.truck_no,
         trailer_no: firstTruck ? firstTruck.trailer_no || '' : prev.trailer_no,
         driver_name: firstTruck ? firstTruck.driver_name || '' : prev.driver_name,
@@ -485,12 +487,13 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   </label>
                   <input
                     type="number"
-                    step="1"
+                    min="0"
+                    step="0.01"
                     value={formData.system_commission ?? 200}
                     onChange={(e) => setFormData({ ...formData, system_commission: Number(e.target.value) })}
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-blue-800"
                   />
-                  <span className="text-[10px] text-slate-500">القيمة الافتراضية 200 ج.م</span>
+                  <span className="text-[10px] text-slate-500">يُستخدم سعر العميل المحفوظ، ويمكن تغييره لهذه الحركة فقط.</span>
                 </div>
 
                 <div>
@@ -499,13 +502,14 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   </label>
                   <input
                     type="number"
-                    step="1"
+                    min="0"
+                    step="0.01"
                     placeholder="0"
-                    value={formData.nafez_commission || ''}
+                    value={formData.nafez_commission ?? 0}
                     onChange={(e) => setFormData({ ...formData, nafez_commission: Number(e.target.value) })}
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-indigo-800"
                   />
-                  <span className="text-[10px] text-slate-500">إن وجدت، وممكن تبقى 0</span>
+                  <span className="text-[10px] text-slate-500">يُستخدم سعر نافذ المحفوظ للعميل، والصفر يعني لا توجد رسوم.</span>
                 </div>
 
                 <div>

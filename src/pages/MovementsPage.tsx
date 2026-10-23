@@ -672,7 +672,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                             )}
                           </td>
                           <td className="p-2 border border-slate-100 text-center font-mono font-bold">{(m.cashier_invoice || 0).toLocaleString()} ج</td>
-                          <td className="p-2 border border-slate-100 text-center font-mono text-blue-700">{(m.system_commission || 200).toLocaleString()} ج</td>
+                          <td className="p-2 border border-slate-100 text-center font-mono text-blue-700">{(m.system_commission ?? settings?.default_system_commission ?? 200).toLocaleString()} ج</td>
                           <td className="p-2 border border-slate-100 text-center font-mono text-indigo-700">{(m.nafez_commission || 0).toLocaleString()} ج</td>
                           <td className="p-2 border border-slate-100 text-center font-mono font-black text-slate-900">{(m.total_amount || 0).toLocaleString()} ج</td>
                           <td className="p-2 border border-slate-100 text-center whitespace-nowrap">
@@ -844,7 +844,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                               )}
                             </td>
                             <td className="p-2 border border-slate-100 text-center font-mono font-semibold">{(m.cashier_invoice || 0).toLocaleString()}</td>
-                            <td className="p-2 border border-slate-100 text-center font-mono text-blue-700">{(m.system_commission || 200).toLocaleString()}</td>
+                            <td className="p-2 border border-slate-100 text-center font-mono text-blue-700">{(m.system_commission ?? settings?.default_system_commission ?? 200).toLocaleString()}</td>
                             <td className="p-2 border border-slate-100 text-center font-mono text-indigo-700">{(m.nafez_commission || 0).toLocaleString()}</td>
                             <td className="p-2 border border-slate-100 text-center">
                               <input
@@ -1033,7 +1033,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                               <span className="inline-block mt-0.5 text-[9px] text-slate-400">غير مربوط</span>
                             )}
                           </td>
-                          <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700 no-print">{(m.system_commission || 200).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700 no-print">{(m.system_commission ?? settings?.default_system_commission ?? 200).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center font-mono font-bold text-indigo-700 no-print">{(m.nafez_commission || 0).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center font-mono font-black text-slate-900 bg-slate-50 no-print">{(m.total_amount || 0).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center whitespace-nowrap no-print">
