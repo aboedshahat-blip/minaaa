@@ -217,8 +217,8 @@ export async function exportCustomerStatementPdf(
   container.style.position = 'fixed';
   container.style.left = '-9999px';
   container.style.top = '0';
-  container.style.width = '850px';
-  container.style.padding = '30px';
+  container.style.width = '1200px';
+  container.style.padding = '24px';
   container.style.backgroundColor = '#ffffff';
   container.style.color = '#0f172a';
   container.style.fontFamily = "'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif";
@@ -237,15 +237,16 @@ export async function exportCustomerStatementPdf(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${escapeHtml(m.declaration_no || '-')}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center;">${escapeHtml(m.truck_no || '-')}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 11px;">${escapeHtml(m.movement_date || '-')}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-size: 10px; color: #4338ca;">${escapeHtml(m.cashier_receipt_no || '-')}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold;">${(Number(m.cashier_invoice) || 0).toLocaleString()}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #1d4ed8;">${(Number(m.system_commission) || 0).toLocaleString()}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: ${m.discount ? '#e11d48' : '#64748b'};">${m.discount ? `${Number(m.discount).toLocaleString()}-` : '0'}</td>
-      <td style="padding: 6px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: 900; background-color: #eff6ff;">${(Number(m.total_amount) || 0).toLocaleString()} ج.م</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${escapeHtml(m.declaration_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center; direction:ltr; unicode-bidi:plaintext;">${escapeHtml(m.truck_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${escapeHtml(m.movement_date || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-size: 11px; color: #4338ca; direction:ltr; unicode-bidi:plaintext; overflow-wrap:anywhere;">${escapeHtml(m.cashier_receipt_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold;">${(Number(m.cashier_invoice) || 0).toLocaleString('en-US')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #1d4ed8;">${(Number(m.system_commission) || 0).toLocaleString('en-US')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #0f766e;">${(Number(m.nafez_commission) || 0).toLocaleString('en-US')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: ${m.discount ? '#e11d48' : '#64748b'};">${m.discount ? `${Number(m.discount).toLocaleString('en-US')}-` : '0'}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: 900; background-color: #eff6ff;">${(Number(m.total_amount) || 0).toLocaleString('en-US')} ج.م</td>
     </tr>
   `
     )
@@ -288,17 +289,18 @@ export async function exportCustomerStatementPdf(
     </div>
 
     <!-- Movements Table -->
-    <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1px solid #cbd5e1; text-align: right; margin-bottom: 15px;">
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; border: 1px solid #cbd5e1; text-align: right; margin-bottom: 15px;">
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 7px 4px; border: 1px solid #334155; width: 30px;">م</th>
-          <th style="padding: 7px 6px; border: 1px solid #334155;">رقم الحاوية</th>
-          <th style="padding: 7px 6px; border: 1px solid #334155;">رقم الإقرار</th>
-          <th style="padding: 7px 6px; border: 1px solid #334155;">رقم الشاحنة</th>
+          <th style="padding: 8px 5px; border: 1px solid #334155; width: 16%;">رقم الحاوية</th>
+          <th style="padding: 8px 5px; border: 1px solid #334155; width: 8%;">رقم الإقرار</th>
+          <th style="padding: 8px 5px; border: 1px solid #334155; width: 11%;">رقم الشاحنة</th>
           <th style="padding: 7px 6px; border: 1px solid #334155;">التاريخ</th>
-          <th style="padding: 7px 6px; border: 1px solid #334155;">مسلسل الكاشير</th>
+          <th style="padding: 8px 5px; border: 1px solid #334155; width: 14%;">مسلسل الكاشير</th>
           <th style="padding: 7px 6px; border: 1px solid #334155;">الكاشير (الميناء)</th>
           <th style="padding: 7px 6px; border: 1px solid #334155;">العمولة</th>
+          <th style="padding: 7px 6px; border: 1px solid #334155;">نافذ</th>
           <th style="padding: 7px 6px; border: 1px solid #334155;">الخصم</th>
           <th style="padding: 7px 6px; border: 1px solid #334155; background-color: #1e3a8a;">الإجمالي</th>
         </tr>
@@ -310,7 +312,7 @@ export async function exportCustomerStatementPdf(
 
     <!-- Totals Breakdown Box -->
     <div style="background-color: #f1f5f9; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 10px;">
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; text-align: center; font-size: 12px;">
+      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; text-align: center; font-size: 12px;">
         <div style="background: #ffffff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
           <span style="font-size: 10px; color: #64748b; display: block;">إجمالي فواتير الكاشير</span>
           <strong style="font-size: 13px; color: #0f172a;">${totals.cashierTotal.toLocaleString()} ج.م</strong>
@@ -318,6 +320,10 @@ export async function exportCustomerStatementPdf(
         <div style="background: #ffffff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
           <span style="font-size: 10px; color: #64748b; display: block;">إجمالي عمولة المنظومة</span>
           <strong style="font-size: 13px; color: #1e3a8a;">${totals.systemCommTotal.toLocaleString()} ج.م</strong>
+        </div>
+        <div style="background: #ffffff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+          <span style="font-size: 10px; color: #64748b; display: block;">إجمالي رسوم نافذ</span>
+          <strong style="font-size: 13px; color: #0f766e;">${totals.nafezCommTotal.toLocaleString()} ج.م</strong>
         </div>
         <div style="background: #ffffff; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
           <span style="font-size: 10px; color: #64748b; display: block;">إجمالي الخصم الممنوح</span>
@@ -373,7 +379,7 @@ export async function exportCustomerStatementPdf(
     });
 
     const pdf = new jsPDF({
-      orientation: 'portrait',
+      orientation: 'landscape',
       unit: 'mm',
       format: 'a4',
     });
