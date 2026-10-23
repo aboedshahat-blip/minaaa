@@ -27,6 +27,8 @@ export interface CashierMatchResult {
   cashierReceiptNo: string;
   bookingCategory: string;
   totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
 }
 
 /**
@@ -43,28 +45,52 @@ export const normalizeArabic = (text: string): string => {
     .trim();
 };
 
+const normalizeNumerals = (text: string): string => text.replace(/[٠-٩۰-۹]/g, (digit) => {
+  const index = '٠١٢٣٤٥٦٧٨٩'.indexOf(digit);
+  return String(index >= 0 ? index : '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit));
+});
+
+const getReceiptDate = (receiptNo: string): number | null => {
+  const match = receiptNo.match(/(\d{2})(\d{2})(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const time = Date.UTC(2000 + Number(year), Number(month) - 1, Number(day));
+  const date = new Date(time);
+  return date.getUTCFullYear() === 2000 + Number(year) &&
+    date.getUTCMonth() === Number(month) - 1 && date.getUTCDate() === Number(day)
+    ? time
+    : null;
+};
+
+const getMovementDate = (movementDate: string): number | null => {
+  const match = movementDate?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const time = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  const date = new Date(time);
+  return date.getUTCFullYear() === Number(year) && date.getUTCMonth() === Number(month) - 1 && date.getUTCDate() === Number(day)
+    ? time
+    : null;
+};
+
 /**
  * Extracts clean 3-4 digits for Egyptian vehicle license plates.
  */
 export const extractPlateDigits = (text: string): string => {
   if (!text) return '';
-  const westernDigits = text.replace(/[٠-٩۰-۹]/g, (digit) => {
-    const arabicIndic = '٠١٢٣٤٥٦٧٨٩';
-    const persian = '۰۱۲۳۴۵۶۷۸۹';
-    const index = arabicIndic.indexOf(digit);
-    return String(index >= 0 ? index : persian.indexOf(digit));
-  });
+  const westernDigits = normalizeNumerals(text);
   // Look for 3 or 4 digit plate numbers first
   const match = westernDigits.match(/\b\d{3,4}\b/);
   if (match) return match[0];
   return westernDigits.replace(/\D/g, '');
 };
 
-const plateLetterVariants = (text: string): string[] => {
-  const letters = extractPlateLetters(text).replace(/\s+/g, '');
-  if (!letters) return [];
-  const reversed = Array.from(letters).reverse().join('');
-  return Array.from(new Set([letters, reversed]));
+const extractAllPlateDigits = (text: string): string[] => {
+  if (!text) return [];
+  const westernDigits = normalizeNumerals(text);
+  const delimitedPlates = Array.from(westernDigits.matchAll(/[-–—]\s*(\d{3,4})\s*[-–—]/g), (match) => match[1]);
+  if (delimitedPlates.length > 0) return Array.from(new Set(delimitedPlates));
+  return Array.from(new Set(westernDigits.match(/\b\d{3,4}\b/g) || []));
 };
 
 /**
@@ -117,11 +143,12 @@ export const parseVehicleString = (
   const truckPart = parts[0] || '';
   const trailerPart = parts[1] || '';
 
-  const truck_digits = extractDigits(truckPart);
+  const plateDigits = extractAllPlateDigits(vehicleStr);
+  const truck_digits = plateDigits[0] || extractDigits(truckPart);
   const truck_letters = extractPlateLetters(truckPart);
   const truck_no = `${truck_letters.split('').join(' ')} ${truck_digits}`.trim();
 
-  const trailer_digits = extractDigits(trailerPart);
+  const trailer_digits = plateDigits[1] || extractDigits(trailerPart);
   const trailer_letters = extractPlateLetters(trailerPart);
   const trailer_no = `${trailer_letters.split('').join(' ')} ${trailer_digits}`.trim();
 
@@ -163,7 +190,7 @@ export const parseCashierTextLines = (lines: string[]): CashierInvoiceEntry[] =>
       if (amountMatches && amountMatches.length > 0) {
         // Exclude parts that look like dates or sequence numbers
         const validAmounts = amountMatches
-          .map(Number)
+          .map((amount) => Number(normalizeNumerals(amount)))
           .filter((n) => n > 0 && n < 100000 && !receipt_no.includes(String(n)));
         if (validAmounts.length > 0) {
           amount = validAmounts[validAmounts.length - 1]; // amount is typically at the end of the line
@@ -289,75 +316,118 @@ export const matchCashierEntriesWithMovements = (
   const updatedMovements = [...movements];
   const matchResults: CashierMatchResult[] = [];
   const matchedEntryIndexes = new Set<number>();
-  const usedMovementIds = new Set<string>();
+  const entriesByMovement = new Map<number, Array<{ entry: CashierInvoiceEntry; entryIndex: number; dayDistance: number | null }>>();
 
-  // Process each movement and find best matching cashier entry
-  updatedMovements.forEach((mov, movIdx) => {
-    const mTruckDigits = extractDigits(mov.truck_no || '');
-    const mTrailerDigits = extractDigits(mov.trailer_no || '');
-    const movementDigits = [mTruckDigits, mTrailerDigits].filter(Boolean);
-    const movementLetters = [mov.truck_no, mov.trailer_no].flatMap((plate) => plateLetterVariants(plate || ''));
+  // Match each receipt against the full unordered truck/trailer pair. If the
+  // report exposes only one plate number, accept it only when it identifies
+  // exactly one movement; ambiguous receipts remain for manual review.
+  entries.forEach((entry, entryIndex) => {
+    const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits].filter(Boolean)));
+    if (entryDigits.length === 0) return;
 
-    if (!mTruckDigits && !mTrailerDigits) return;
+    const exactCandidates: Array<{ index: number; dayDistance: number | null }> = [];
+    const singlePlateCandidates: Array<{ index: number; dayDistance: number | null }> = [];
+    const receiptDate = getReceiptDate(entry.receipt_no);
+    updatedMovements.forEach((movement, movementIndex) => {
+      const movementDigits = Array.from(new Set([
+        extractDigits(movement.truck_no || ''),
+        extractDigits(movement.trailer_no || ''),
+      ].filter(Boolean)));
+      if (movementDigits.length === 0) return;
 
-    // Search for matching cashier entry
-    for (let eIdx = 0; eIdx < entries.length; eIdx++) {
-      if (matchedEntryIndexes.has(eIdx)) continue;
-      const entry = entries[eIdx];
+      const movementDate = getMovementDate(movement.movement_date || '');
+      const dayDistance = receiptDate != null && movementDate != null
+        ? Math.round(Math.abs(receiptDate - movementDate) / 86_400_000)
+        : null;
+      // Receipt serials contain their issue date. Use it to distinguish repeated
+      // truck pairs from different trips; old reports stay unmatched for review.
+      if (dayDistance != null && dayDistance > 3) return;
 
-      const entryDigits = [entry.truck_digits, entry.trailer_digits].filter(Boolean);
-      const matchingDigits = entryDigits.filter((digits) => movementDigits.includes(digits));
-      const digitMatch = matchingDigits.length > 0;
-      const entryLetters = [entry.truck_letters, entry.trailer_letters].flatMap((plate) => plateLetterVariants(plate || ''));
-      const lettersMatch = entryLetters.some((letters) => movementLetters.includes(letters));
-      // Cashier/PDF extraction may reverse the truck and trailer columns in RTL text.
-      // Compare unordered plate numbers and allow one side to omit the trailer number.
-      // The uploaded cashier report has plate digits but omits plate letters.
-      // Match the complete unordered pair when both sides include truck + trailer,
-      // otherwise allow the single shared number to identify a one-vehicle booking.
-      const isMatch = digitMatch;
-
-      if (isMatch) {
-        matchedEntryIndexes.add(eIdx);
-        usedMovementIds.add(mov.id);
-
-        const newCashier = entry.amount > 0 ? entry.amount : mov.cashier_invoice;
-        const sysComm = mov.system_commission || defaultSystemCommission;
-        const nafezComm = mov.nafez_commission || 0;
-        const newTotal = newCashier + sysComm + nafezComm;
-        // A cashier report is proof that the external cashier invoice was paid.
-        // Keep any larger amount already collected on the movement.
-        const paid = Math.max(Number(mov.paid_amount) || 0, newCashier);
-        const remaining = Math.max(0, newTotal - paid);
-
-        const updatedMov: Movement = {
-          ...mov,
-          cashier_receipt_no: entry.receipt_no,
-          cashier_invoice: newCashier,
-          booking_category: entry.booking_category || mov.booking_category,
-          total_amount: newTotal,
-          remaining_amount: remaining,
-          payment_status: paid >= newTotal && newTotal > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
-        };
-
-        updatedMovements[movIdx] = updatedMov;
-
-        matchResults.push({
-          movementId: mov.id,
-          movementSeq: mov.seq,
-          truckNo: mov.truck_no,
-          driverName: mov.driver_name || mov.customer_name,
-          containerNo: mov.container_no,
-          oldCashierInvoice: mov.cashier_invoice,
-          newCashierInvoice: newCashier,
-          cashierReceiptNo: entry.receipt_no,
-          bookingCategory: entry.booking_category,
-          totalAmount: newTotal,
-        });
-
-        break;
+      if (entryDigits.length >= 2 && entryDigits.every((digits) => movementDigits.includes(digits))) {
+        exactCandidates.push({ index: movementIndex, dayDistance });
+      } else if (entryDigits.length === 1 && movementDigits.includes(entryDigits[0])) {
+        singlePlateCandidates.push({ index: movementIndex, dayDistance });
+      } else if (entryDigits.length >= 2 && movementDigits.length === 1 && entryDigits.includes(movementDigits[0])) {
+        singlePlateCandidates.push({ index: movementIndex, dayDistance });
       }
-    }
+    });
+
+    const candidates = exactCandidates.length > 0 ? exactCandidates : singlePlateCandidates;
+    if (candidates.length === 0) return;
+    const datedCandidates = candidates.filter((candidate) => candidate.dayDistance != null);
+    const scoredCandidates = datedCandidates.length > 0 ? datedCandidates : candidates;
+    const bestDistance = scoredCandidates.reduce<number | null>((best, candidate) =>
+      candidate.dayDistance == null ? best : best == null ? candidate.dayDistance : Math.min(best, candidate.dayDistance), null);
+    const bestCandidates = bestDistance == null
+      ? scoredCandidates
+      : scoredCandidates.filter((candidate) => candidate.dayDistance === bestDistance);
+    if (bestCandidates.length !== 1) return;
+    const { index: movementIndex, dayDistance } = bestCandidates[0];
+    const assigned = entriesByMovement.get(movementIndex) || [];
+    assigned.push({ entry, entryIndex, dayDistance });
+    entriesByMovement.set(movementIndex, assigned);
+  });
+
+  entriesByMovement.forEach((assignedEntries, movementIndex) => {
+    const movement = updatedMovements[movementIndex];
+    const datedEntries = assignedEntries.filter((assigned) => assigned.dayDistance != null);
+    const bestMovementDayDistance = datedEntries.length > 0
+      ? Math.min(...datedEntries.map((assigned) => assigned.dayDistance as number))
+      : null;
+    const relevantEntries = bestMovementDayDistance == null
+      ? assignedEntries
+      : assignedEntries.filter((assigned) => assigned.dayDistance === bestMovementDayDistance);
+    relevantEntries.forEach((assigned) => matchedEntryIndexes.add(assigned.entryIndex));
+    const movementEntries = relevantEntries.map((assigned) => assigned.entry);
+    const existingReceiptNumbers = (movement.cashier_receipt_no || '')
+      .split(/[,،\n]+/).map((receipt) => receipt.trim()).filter(Boolean);
+    const existingReceiptSet = new Set(existingReceiptNumbers);
+    const seenReceipts = new Set(existingReceiptSet);
+    const newEntries = movementEntries.filter((entry) => {
+      if (seenReceipts.has(entry.receipt_no)) return false;
+      seenReceipts.add(entry.receipt_no);
+      return true;
+    });
+    if (newEntries.length === 0) return;
+
+    const addedCashier = newEntries.reduce((sum, entry) => sum + Math.max(0, Number(entry.amount) || 0), 0);
+    const oldCashier = Number(movement.cashier_invoice) || 0;
+    const newCashier = oldCashier + addedCashier;
+    const systemCommission = Number(movement.system_commission) || defaultSystemCommission;
+    const nafezCommission = Number(movement.nafez_commission) || 0;
+    const newTotal = newCashier + systemCommission + nafezCommission;
+    // Each newly linked cashier receipt confirms that amount was paid.
+    const paid = (Number(movement.paid_amount) || 0) + addedCashier;
+    const remaining = Math.max(0, newTotal - paid);
+    const receiptNumbers = Array.from(new Set([...existingReceiptNumbers, ...newEntries.map((entry) => entry.receipt_no)]));
+    const updatedMovement: Movement = {
+      ...movement,
+      cashier_receipt_no: receiptNumbers.join(', '),
+      cashier_invoice: newCashier,
+      paid_amount: paid,
+      system_commission: systemCommission,
+      nafez_commission: nafezCommission,
+      booking_category: newEntries[newEntries.length - 1].booking_category || movement.booking_category,
+      total_amount: newTotal,
+      remaining_amount: remaining,
+      payment_status: paid >= newTotal && newTotal > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
+    };
+    updatedMovements[movementIndex] = updatedMovement;
+
+    matchResults.push({
+      movementId: movement.id,
+      movementSeq: movement.seq,
+      truckNo: movement.truck_no,
+      driverName: movement.driver_name || movement.customer_name,
+      containerNo: movement.container_no,
+      oldCashierInvoice: oldCashier,
+      newCashierInvoice: newCashier,
+      cashierReceiptNo: newEntries.map((entry) => entry.receipt_no).join(', '),
+      bookingCategory: updatedMovement.booking_category || '',
+      totalAmount: newTotal,
+      paidAmount: paid,
+      remainingAmount: remaining,
+    });
   });
 
   const unmatchedEntries = entries.filter((_, idx) => !matchedEntryIndexes.has(idx));

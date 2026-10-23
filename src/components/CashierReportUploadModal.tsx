@@ -39,6 +39,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const [matchResults, setMatchResults] = useState<CashierMatchResult[]>([]);
   const [updatedMovementsList, setUpdatedMovementsList] = useState<Movement[]>([]);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [unmatchedEntries, setUnmatchedEntries] = useState<CashierInvoiceEntry[]>([]);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isImageMode, setIsImageMode] = useState(false);
   const [selectedMovementId, setSelectedMovementId] = useState('');
@@ -53,6 +54,11 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setParsedEntries([]);
+    setMatchResults([]);
+    setUpdatedMovementsList([]);
+    setUnmatchedCount(0);
+    setUnmatchedEntries([]);
     setLoading(true);
     setFileName(file.name);
 
@@ -93,6 +99,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       setMatchResults(matches);
       setUpdatedMovementsList(matchedMovements);
       setUnmatchedCount(unmatchedEntries.length);
+      setUnmatchedEntries(unmatchedEntries);
     } catch (err: any) {
       console.error(err);
       alert(`خطأ أثناء قراءة تقرير الكاشير: ${err.message || 'يرجى مراجعة الملف وصيغته'}`);
@@ -125,6 +132,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
           ...m,
           cashier_receipt_no: manualReceiptNo || m.cashier_receipt_no,
           cashier_invoice: cashierVal,
+          paid_amount: paid,
           booking_category: manualCategory || m.booking_category,
           system_commission: m.system_commission || sysComm,
           nafez_commission: m.nafez_commission || nafezComm,
@@ -367,6 +375,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                   </button>
                 </div>
               </div>
+
             </div>
           )}
 
@@ -396,7 +405,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                   <span className="text-[11px] text-amber-700 block font-semibold">
-                    فواتير غير مسجلة بالسيستم بعد
+                    إيصالات لم تتم مطابقتها تلقائياً
                   </span>
                   <span className="text-xl font-black text-amber-800">
                     {unmatchedCount} فاتورة
@@ -430,6 +439,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                         <th className="p-2 text-center">تصنيف الحجز</th>
                         <th className="p-2 text-center font-bold text-indigo-900">مبلغ الكاشير</th>
                         <th className="p-2 text-center font-bold text-slate-900">الإجمالي بعد العمولة</th>
+                        <th className="p-2 text-center font-bold text-emerald-800">المدفوع</th>
+                        <th className="p-2 text-center font-bold text-rose-800">المتبقي</th>
                         <th className="p-2 text-center">الحالة</th>
                       </tr>
                     </thead>
@@ -462,6 +473,12 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                           <td className="p-2 text-center font-mono font-black text-slate-900 bg-blue-50/40">
                             {item.totalAmount.toLocaleString()} ج.م
                           </td>
+                          <td className="p-2 text-center font-mono font-black text-emerald-800 bg-emerald-50/50">
+                            {item.paidAmount.toLocaleString()} ج.م
+                          </td>
+                          <td className="p-2 text-center font-mono font-black text-rose-800 bg-rose-50/50">
+                            {item.remainingAmount.toLocaleString()} ج.م
+                          </td>
                           <td className="p-2 text-center">
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
                               جاهز للتحديث ✓
@@ -473,6 +490,34 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                   </table>
                 </div>
               </div>
+
+              {unmatchedEntries.length > 0 && (
+                <div className="border border-amber-200 rounded-xl overflow-hidden">
+                  <div className="bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">
+                    إيصالات لم يتم ربطها تلقائياً ({unmatchedEntries.length}) — لم نربطها بحركة بالتخمين
+                  </div>
+                  <div className="overflow-x-auto max-h-52">
+                    <table className="w-full text-xs text-right">
+                      <thead className="bg-amber-50/60 text-amber-900 sticky top-0">
+                        <tr>
+                          <th className="p-2">مسلسل الإيصال</th>
+                          <th className="p-2">أرقام اللوحات المقروءة</th>
+                          <th className="p-2 text-center">المبلغ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-amber-100 bg-white">
+                        {unmatchedEntries.map((entry) => (
+                          <tr key={entry.receipt_no}>
+                            <td className="p-2 font-mono font-bold">{entry.receipt_no}</td>
+                            <td className="p-2 font-mono">{[entry.truck_digits, entry.trailer_digits].filter(Boolean).join(' / ') || 'لم تُقرأ لوحة'}</td>
+                            <td className="p-2 text-center font-bold">{entry.amount.toLocaleString()} ج.م</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -66,13 +66,14 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
     const sysComm = Number(selectedMovement.system_commission) || 200;
     const nafezComm = Number(selectedMovement.nafez_commission) || 0;
     const newTotal = cashierInvoice + sysComm + nafezComm;
-    const paid = Number(selectedMovement.paid_amount) || 0;
+    const paid = Math.max(Number(selectedMovement.paid_amount) || 0, cashierInvoice);
     const remaining = Math.max(0, newTotal - paid);
 
     const updatedData: Partial<Movement> = {
       ...selectedMovement,
       cashier_receipt_no: receiptNo.trim(),
       cashier_invoice: cashierInvoice,
+      paid_amount: paid,
       booking_category: category,
       total_amount: newTotal,
       remaining_amount: remaining,

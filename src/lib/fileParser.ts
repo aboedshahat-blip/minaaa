@@ -117,6 +117,13 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
     const content = await page.getTextContent();
+    const pageDateMatch = content.items
+      .map((item: any) => item.str || '')
+      .join(' ')
+      .match(/\b(20\d{2})[/-](\d{1,2})[/-](\d{1,2})\b/);
+    const pageMovementDate = pageDateMatch
+      ? `${pageDateMatch[1]}-${pageDateMatch[2].padStart(2, '0')}-${pageDateMatch[3].padStart(2, '0')}`
+      : '';
 
     // Group items on this single page by vertical Y proximity (within 7px)
     const lineBuckets: { y: number; items: { x: number; str: string; dir?: string; width?: number }[] }[] = [];
@@ -301,6 +308,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       }
 
       const movementBase: Partial<Movement> = {
+        movement_date: pageMovementDate,
         container_path,
         container_desc,
         declaration_no,
