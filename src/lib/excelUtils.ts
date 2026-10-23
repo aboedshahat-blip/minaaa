@@ -34,7 +34,7 @@ export const exportTemplateToExcel = async (movements: Movement[], fileName = '�
     'محاور الشاحنة': m.truck_axles ?? 20,
     'وزن الشاحنة من واقع الرخصة': m.truck_weight ?? 7.5,
     'رقم الشاحنة': m.truck_no || '',
-    'م': m.seq ?? (index + 1),
+    'م': index + 1,
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);

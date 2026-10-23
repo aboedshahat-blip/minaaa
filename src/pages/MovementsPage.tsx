@@ -232,14 +232,18 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   const pickedBatchMovements = useMemo(() => {
     const selectedIds = new Set(selectedManifestBatchIds);
-    return filteredMovements.filter((movement) => selectedIds.has(getMovementBatch(movement).id));
+    return filteredMovements
+      .filter((movement) => selectedIds.has(getMovementBatch(movement).id))
+      .sort((a, b) => (a.seq || 0) - (b.seq || 0));
   }, [filteredMovements, selectedManifestBatchIds]);
 
   const manifestMovements = useMemo(() => {
-    if (selectedManifestBatch === 'all') return filteredMovements;
+    if (selectedManifestBatch === 'all') return filteredMovements.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
     if (selectedManifestBatch === 'picked') return pickedBatchMovements;
     const targetId = selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch;
-    return filteredMovements.filter((movement) => getMovementBatch(movement).id === targetId);
+    return filteredMovements
+      .filter((movement) => getMovementBatch(movement).id === targetId)
+      .sort((a, b) => (a.seq || 0) - (b.seq || 0));
   }, [filteredMovements, selectedManifestBatch, latestBatchId, pickedBatchMovements]);
 
   const toggleManifestBatchSelection = (batchId: string) => {
@@ -640,7 +644,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {manifestMovements.length > 0 ? manifestMovements.map((m, i) => (
                     <tr key={m.id} className="hover:bg-rose-50/30 transition">
-                      <td className="p-2 border border-slate-100 text-center font-bold text-rose-800 bg-slate-50">{m.seq || i + 1}</td>
+                      <td className="p-2 border border-slate-100 text-center font-bold text-rose-800 bg-slate-50">{i + 1}</td>
                       <td className="p-2 border border-slate-100 font-bold text-slate-900 whitespace-nowrap">
                         {m.truck_no}
                         {m.customer_name && <span className="block text-[10px] font-normal text-slate-500">{m.customer_name}</span>}

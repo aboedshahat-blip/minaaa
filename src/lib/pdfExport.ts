@@ -78,7 +78,7 @@ export async function exportMovementsToOfficialPdf(
     .map(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #cbd5e1; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-weight: bold; color: #1e3a8a;">${m.seq || idx + 1}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; font-weight: bold; text-align: center; color: #0f172a;">${escapeHtml(m.truck_no || '-')}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.truck_weight ?? 7.5}</td>
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.truck_axles ?? 20}</td>

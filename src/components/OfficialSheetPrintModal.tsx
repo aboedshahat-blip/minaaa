@@ -174,7 +174,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
                       className="border-b border-slate-300 hover:bg-slate-50 transition"
                     >
                       <td className="p-2 border border-slate-300 text-center font-bold text-blue-900 bg-slate-50/50">
-                        {m.seq || index + 1}
+                        {index + 1}
                       </td>
                       <td className="p-2 border border-slate-300 font-bold text-slate-900 text-center whitespace-nowrap">
                         {m.truck_no || '-'}
