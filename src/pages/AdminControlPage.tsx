@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ManagedUser, RolePermissions, SystemSettings } from '../types';
 import { OperationalSafetyBackup } from '../lib/storage';
@@ -88,6 +88,29 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [selectedBackupId, setSelectedBackupId] = useState('');
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+
+  const openLatestUndo = () => {
+    const latestBackup = safetyBackups[0];
+    if (!latestBackup) return;
+    setSelectedBackupId(latestBackup.id);
+    setRestorePassword('');
+    setRestoreError(null);
+    setIsRestoreDialogOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isUnlocked || !safetyBackups.length) return;
+    const handleUndoShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = target?.matches('input, textarea, select, [contenteditable="true"]');
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !isTyping) {
+        event.preventDefault();
+        openLatestUndo();
+      }
+    };
+    window.addEventListener('keydown', handleUndoShortcut);
+    return () => window.removeEventListener('keydown', handleUndoShortcut);
+  }, [isUnlocked, safetyBackups]);
 
   // Active selected user for permissions/password management
   const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
@@ -411,7 +434,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             <p className="mt-1 text-xs leading-6 text-emerald-800">يحفظ النظام تلقائيًا آخر 10 نسخ قبل حذف الحركات أو العميل أو مسح بيانات التشغيل. النسخ محفوظة على هذا الجهاز، والاستعادة تتطلب كلمة مرور الأدمن.</p>
             {safetyBackups[0] && <p className="mt-1 text-xs font-bold text-emerald-900">آخر نسخة: {new Date(safetyBackups[0].created_at).toLocaleString('ar-EG')} — {safetyBackups[0].label}</p>}
           </div>
-          <button type="button" disabled={!safetyBackups.length} onClick={()=>{setSelectedBackupId(safetyBackups[0]?.id || '');setRestorePassword('');setRestoreError(null);setIsRestoreDialogOpen(true);}} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>استعادة المحذوف</button>
+          <button type="button" disabled={!safetyBackups.length} onClick={openLatestUndo} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>تراجع عن آخر حذف (Ctrl+Z)</button>
         </div>
         {!safetyBackups.length && <p className="text-xs text-slate-600">لا توجد نسخة سابقة على هذا الجهاز حتى الآن. سيُنشئ النظام نسخة تلقائية قبل عمليات الحذف القادمة.</p>}
       </section>
