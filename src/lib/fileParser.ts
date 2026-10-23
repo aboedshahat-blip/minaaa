@@ -247,7 +247,12 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         }
       }
 
-      const container_path = rowTokens[0] === 'وارد' || rowTokens[0] === 'صادر' ? rowTokens[0] : 'وارد';
+      // Direction/condition belongs to its own cell and may appear anywhere
+      // in PDF.js token order, especially when RTL text is split into fragments.
+      const directionToken = rowTokens
+        .map((token) => token.replace(/[\s\u0640]/g, ''))
+        .find((token) => ['وارد', 'صادر', 'فارغ'].includes(token));
+      const container_path = directionToken || 'وارد';
       const container_desc = container_path;
 
       // Dynamic weights and axles
@@ -304,7 +309,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         const truckLetters = truckLetterItems.length > 1 && truckLetterItems.every((item) => item.dir === 'rtl')
           ? [...truckLetterItems].sort((a, b) => b.x - a.x).map((item) => item.str).join(' ')
           : truckLetterItems.map((item) => item.str).join(' ');
-        truck_no = [truckDigitsToken?.str || '', truckLetters].filter(Boolean).join(' ');
+        truck_no = [truckDigitsToken?.str || '', truckLetters].filter(Boolean).join(' - ');
       }
 
       const movementBase: Partial<Movement> = {
@@ -473,7 +478,7 @@ export const matrixToMovements = (matrix: unknown[][]): {
       }
 
       // Plate letters
-      if (/^[أ-ي\s]{2,8}$/.test(s) && !['وارد', 'صادر', 'ترانزيت', 'الرخصة', 'واقع', 'وزن', 'من'].includes(s)) {
+      if (/^[أ-ي\s]{2,8}$/.test(s) && !['وارد', 'صادر', 'فارغ', 'ترانزيت', 'الرخصة', 'واقع', 'وزن', 'من'].includes(s)) {
         plateLetters.push(s);
         return;
       }
@@ -484,14 +489,14 @@ export const matrixToMovements = (matrix: unknown[][]): {
         return;
       }
 
-      if (['وارد', 'صادر', 'ترانزيت'].includes(s)) {
+      if (['وارد', 'صادر', 'فارغ', 'ترانزيت'].includes(s)) {
         container_path = s;
         container_desc = s;
       }
     });
 
     if (plateNumbers.length > 0 && plateLetters.length > 0) {
-      truck_no = `${plateNumbers[0]} ${plateLetters[0]}`;
+      truck_no = `${plateNumbers[0]} - ${plateLetters[0]}`;
       if (plateNumbers.length > 1) {
         trailer_no = plateNumbers[1] + (plateLetters[1] ? ` ${plateLetters[1]}` : '');
       }
