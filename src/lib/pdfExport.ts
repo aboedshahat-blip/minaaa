@@ -99,11 +99,7 @@ export async function exportMovementsToOfficialPdf(
   container.innerHTML = `
     <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 18px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <img src="${vibLogoUrl}" alt="شعار VIB" style="width:86px;height:86px;object-fit:contain;flex:none;" />
-        <div style="text-align: right;">
-          <h2 style="font-size: 20px; font-weight: 900; color: #0f172a; margin: 0;">منظومة VIB اللوجستية</h2>
-          <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">إدارة حركة الشاحنات والحاويات بالميناء</p>
-        </div>
+        <img src="${vibLogoUrl}" alt="شعار VIB" style="width:148px;height:118px;object-fit:contain;flex:none;" />
         <div style="text-align: center;">
           <span style="display: inline-block; background-color: #0f172a; color: #ffffff; padding: 6px 18px; border-radius: 8px; font-size: 14px; font-weight: bold;">
             ${escapeHtml(title)}
@@ -266,16 +262,12 @@ export async function exportCustomerStatementPdf(
 
   container.innerHTML = `
     <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
-      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:92px;height:92px;object-fit:contain;flex:none;" />
-      <div style="text-align: right;">
-        <h2 style="font-size: 20px; font-weight: 900; color: #1e3a8a; margin: 0;">منظومة VIB اللوجستية</h2>
-        <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">${escapeHtml(placeName)}</p>
-      </div>
+      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:120px;object-fit:contain;flex:none;" />
       <div style="text-align: center;">
         <span style="display: inline-block; background-color: #1e3a8a; color: #ffffff; padding: 6px 20px; border-radius: 8px; font-size: 14px; font-weight: bold;">
           فاتورة ومطالبة حساب عميل / سائق
         </span>
-        <p style="font-size: 11px; color: #475569; margin: 4px 0 0 0;">كشف حساب مجمع للشحنات المنفذة</p>
+        <p style="font-size: 11px; color: #475569; margin: 4px 0 0 0;">${escapeHtml(placeName)}</p>
       </div>
       <div style="text-align: left; font-size: 11px; color: #475569;">
         <p style="margin: 0;"><strong>تاريخ الفاتورة:</strong> ${dateStr}</p>

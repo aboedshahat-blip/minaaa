@@ -127,9 +127,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             <div className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
               <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
                 <div className="text-right">
-                  <img src={vibLogoUrl} alt="شعار VIB" className="w-20 h-20 object-contain mb-1" />
-                  <p className="font-bold text-slate-900 text-sm">منظومة VIB اللوجستية</p>
-                  <p>إدارة وتشغيل حركة الشاحنات والحاويات بالميناء</p>
+                  <img src={vibLogoUrl} alt="شعار VIB" className="w-36 h-28 object-contain" />
                 </div>
                 <div className="text-center">
                   <span className="inline-block bg-slate-900 text-white font-bold text-sm px-4 py-1.5 rounded-lg shadow-sm">
