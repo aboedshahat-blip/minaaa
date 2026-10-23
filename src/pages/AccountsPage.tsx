@@ -19,6 +19,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 type AccountsSubTab = 'clients' | 'system_revenue' | 'receipts' | 'drivers';
 const ACCOUNTS_SUB_TAB_KEY = 'pls_accounts_sub_tab';
@@ -48,7 +49,9 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   onOpenPaymentModal,
   onBatchUpdateMovements,
 }) => {
+  const confirmAction = useConfirmAction();
   const [searchTerm, setSearchTerm] = useState('');
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [activeSubTab, setActiveSubTab] = useState<AccountsSubTab>(getStoredAccountsSubTab);
   const [driverSearch, setDriverSearch] = useState('');
   const [selectedDriverForInvoice, setSelectedDriverForInvoice] = useState<{ name: string; moves: Movement[] } | null>(null);
@@ -63,9 +66,15 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   }, [activeSubTab]);
 
   // Update individual shipment discount
-  const handleUpdateMovementDiscount = (movementId: string, discountVal: number) => {
+  const handleUpdateMovementDiscount = async (movementId: string, discountVal: number) => {
     if (!onBatchUpdateMovements) return;
     const disc = Math.max(0, discountVal || 0);
+    const current = movements.find((movement) => movement.id === movementId)?.discount || 0;
+    if (disc === current) { setDiscountDrafts((drafts) => ({ ...drafts, [movementId]: String(current) })); return; }
+    if (!await confirmAction(`هل تريد تغيير الخصم لهذه الحركة إلى ${disc.toLocaleString()} ج.م؟`, 'نعم، احفظ الخصم')) {
+      setDiscountDrafts((drafts) => ({ ...drafts, [movementId]: String(current) }));
+      return;
+    }
     const updated = movements.map((m) => {
       if (m.id === movementId) {
         const cashier = Number(m.cashier_invoice) || 0;
@@ -85,10 +94,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       return m;
     });
     onBatchUpdateMovements(updated);
+    setDiscountDrafts((drafts) => { const next = { ...drafts }; delete next[movementId]; return next; });
   };
 
   // Apply overall discount distributed to customer's shipments
-  const handleApplyOverallCustomerDiscount = (customerName: string) => {
+  const handleApplyOverallCustomerDiscount = async (customerName: string) => {
     if (!onBatchUpdateMovements) return;
     const custMoves = movements.filter((m) => (m.driver_name || m.customer_name) === customerName);
     if (custMoves.length === 0) return;
@@ -100,6 +110,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       alert('يرجى إدخال مبلغ خصم صحيح');
       return;
     }
+    if (!await confirmAction(`سيتم توزيع خصم ${overallDiscount.toLocaleString()} ج.م على ${custMoves.length} حركة للعميل ${customerName}. هل تريد المتابعة؟`, 'نعم، طبّق الخصم')) return;
 
     const perMoveDiscount = Math.round((overallDiscount / custMoves.length) * 100) / 100;
     const updated = movements.map((m) => {
@@ -873,8 +884,9 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                                 min="0"
                                 step="5"
                                 placeholder="0"
-                                value={m.discount || ''}
-                                onChange={(e) => handleUpdateMovementDiscount(m.id, Number(e.target.value))}
+                                value={discountDrafts[m.id] ?? String(m.discount || '')}
+                                onChange={(e) => setDiscountDrafts((drafts) => ({ ...drafts, [m.id]: e.target.value }))}
+                                onBlur={(e) => void handleUpdateMovementDiscount(m.id, Number(e.target.value))}
                                 className="w-16 bg-white border border-rose-300 rounded px-1 py-0.5 text-xs text-center font-bold text-rose-700 focus:outline-none focus:ring-1 focus:ring-rose-500"
                                 title="تعديل الخصم لهذه الشحنة"
                               />

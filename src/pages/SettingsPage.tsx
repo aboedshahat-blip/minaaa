@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { SystemSettings } from '../types';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import {
   Settings,
   DollarSign,
@@ -16,10 +17,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   settings,
   onSaveSettings,
 }) => {
+  const confirmAction = useConfirmAction();
   const [formData, setFormData] = useState<SystemSettings>(settings);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!await confirmAction('هل تريد حفظ إعدادات العمولات وقيم التشغيل الجديدة؟', 'نعم، احفظ الإعدادات')) return;
     onSaveSettings(formData);
     alert('تم حفظ إعدادات العمولات وقيم التشغيل بنجاح!');
   };

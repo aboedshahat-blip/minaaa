@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { Customer, Movement, Berth } from '../types';
 import {
   BarChart3,
@@ -25,6 +26,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   movements,
   berths,
 }) => {
+  const confirmAction = useConfirmAction();
   const [activeReport, setActiveReport] = useState<'detailed_client' | 'statistics'>('detailed_client');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
   const [dateFrom, setDateFrom] = useState('');
@@ -138,8 +140,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     XLSX.writeFile(wb, `تقرير_حركات_${selectedCustomer.code}_${selectedCustomer.name}.xlsx`);
   };
 
-  const handlePrint = () => {
-    if (!window.confirm('هل تريد طباعة التقرير الحالي؟')) return;
+  const handlePrint = async () => {
+    if (!await confirmAction('هل تريد طباعة التقرير الحالي؟', 'نعم، اطبع')) return;
     window.print();
   };
 

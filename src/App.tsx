@@ -56,6 +56,7 @@ import { CustomerModal } from './components/CustomerModal';
 import { BerthModal } from './components/BerthModal';
 import { PaymentModal } from './components/PaymentModal';
 import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
+import { ConfirmActionProvider, useConfirmAction } from './contexts/ConfirmActionContext';
 
 const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
   const cloudIds = new Set(cloudRows.map((row) => row.id));
@@ -75,6 +76,7 @@ const getStoredActiveTab = (): TabType => {
 };
 
 const AppContent: React.FC = () => {
+  const confirmAction = useConfirmAction();
   const {
     isAuthenticated,
     canViewFinancials,
@@ -340,12 +342,12 @@ const AppContent: React.FC = () => {
     setEditingMovement(null);
   };
 
-  const handleDeleteMovement = (id: string) => {
+  const handleDeleteMovement = async (id: string) => {
     if (!canDeleteMovements) {
       alert('ليس لديك صلاحية لحذف الحركات');
       return;
     }
-    if (window.confirm('هل أنت متأكد من حذف هذه الحركة من السيستم وقاعدة البيانات؟')) {
+    if (await confirmAction('هل تريد حذف هذه الحركة من النظام وقاعدة البيانات؟', 'نعم، احذف')) {
       captureSafetyBackup('قبل حذف حركة');
       const updated = movements.filter((m) => m.id !== id);
       setMovements(updated);
@@ -359,7 +361,7 @@ const AppContent: React.FC = () => {
       alert('هذه العملية تتطلب صلاحيات المدير العام.');
       return;
     }
-    if (window.confirm('⚠️ تحذير تصفير السيستم:\nهل أنت متأكد من مسح وتصفير كافة الحركات والشحنات المسجلة؟\nسيتم إفراغ النظام وقاعدة البيانات تماماً لتسليمه للعميل خالي من أي بيانات تجريبية.')) {
+    if (await confirmAction('تحذير: سيتم حذف كل الحركات والشحنات من النظام وقاعدة البيانات. هل تريد المتابعة؟', 'نعم، امسح الكل')) {
       captureSafetyBackup('قبل مسح كل الحركات');
       setMovements([]);
       saveMovements([]);
@@ -416,14 +418,13 @@ const AppContent: React.FC = () => {
       if (editingText) return;
       if (!getSafetyBackups().length) return;
       event.preventDefault();
-      if (!window.confirm('سيتم التراجع عن آخر حذف واستعادة البيانات السابقة. هل تريد المتابعة؟')) return;
-      void handleUndoLatestDeletion().catch((error) => {
-        window.alert(error instanceof Error ? error.message : 'تعذر التراجع عن آخر حذف.');
-      });
+      void confirmAction('سيتم استعادة البيانات كما كانت قبل آخر حذف. هل تريد التراجع؟', 'نعم، تراجع').then((confirmed) => {
+        if (confirmed) return handleUndoLatestDeletion();
+      }).catch((error) => window.alert(error instanceof Error ? error.message : 'تعذر التراجع عن آخر حذف.'));
     };
     window.addEventListener('keydown', handleUndoShortcut);
     return () => window.removeEventListener('keydown', handleUndoShortcut);
-  }, [safetyBackups]);
+  }, [safetyBackups, confirmAction]);
 
   const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
     const batchAt = new Date().toISOString();
@@ -494,12 +495,12 @@ const AppContent: React.FC = () => {
     setEditingCustomer(null);
   };
 
-  const handleDeleteCustomer = (id: string) => {
+  const handleDeleteCustomer = async (id: string) => {
     if (!canDeleteCustomers) {
       alert('ليس لديك صلاحية لحذف العملاء');
       return;
     }
-    if (window.confirm('هل أنت متأكد من حذف هذا العميل من المنظومة؟')) {
+    if (await confirmAction('هل تريد حذف هذا العميل من المنظومة؟', 'نعم، احذف العميل')) {
       captureSafetyBackup('قبل حذف عميل');
       const updated = customers.filter((c) => c.id !== id);
       setCustomers(updated);
@@ -530,12 +531,12 @@ const AppContent: React.FC = () => {
     setEditingBerth(null);
   };
 
-  const handleDeleteBerth = (id: string) => {
+  const handleDeleteBerth = async (id: string) => {
     if (!canManageBerths) {
       alert('ليس لديك صلاحية لحذف الأرصفة');
       return;
     }
-    if (window.confirm('هل أنت متأكد من حذف هذا الرصيف؟')) {
+    if (await confirmAction('هل تريد حذف هذا الرصيف؟', 'نعم، احذف الرصيف')) {
       captureSafetyBackup('قبل حذف رصيف');
       const updated = berths.filter((b) => b.id !== id);
       setBerths(updated);
@@ -755,8 +756,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ConfirmActionProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ConfirmActionProvider>
   );
 }

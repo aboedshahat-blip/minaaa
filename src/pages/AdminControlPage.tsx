@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { ManagedUser, RolePermissions, SystemSettings } from '../types';
 import { OperationalSafetyBackup } from '../lib/storage';
 import {
@@ -49,6 +50,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   onClearOperationalData,
   onRestoreSafetyBackup,
 }) => {
+  const confirmAction = useConfirmAction();
   const {
     users,
     currentUser,
@@ -150,8 +152,9 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       return;
     }
 
-    const confirmed = window.confirm(
-      'تحذير: سيتم حذف كل الحركات والعملاء وسندات القبض من قاعدة البيانات والأجهزة المرتبطة. ستظل حسابات المستخدمين وكلمات المرور والإعدادات والأرصفة محفوظة. هل تريد المتابعة؟'
+    const confirmed = await confirmAction(
+      'تحذير: سيتم حذف كل الحركات والعملاء وسندات القبض من قاعدة البيانات والأجهزة المرتبطة. ستظل حسابات المستخدمين وكلمات المرور والإعدادات والأرصفة محفوظة. هل تريد المتابعة؟',
+      'نعم، امسح بيانات التشغيل'
     );
     if (!confirmed) return;
 
@@ -182,7 +185,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       setRestoreError('اختر نسخة محفوظة للاستعادة.');
       return;
     }
-    if (!window.confirm(`سيتم استبدال بيانات التشغيل الحالية بالنسخة المحفوظة بتاريخ ${new Date(backup.created_at).toLocaleString('ar-EG')} (${backup.label}). قد تختفي أي بيانات أضيفت بعد هذه النسخة. هل تريد الاستمرار؟`)) return;
+    if (!await confirmAction(`سيتم استبدال بيانات التشغيل الحالية بالنسخة المحفوظة بتاريخ ${new Date(backup.created_at).toLocaleString('ar-EG')} (${backup.label}). قد تختفي أي بيانات أضيفت بعد هذه النسخة. هل تريد الاستمرار؟`, 'نعم، استعد النسخة')) return;
     setIsRestoring(true);
     setRestoreError(null);
     try {
@@ -196,7 +199,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     }
   };
 
-  const handleTogglePermission = (userId: string, key: keyof RolePermissions) => {
+  const handleTogglePermission = async (userId: string, key: keyof RolePermissions) => {
     const targetUser = users.find((u) => u.id === userId);
     if (!targetUser) return;
 
@@ -206,10 +209,11 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       [key]: !currentPerms[key],
     };
 
+    if (!await confirmAction('هل تريد تغيير صلاحية هذا المستخدم؟', 'نعم، غيّر الصلاحية')) return;
     updateUserPermissions(userId, updatedPerms);
   };
 
-  const handleAddNewUser = (e: React.FormEvent) => {
+  const handleAddNewUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newFullName.trim()) {
       alert('يرجى ملء جميع الحقول المطلوبة');
@@ -253,6 +257,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             can_edit_commissions: false,
           };
 
+    if (!await confirmAction(`هل تريد إضافة المستخدم ${newFullName.trim()} بالصلاحيات المحددة؟`, 'نعم، أضف المستخدم')) return;
     addNewUser({
       username: newUsername.trim(),
       password: newUserPassword.trim(),
@@ -525,7 +530,10 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
               {selectedUser.role !== 'admin' && (
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => updateUserStatus(selectedUser.id, !selectedUser.is_active)}
+                    onClick={async () => {
+                      const nextActive = !selectedUser.is_active;
+                      if (await confirmAction(`هل تريد ${nextActive ? 'تفعيل' : 'تعطيل'} حساب ${selectedUser.name}؟`, 'نعم، نفّذ')) updateUserStatus(selectedUser.id, nextActive);
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                       selectedUser.is_active
                         ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
@@ -537,7 +545,9 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   </button>
 
                   <button
-                    onClick={() => deleteUser(selectedUser.id)}
+                    onClick={async () => {
+                      if (await confirmAction(`سيتم حذف حساب المستخدم ${selectedUser.name}. هل تريد المتابعة؟`, 'نعم، احذف المستخدم')) deleteUser(selectedUser.id);
+                    }}
                     className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
                     title="حذف هذا المستخدم"
                   >
@@ -575,11 +585,12 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!editingPassword.trim()) {
                       alert('يرجى كتابة كلمة مرور جديدة');
                       return;
                     }
+                    if (!await confirmAction(`هل تريد تغيير كلمة مرور ${selectedUser.name}؟`, 'نعم، غيّر كلمة المرور')) return;
                     updateUserPassword(selectedUser.id, editingPassword.trim());
                     alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name})!\n\nتم حفظها فورياً وسيقوم السيستم بطلبها حصرياً عند الدخول.`);
                     setEditingPassword('');

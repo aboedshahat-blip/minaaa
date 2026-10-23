@@ -4,6 +4,7 @@ import { Customer, Berth, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
 import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import {
   Upload,
   FileSpreadsheet,
@@ -36,6 +37,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   settings,
   currentMaxSeq,
 }) => {
+  const confirmAction = useConfirmAction();
   const { canViewFinancials } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,11 +110,13 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     }
   };
 
-  const handleProcessAndSave = () => {
+  const handleProcessAndSave = async () => {
     if (parsedRows.length === 0) {
       alert('لا توجد بيانات مستخلصة لحفظها');
       return;
     }
+    if (!await confirmAction(`هل راجعت الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${parsedRows.length}.`, 'نعم، راجعت الشيت')) return;
+    if (!await confirmAction(`هل تريد رفع ${parsedRows.length} حركة إلى السيستم ومزامنتها؟`, 'نعم، ارفع الشيت')) return;
 
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 

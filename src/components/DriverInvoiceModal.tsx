@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Movement } from '../types';
 import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
 import vibLogoUrl from '../assets/vib-logo.jpeg';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface DriverInvoiceModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
   initialDriverName,
   defaultPlaceName = 'محطة تشغيل وتفريغ الحاويات والشاحنات - إدارة الحركة',
 }) => {
+  const confirmAction = useConfirmAction();
   const [placeName, setPlaceName] = useState(defaultPlaceName);
   const [invoiceNo] = useState(`INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
   const [invoiceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -63,8 +65,8 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
     );
   };
 
-  const handlePrint = () => {
-    if (!window.confirm(`هل تريد طباعة فاتورة ${driverName}؟`)) return;
+  const handlePrint = async () => {
+    if (!await confirmAction(`هل تريد طباعة فاتورة ${driverName}؟`, 'نعم، اطبع')) return;
     const printContent = document.getElementById('printable-driver-invoice');
     if (!printContent) {
       window.print();

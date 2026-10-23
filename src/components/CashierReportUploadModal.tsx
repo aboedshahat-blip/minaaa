@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { Movement, SystemSettings } from '../types';
 import type {
   CashierInvoiceEntry,
@@ -32,6 +33,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   onBatchUpdateMovements,
   settings,
 }) => {
+  const confirmAction = useConfirmAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState('');
@@ -108,7 +110,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     }
   };
 
-  const handleLinkFromImage = () => {
+  const handleLinkFromImage = async () => {
     if (!selectedMovementId) {
       alert('يرجى اختيار الشاحنة / الحركة المراد ربط الفاتورة بها');
       return;
@@ -149,6 +151,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       return m;
     });
 
+    if (!await confirmAction(`هل تريد ربط الفاتورة وتحديث الحركة المحددة؟ المبلغ: ${cashierVal.toLocaleString()} ج.م`, 'نعم، اربطها')) return;
     onBatchUpdateMovements(updated);
     alert('✓ تم بنجاح ربط وتحديث فاتورة الكاشير للشاحنة المختارة وحساب العميل!');
     setManualReceiptNo('');
@@ -156,12 +159,13 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     setSelectedMovementId('');
   };
 
-  const handleApplyUpdates = () => {
+  const handleApplyUpdates = async () => {
     if (matchResults.length === 0) {
       alert('لا توجد شحنات مطابقة لتحديثها');
       return;
     }
 
+    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة من تقرير الكاشير وربط الفواتير المطابقة. هل تريد المتابعة؟`, 'نعم، حدّث الحركات')) return;
     onBatchUpdateMovements(updatedMovementsList);
     alert(
       `✓ تم بنجاح تحديث وربط ${matchResults.length} فاتورة كاشير مع الحركات والشاحنات وحسابات العملاء تلقائياً!`

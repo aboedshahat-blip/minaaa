@@ -3,6 +3,7 @@ import { Movement } from '../types';
 import { X, Printer, Download, FileSpreadsheet, Check } from 'lucide-react';
 import { exportTemplateToExcel } from '../lib/excelUtils';
 import vibLogoUrl from '../assets/vib-logo.jpeg';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface OfficialSheetPrintModalProps {
   isOpen: boolean;
@@ -19,10 +20,11 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
   title = 'شيت تسجيل حجز الشاحنات',
   berthName,
 }) => {
+  const confirmAction = useConfirmAction();
   if (!isOpen) return null;
 
-  const handlePrint = () => {
-    if (!window.confirm(`هل تريد طباعة ${movements.length} حركة في الكشف الحالي؟`)) return;
+  const handlePrint = async () => {
+    if (!await confirmAction(`هل تريد طباعة ${movements.length} حركة في الكشف الحالي؟`, 'نعم، اطبع')) return;
     window.print();
   };
 

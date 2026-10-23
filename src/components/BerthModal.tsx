@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Berth } from '../types';
 import { X, Anchor, Check } from 'lucide-react';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface BerthModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const BerthModal: React.FC<BerthModalProps> = ({
   editingBerth,
   existingCount,
 }) => {
+  const confirmAction = useConfirmAction();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -38,7 +40,7 @@ export const BerthModal: React.FC<BerthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       alert('برجاء كتابة اسم الرصيف');
@@ -54,6 +56,8 @@ export const BerthModal: React.FC<BerthModalProps> = ({
       created_at: editingBerth ? editingBerth.created_at : new Date().toISOString(),
     };
 
+    const action = editingBerth ? 'حفظ تعديلات الرصيف' : 'إضافة الرصيف إلى النظام';
+    if (!await confirmAction(`هل تريد ${action}؟`, 'نعم، احفظ')) return;
     onSave(berthData);
     onClose();
   };

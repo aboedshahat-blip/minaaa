@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { X, Calculator, Truck, FileText, Check } from 'lucide-react';
 
 interface MovementModalProps {
@@ -238,6 +239,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
   settings,
   nextSeq,
 }) => {
+  const confirmAction = useConfirmAction();
   const { canViewFinancials } = useAuth();
 
   const normalizeDigits = (value: string) => value.replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit))).replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)));
@@ -414,7 +416,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.truck_no && !formData.container_no) {
       alert('برجاء إدخال رقم الشاحنة أو رقم الحاوية على الأقل');
@@ -427,6 +429,8 @@ export const MovementModal: React.FC<MovementModalProps> = ({
       alert(invalidNumber);
       return;
     }
+    const action = editingMovement ? 'حفظ التعديلات على الحركة' : 'إضافة الحركة إلى النظام';
+    if (!await confirmAction(`هل تريد ${action}؟`, 'نعم، احفظ')) return;
     onSave(formData);
     localStorage.removeItem(draftKey);
     onClose();

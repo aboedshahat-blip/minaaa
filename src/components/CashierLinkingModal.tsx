@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
 import { X, Link2, Check, DollarSign, Search, FileText, Truck, AlertCircle } from 'lucide-react';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface CashierLinkingModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
   onSaveMovement,
   initialMovement,
 }) => {
+  const confirmAction = useConfirmAction();
   const [selectedMovementId, setSelectedMovementId] = useState<string>(initialMovement?.id || '');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [receiptNo, setReceiptNo] = useState<string>(initialMovement?.cashier_receipt_no || '');
@@ -50,7 +52,7 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
     setCategory(m.booking_category || 'وارد حاويات');
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMovement) {
       alert('يرجى تحديد الشحنة أو الحركة أولاً');
@@ -84,6 +86,7 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
       payment_status: paid >= newTotal && newTotal > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid',
     };
 
+    if (!await confirmAction(`هل تريد ربط فاتورة الكاشير ${receiptNo} وتحديث حساب هذه الحركة؟`, 'نعم، اربط الفاتورة')) return;
     onSaveMovement(updatedData);
     alert(`تم بنجاح ربط فاتورة الكاشير رقم (${receiptNo}) بالشحنة رقم الحاوية [${selectedMovement.container_no}] ورقم الشاحنة [${selectedMovement.truck_no}]!`);
     onClose();

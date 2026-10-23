@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Customer, CustomerTruck } from '../types';
 import { X, Users, Plus, Trash2, Truck, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   defaultSystemCommission,
   defaultNafezCommission,
 }) => {
+  const confirmAction = useConfirmAction();
   const { canEditCommissions } = useAuth();
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -83,7 +85,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     setTrucks(trucks.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       alert('برجاء كتابة اسم العميل أو الشركة');
@@ -107,6 +109,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       created_at: editingCustomer ? editingCustomer.created_at : new Date().toISOString(),
     };
 
+    const action = editingCustomer ? 'حفظ تعديلات العميل' : 'إضافة العميل إلى النظام';
+    if (!await confirmAction(`هل تريد ${action}؟`, 'نعم، احفظ')) return;
     onSave(customerData);
     onClose();
   };

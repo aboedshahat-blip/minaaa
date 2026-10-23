@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { Customer, Movement, PaymentReceipt } from '../types';
 import { X, Receipt, Check, CreditCard, AlertCircle } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   movements,
   initialCustomerId,
 }) => {
+  const confirmAction = useConfirmAction();
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [amount, setAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer' | 'check' | 'other'>('cash');
@@ -85,7 +87,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     setAmount(totalSelected);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (amount <= 0) {
       alert('برجاء كتابة مبلغ تحصيل صحيح أكبر من صفر');
@@ -159,6 +161,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       created_at: new Date().toISOString(),
     };
 
+    if (!await confirmAction(`سيتم تسجيل سند قبض بقيمة ${amount.toLocaleString()} ج.م وتوزيعه على ${appliedMovementIds.length} حركة. هل تريد المتابعة؟`, 'نعم، سجّل السند')) return;
     onSavePayment(paymentReceipt, updatedMovements);
     alert(`تم بنجاح تسجيل سند قبض بقيمة ${amount.toLocaleString()} ج.م وخصم/تسوية حركات السيارات!`);
     onClose();

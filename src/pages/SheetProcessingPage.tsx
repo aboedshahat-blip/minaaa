@@ -4,6 +4,7 @@ import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import {
   FileSpreadsheet,
   Upload,
@@ -33,6 +34,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   currentMaxSeq,
   onImportMovements,
 }) => {
+  const confirmAction = useConfirmAction();
   const { canViewFinancials } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,15 +83,19 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     setRows(updated);
   };
 
-  const handleRemoveRow = (index: number) => {
+  const handleRemoveRow = async (index: number) => {
+    const rowName = rows[index]?.driver_name || `الحركة رقم ${index + 1}`;
+    if (!await confirmAction(`هل تريد حذف ${rowName} من الشيت قبل اعتماده؟`, 'نعم، احذف من المعاينة')) return;
     setRows(rows.filter((_, i) => i !== index));
   };
 
-  const handleSaveToSystem = () => {
+  const handleSaveToSystem = async () => {
     if (rows.length === 0) {
       alert('لا توجد بيانات للاستيراد');
       return;
     }
+    if (!await confirmAction(`هل راجعت بيانات الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${rows.length}.`, 'نعم، راجعت البيانات')) return;
+    if (!await confirmAction(`هل تريد رفع ${rows.length} حركة إلى السيستم ومزامنتها مع الأجهزة الأخرى؟`, 'نعم، ارفع الشيت')) return;
 
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 

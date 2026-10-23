@@ -31,6 +31,7 @@ import { CashierReportUploadModal } from '../components/CashierReportUploadModal
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
 import { SheetProcessingPage } from './SheetProcessingPage';
+import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface MovementsPageProps {
   movements: Movement[];
@@ -82,6 +83,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   canUndoLatestDeletion = false,
   onBatchUpdateMovements,
 }) => {
+  const confirmAction = useConfirmAction();
   const { canViewFinancials, isAdmin, canManagePayments } = useAuth();
 
   // Modals state
@@ -111,6 +113,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [selectedManifestBatchIds, setSelectedManifestBatchIds] = useState<string[]>([]);
   const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all' | 'picked'>('selected');
   const [isExportingPickedPdf, setIsExportingPickedPdf] = useState(false);
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
 
   const importBatches = useMemo(() => {
     const batches = new Map<string, { id: string; name: string; at: string; count: number }>();
@@ -137,7 +140,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   const runUndoLatestDeletion = async () => {
     if (!canUndoLatestDeletion || !onUndoLatestDeletion) return;
-    const confirmed = window.confirm('سيتم إرجاع البيانات كما كانت قبل آخر حذف، وقد تُستبدل أي تغييرات أُدخلت بعده. هل تريد التراجع؟');
+    const confirmed = await confirmAction('سيتم إرجاع البيانات كما كانت قبل آخر حذف، وقد تُستبدل أي تغييرات أُدخلت بعده. هل تريد التراجع؟', 'نعم، تراجع');
     if (!confirmed) return;
     try {
       await onUndoLatestDeletion();
@@ -305,9 +308,15 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   }, [filteredMovements]);
 
   // Discount Handlers
-  const handleDiscountChange = (movementId: string, discountVal: number) => {
+  const handleDiscountChange = async (movementId: string, discountVal: number) => {
     if (!onBatchUpdateMovements) return;
     const disc = Math.max(0, discountVal || 0);
+    const current = movements.find((movement) => movement.id === movementId)?.discount || 0;
+    if (disc === current) { setDiscountDrafts((drafts) => ({ ...drafts, [movementId]: String(current) })); return; }
+    if (!await confirmAction(`هل تريد تغيير الخصم لهذه الحركة إلى ${disc.toLocaleString()} ج.م؟`, 'نعم، احفظ الخصم')) {
+      setDiscountDrafts((drafts) => ({ ...drafts, [movementId]: String(current) }));
+      return;
+    }
     const updated = movements.map((m) => {
       if (m.id === movementId) {
         const cashier = Number(m.cashier_invoice) || 0;
@@ -327,9 +336,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       return m;
     });
     onBatchUpdateMovements(updated);
+    setDiscountDrafts((drafts) => { const next = { ...drafts }; delete next[movementId]; return next; });
   };
 
-  const handleApplyOverallDiscount = (customerName: string) => {
+  const handleApplyOverallDiscount = async (customerName: string) => {
     if (!onBatchUpdateMovements) return;
     const custMoves = movements.filter((m) => (m.driver_name || m.customer_name) === customerName);
     if (custMoves.length === 0) return;
@@ -341,6 +351,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       alert('يرجى إدخال مبلغ خصم صحيح');
       return;
     }
+    if (!await confirmAction(`سيتم توزيع خصم ${overallDiscount.toLocaleString()} ج.م على ${custMoves.length} حركة للعميل ${customerName}. هل تريد المتابعة؟`, 'نعم، طبّق الخصم')) return;
 
     const perMoveDiscount = Math.round((overallDiscount / custMoves.length) * 100) / 100;
     const updated = movements.map((m) => {
@@ -1013,8 +1024,9 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                               <input
                                 type="number"
                                 min="0"
-                                value={m.discount || 0}
-                                onChange={(e) => handleDiscountChange(m.id, Number(e.target.value))}
+                                value={discountDrafts[m.id] ?? String(m.discount || 0)}
+                                onChange={(e) => setDiscountDrafts((drafts) => ({ ...drafts, [m.id]: e.target.value }))}
+                                onBlur={(e) => void handleDiscountChange(m.id, Number(e.target.value))}
                                 className="w-16 text-center border border-amber-300 rounded-lg py-1 text-[11px] font-bold bg-amber-50 focus:ring-1 focus:ring-amber-400 text-amber-800"
                                 placeholder="0"
                               />
