@@ -1,0 +1,46 @@
+name: Supabase read-only activity check
+
+on:
+  schedule:
+    # Every two days, away from the top of the hour to reduce queue delays.
+    - cron: '17 6 */2 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  readonly-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send read-only query to Supabase
+        env:
+          SUPABASE_URL: https://jfhmarmaebrzdnsvkqzv.supabase.co
+          SUPABASE_ANON_KEY: sb_publishable_8PP8MB6X56rGXiSzKFlP4g_n9MM-8gm
+        shell: bash
+        run: |
+          set +x
+          response_file="$(mktemp)"
+          status="$(curl --silent --show-error \
+            --output "$response_file" \
+            --write-out '%{http_code}' \
+            --get "$SUPABASE_URL/rest/v1/berths" \
+            --data-urlencode 'select=id' \
+            --data-urlencode 'limit=1' \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header 'Accept: application/json' \
+            --max-time 30 || true)"
+
+          if [[ "$status" =~ ^2[0-9][0-9]$ ]]; then
+            echo "Read-only Supabase query succeeded (HTTP $status). No data was added or changed."
+          else
+            echo "Read-only Supabase query failed (HTTP ${status:-no response}). No data was added or changed."
+            if [[ "$status" == "540" ]]; then
+              echo "The project appears to be paused. This workflow will not resume it; restore it manually in the Supabase dashboard."
+            fi
+            cat "$response_file"
+            rm -f "$response_file"
+            exit 1
+          fi
+
+          rm -f "$response_file"
