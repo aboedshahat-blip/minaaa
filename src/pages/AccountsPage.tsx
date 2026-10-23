@@ -128,7 +128,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   // Download direct customer statement PDF
   const handleDownloadCustomerPdf = async (name: string, moves: Movement[], totals: any) => {
     const { exportCustomerStatementPdf } = await import('../lib/pdfExport');
-    await exportCustomerStatementPdf(name, moves, totals);
+    const movementIds = new Set(moves.map((movement) => movement.id));
+    const customerPayments = payments.filter((payment) =>
+      payment.customer_name === name || (payment.movement_ids || []).some((id) => movementIds.has(id))
+    );
+    await exportCustomerStatementPdf(name, moves, totals, undefined, customerPayments);
   };
 
   // === Driver Ledger: group ALL movements by driver_name ===

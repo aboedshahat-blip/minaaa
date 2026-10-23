@@ -42,21 +42,31 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Filter client's movements that are unpaid or partial
+  // Always derive the balance from total minus paid. This keeps installment
+  // collection working even when an older record has a stale remaining_amount.
   const clientMovements = movements.filter(
     (m) => m.customer_id === selectedCustomerId || m.customer_name === customers.find(c => c.id === selectedCustomerId)?.name
   );
-
-  const unpaidMovements = clientMovements.filter((m) => Number(m.remaining_amount) > 0);
-  const totalClientDebt = unpaidMovements.reduce((sum, m) => sum + (Number(m.remaining_amount) || 0), 0);
+  const getOutstandingCents = (movement: Movement) => Math.max(
+    0,
+    Math.round(((Number(movement.total_amount) || 0) - (Number(movement.paid_amount) || 0)) * 100),
+  );
+  const unpaidMovements = clientMovements
+    .filter((m) => getOutstandingCents(m) > 0)
+    .sort((a, b) => (a.movement_date || '').localeCompare(b.movement_date || '') || (a.seq || 0) - (b.seq || 0));
+  const totalClientDebtCents = unpaidMovements.reduce((sum, m) => sum + getOutstandingCents(m), 0);
+  const totalClientDebt = totalClientDebtCents / 100;
+  const selectedDebtCents = selectedMovementIds.length
+    ? unpaidMovements.filter((m) => selectedMovementIds.includes(m.id)).reduce((sum, m) => sum + getOutstandingCents(m), 0)
+    : totalClientDebtCents;
+  const installmentRemainder = Math.max(0, selectedDebtCents - Math.round((Number(amount) || 0) * 100)) / 100;
 
   const handleSelectAllUnpaid = () => {
     if (selectedMovementIds.length === unpaidMovements.length) {
       setSelectedMovementIds([]);
     } else {
       setSelectedMovementIds(unpaidMovements.map((m) => m.id));
-      const totalSelected = unpaidMovements.reduce((sum, m) => sum + (Number(m.remaining_amount) || 0), 0);
-      setAmount(totalSelected);
+      setAmount(totalClientDebt);
     }
   };
 
@@ -71,7 +81,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     const totalSelected = unpaidMovements
       .filter((m) => nextIds.includes(m.id))
-      .reduce((sum, m) => sum + (Number(m.remaining_amount) || 0), 0);
+      .reduce((sum, m) => sum + getOutstandingCents(m), 0) / 100;
     setAmount(totalSelected);
   };
 
@@ -87,32 +97,37 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     const selectedTargets = unpaidMovements.filter((movement) => selectedMovementIds.includes(movement.id));
     const targetMovements = selectedTargets.length > 0 ? selectedTargets : unpaidMovements;
-    const availableDebt = targetMovements.reduce((sum, movement) => sum + (Number(movement.remaining_amount) || 0), 0);
+    const availableDebtCents = targetMovements.reduce((sum, movement) => sum + getOutstandingCents(movement), 0);
+    const amountCents = Math.round(Number(amount) * 100);
+    const availableDebt = availableDebtCents / 100;
     if (targetMovements.length === 0 || availableDebt <= 0) {
       alert('لا توجد حركات عليها رصيد مستحق لهذا العميل لتسويتها.');
       return;
     }
-    if (amount > availableDebt) {
+    if (amountCents > availableDebtCents) {
       alert(`المبلغ أكبر من الرصيد المحدد. أقصى مبلغ يمكن تسجيله هو ${availableDebt.toLocaleString()} ج.م`);
       return;
     }
 
     // Distribute payment to the selected unpaid movements, or to all unpaid movements.
-    let remainingToDistribute = amount;
+    let remainingToDistributeCents = amountCents;
     const appliedMovementIds: string[] = [];
 
     const updatedMovements = movements.map((m) => {
       const isTarget = targetMovements.some((tm) => tm.id === m.id);
-      if (!isTarget || remainingToDistribute <= 0) return m;
+      if (!isTarget || remainingToDistributeCents <= 0) return m;
 
-      const debt = Number(m.remaining_amount) || 0;
-      if (debt <= 0) return m;
+      const debtCents = getOutstandingCents(m);
+      if (debtCents <= 0) return m;
 
-      const paymentForThis = Math.min(debt, remainingToDistribute);
-      remainingToDistribute -= paymentForThis;
+      const paymentForThisCents = Math.min(debtCents, remainingToDistributeCents);
+      remainingToDistributeCents -= paymentForThisCents;
 
-      const newPaid = (Number(m.paid_amount) || 0) + paymentForThis;
-      const newRemaining = Math.max(0, (Number(m.total_amount) || 0) - newPaid);
+      const newPaidCents = Math.round((Number(m.paid_amount) || 0) * 100) + paymentForThisCents;
+      const totalCents = Math.max(0, Math.round((Number(m.total_amount) || 0) * 100));
+      const newRemainingCents = Math.max(0, totalCents - newPaidCents);
+      const newPaid = newPaidCents / 100;
+      const newRemaining = newRemainingCents / 100;
       const newStatus = newRemaining === 0 ? 'paid' : 'partial';
       appliedMovementIds.push(m.id);
 
@@ -130,7 +145,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       date: new Date().toISOString().split('T')[0],
       customer_id: currentCustomer.id,
       customer_name: currentCustomer.name,
-      amount,
+      amount: amountCents / 100,
       payment_method: paymentMethod,
       notes: notes.trim(),
       movement_ids: appliedMovementIds,
@@ -206,6 +221,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <input
                 type="number"
                 step="0.01"
+                min="0.01"
+                max={selectedDebtCents / 100}
                 value={amount || ''}
                 onChange={(e) => setAmount(Number(e.target.value))}
                 placeholder="0.00"
@@ -229,6 +246,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <option value="other">أخرى</option>
               </select>
             </div>
+          </div>
+
+          <div className="-mt-3 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+            <span className="font-bold">
+              {amount > 0 && Math.round(amount * 100) < selectedDebtCents ? 'دفعة جزئية' : 'المتبقي بعد الدفعة'}:
+            </span>{' '}
+            {installmentRemainder.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
+            {amount > 0 && Math.round(amount * 100) < selectedDebtCents && (
+              <span className="mr-2 text-indigo-700">سيُسجل المبلغ كسند مستقل، ويظل باقي الرصيد مفتوحًا للدفعة التالية.</span>
+            )}
           </div>
 
           {/* Movement Selection: "والعربيات تتخصم من السيستم" */}
@@ -287,7 +314,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           الإجمالي: {(m.total_amount || 0).toLocaleString()} ج.م
                         </span>
                         <span className="font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                          المتبقي: {(m.remaining_amount || 0).toLocaleString()} ج.م
+                          المتبقي: {(getOutstandingCents(m) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
                         </span>
                       </div>
                     </label>

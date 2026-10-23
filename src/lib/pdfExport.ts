@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { Movement } from '../types';
+import { Movement, PaymentReceipt } from '../types';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
@@ -206,7 +206,8 @@ export async function exportCustomerStatementPdf(
     paidTotal: number;
     remainingTotal: number;
   },
-  placeName: string = 'محطة تشغيل وتفريغ الحاويات والشاحنات - إدارة الحركة'
+  placeName: string = 'محطة تشغيل وتفريغ الحاويات والشاحنات - إدارة الحركة',
+  paymentReceipts: PaymentReceipt[] = [],
 ): Promise<void> {
   if (!movements || movements.length === 0) {
     alert('لا توجد شحنات لتصدير فاتورة هذا العميل');
@@ -231,6 +232,15 @@ export async function exportCustomerStatementPdf(
   });
 
   const truckPlates = Array.from(new Set(movements.map((m) => m.truck_no).filter(Boolean))).join(' ، ');
+  const paymentRowsHtml = paymentReceipts.map((payment, idx) => `
+    <tr style="background-color:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;direction:ltr;unicode-bidi:plaintext;">${escapeHtml(payment.receipt_no || '-')}</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;">${escapeHtml(payment.date || '-')}</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;">${payment.payment_method === 'cash' ? 'نقدي' : payment.payment_method === 'bank_transfer' ? 'تحويل بنكي' : payment.payment_method === 'check' ? 'شيك' : 'أخرى'}</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;font-weight:bold;color:#047857;">${(Number(payment.amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م</td>
+      <td style="padding:6px;border:1px solid #cbd5e1;">${escapeHtml(payment.notes || '-')}</td>
+    </tr>
+  `).join('');
 
   const rowsHtml = movements
     .map(
@@ -309,6 +319,22 @@ export async function exportCustomerStatementPdf(
         ${rowsHtml}
       </tbody>
     </table>
+
+    ${paymentReceipts.length > 0 ? `
+      <div style="margin:10px 0 15px;">
+        <h3 style="font-size:13px;color:#0f172a;margin:0 0 6px;">سجل الدفعات الجزئية وسندات القبض</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;text-align:right;">
+          <thead><tr style="background:#0f172a;color:#fff;">
+            <th style="padding:6px;border:1px solid #334155;">رقم السند</th>
+            <th style="padding:6px;border:1px solid #334155;">التاريخ</th>
+            <th style="padding:6px;border:1px solid #334155;">طريقة الدفع</th>
+            <th style="padding:6px;border:1px solid #334155;">مبلغ الدفعة</th>
+            <th style="padding:6px;border:1px solid #334155;">ملاحظات</th>
+          </tr></thead>
+          <tbody>${paymentRowsHtml}</tbody>
+        </table>
+      </div>
+    ` : ''}
 
     <!-- Totals Breakdown Box -->
     <div style="background-color: #f1f5f9; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-top: 10px;">
