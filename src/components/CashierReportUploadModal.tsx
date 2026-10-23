@@ -128,12 +128,16 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       if (m.id === selectedMovementId) {
         // Linking a cashier invoice marks that invoice amount as paid; system
         // and Nafez commissions remain outstanding until separately collected.
-        const paid = Math.max(Number(m.paid_amount) || 0, cashierVal);
+        const customerPaid = m.customer_paid_amount !== undefined
+          ? Number(m.customer_paid_amount) || 0
+          : Math.max(0, (Number(m.paid_amount) || 0) - (Number(m.cashier_invoice) || 0));
+        const paid = cashierVal + customerPaid;
         return {
           ...m,
           cashier_receipt_no: manualReceiptNo || m.cashier_receipt_no,
           cashier_invoice: cashierVal,
           paid_amount: paid,
+          customer_paid_amount: customerPaid,
           booking_category: manualCategory || m.booking_category,
           system_commission: m.system_commission ?? sysComm,
           nafez_commission: m.nafez_commission ?? nafezComm,

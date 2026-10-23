@@ -91,6 +91,7 @@ export interface Movement {
   payment_status: 'unpaid' | 'paid' | 'partial';
   paid_amount: number;
   remaining_amount: number;
+  customer_paid_amount?: number;
   
   notes?: string;
   created_at: string;
@@ -110,6 +111,8 @@ export interface PaymentReceipt {
   payment_method: 'cash' | 'bank_transfer' | 'check' | 'other';
   notes?: string;
   movement_ids?: string[]; // Movements settled by this payment
+  payment_type?: 'collection' | 'advance';
+  unallocated_amount?: number;
   created_at: string;
 }
 

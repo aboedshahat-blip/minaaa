@@ -61,7 +61,7 @@ export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBac
     ['customers', backup.customers.map(customerForCloud)],
     ['berths', backup.berths.map((row) => ({ ...row }))],
     ['movements', backup.movements.map(movementForCloud)],
-    ['payments', backup.payments.map((row) => ({ ...row }))],
+    ['payments', backup.payments.map(paymentForCloud)],
   ];
   for (const [table, rows] of writes) {
     if (!rows.length) continue;
@@ -90,11 +90,12 @@ export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBac
 
 const CUSTOMER_FEE_MARKER = /\n?\[\[VIB_CUSTOMER_FEES:(\{.*?\})\]\]/;
 const MOVEMENT_BATCH_MARKER = /\n?\[\[VIB_IMPORT_BATCH:(\{.*?\})\]\]/;
+const PAYMENT_META_MARKER = /\n?\[\[VIB_PAYMENT_META:(\{.*?\})\]\]/;
 
 const movementForApp = (row: Movement): Movement => {
   const notes = row.notes || '';
   const marker = notes.match(MOVEMENT_BATCH_MARKER);
-  let batch: { id?: string; name?: string; at?: string } = {};
+  let batch: { id?: string; name?: string; at?: string; customerPaid?: number } = {};
   if (marker?.[1]) {
     try { batch = JSON.parse(marker[1]); } catch { /* keep the row usable if metadata is malformed */ }
   }
@@ -104,16 +105,42 @@ const movementForApp = (row: Movement): Movement => {
     import_batch_id: row.import_batch_id ?? batch.id,
     import_batch_name: row.import_batch_name ?? batch.name,
     import_batch_at: row.import_batch_at ?? batch.at,
+    customer_paid_amount: row.customer_paid_amount ?? batch.customerPaid,
   };
 };
 
 const movementForCloud = (row: Movement): Record<string, unknown> => {
   const movement = movementForApp(row);
-  const { import_batch_id, import_batch_name, import_batch_at, ...cloudRow } = movement;
-  if (!import_batch_id) return cloudRow;
+  const { import_batch_id, import_batch_name, import_batch_at, customer_paid_amount, ...cloudRow } = movement;
+  if (!import_batch_id && customer_paid_amount === undefined) return cloudRow;
   return {
     ...cloudRow,
-    notes: `${cloudRow.notes || ''}\n[[VIB_IMPORT_BATCH:${JSON.stringify({ id: import_batch_id, name: import_batch_name, at: import_batch_at })}]]`.trim(),
+    notes: `${cloudRow.notes || ''}\n[[VIB_IMPORT_BATCH:${JSON.stringify({ id: import_batch_id, name: import_batch_name, at: import_batch_at, customerPaid: customer_paid_amount })}]]`.trim(),
+  };
+};
+
+const paymentForApp = (row: PaymentReceipt): PaymentReceipt => {
+  const notes = row.notes || '';
+  const marker = notes.match(PAYMENT_META_MARKER);
+  let meta: { type?: PaymentReceipt['payment_type']; unallocated?: number } = {};
+  if (marker?.[1]) {
+    try { meta = JSON.parse(marker[1]); } catch { /* keep the receipt readable */ }
+  }
+  return {
+    ...row,
+    notes: notes.replace(PAYMENT_META_MARKER, '').trim(),
+    payment_type: row.payment_type ?? meta.type ?? 'collection',
+    unallocated_amount: row.unallocated_amount ?? meta.unallocated ?? 0,
+  };
+};
+
+const paymentForCloud = (row: PaymentReceipt): Record<string, unknown> => {
+  const payment = paymentForApp(row);
+  const { payment_type, unallocated_amount, ...cloudRow } = payment;
+  if (!payment_type && !unallocated_amount) return cloudRow;
+  return {
+    ...cloudRow,
+    notes: `${cloudRow.notes || ''}\n[[VIB_PAYMENT_META:${JSON.stringify({ type: payment_type, unallocated: unallocated_amount || 0 })}]]`.trim(),
   };
 };
 
@@ -252,7 +279,8 @@ export const flushPendingSync = async () => {
     for (const row of Object.values(pending.upserts[table] || {})) {
       const cloudRow = table === 'customers'
         ? customerForCloud(row as Customer)
-        : table === 'movements' ? movementForCloud(row as Movement) : row;
+        : table === 'movements' ? movementForCloud(row as Movement)
+        : table === 'payments' ? paymentForCloud(row as PaymentReceipt) : row;
       const { error } = await supabase.from(table).upsert(cloudRow as Record<string, unknown>);
       if (error) throw new Error(`تعذرت مزامنة ${table}: ${error.message}`);
       clearPendingUpsert(table, (row as { id: string }).id);
@@ -396,7 +424,7 @@ export const fetchAllFromSupabase = async () => {
         .filter((customer) => !['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__'].includes(customer.id))
         .map((customer) => customerForApp(customer as Customer)),
       berths: (berthsRes.data || []) as Berth[],
-      payments: (paymentsRes.data || []) as PaymentReceipt[],
+      payments: ((paymentsRes.data || []) as PaymentReceipt[]).map(paymentForApp),
       dataResetAt: (customersRes.data || []).find((customer) => customer.id === '__SYSTEM_HANDOFF_RESET__')?.created_at as string | undefined,
     };
   } catch (err) {
@@ -457,7 +485,7 @@ export const syncPaymentToSupabase = async (payment: PaymentReceipt) => {
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
   try {
-    const { error } = await supabase.from('payments').upsert(payment);
+    const { error } = await supabase.from('payments').upsert(paymentForCloud(payment));
     if (error) throw error;
     clearPendingUpsert('payments', payment.id);
   } catch (e) {
@@ -485,7 +513,7 @@ export const restoreLocalDataToSupabase = async (data: {
     ['customers', data.customers.map(customerForCloud)],
     ['berths', data.berths],
     ['movements', data.movements.map(movementForCloud)],
-    ['payments', data.payments],
+    ['payments', data.payments.map(paymentForCloud)],
   ] as const;
   for (const [table, rows] of orderedWrites) {
     if (!rows.length) continue;

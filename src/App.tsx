@@ -55,6 +55,7 @@ import { SheetUploadModal } from './components/SheetUploadModal';
 import { CustomerModal } from './components/CustomerModal';
 import { BerthModal } from './components/BerthModal';
 import { PaymentModal } from './components/PaymentModal';
+import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
 
 const mergeCloudAndLocal = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
   const cloudIds = new Set(cloudRows.map((row) => row.id));
@@ -144,23 +145,33 @@ const AppContent: React.FC = () => {
           return Array.from(merged.values());
         };
         const reconciledCashierMovementIds = new Set<string>();
-        const movementsToUse = mergePending(cloudData.movements, localMovements, pendingMovements).map((movement) => {
+        const mergedMovements = mergePending(cloudData.movements, localMovements, pendingMovements).map((movement) => {
+          if (!movement.cashier_receipt_no) return movement;
           const cashierInvoice = Number(movement.cashier_invoice) || 0;
-          const alreadyPaid = Number(movement.paid_amount) || 0;
-          if (!movement.cashier_receipt_no || cashierInvoice <= alreadyPaid) return movement;
-
+          const oldPaid = Number(movement.paid_amount) || 0;
+          const customerPaid = movement.customer_paid_amount !== undefined
+            ? Number(movement.customer_paid_amount) || 0
+            : Math.max(0, oldPaid - cashierInvoice);
+          const total = Number(movement.total_amount) || 0;
+          const paid = cashierInvoice + customerPaid;
+          const remaining = Math.max(0, total - paid);
+          if (movement.customer_paid_amount === customerPaid && oldPaid === paid && Number(movement.remaining_amount) === remaining) return movement;
           reconciledCashierMovementIds.add(movement.id);
-          const remaining = Math.max(0, (Number(movement.total_amount) || 0) - cashierInvoice);
           return {
             ...movement,
-            paid_amount: cashierInvoice,
+            customer_paid_amount: customerPaid,
+            paid_amount: paid,
             remaining_amount: remaining,
-            payment_status: (remaining === 0 ? 'paid' : 'partial') as Movement['payment_status'],
+            payment_status: (remaining === 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid') as Movement['payment_status'],
           };
         });
         const customersToUse = mergePending(cloudData.customers, localCustomers, pendingCustomers);
         const berthsToUse = mergePending(cloudData.berths, localBerths, pendingBerths);
         const paymentsToUse = mergePending(cloudData.payments, localPayments, pendingPayments);
+        const allocation = applyUnallocatedCustomerAdvances(mergedMovements, paymentsToUse);
+        const movementsToUse = allocation.movements;
+        const paymentsFinal = allocation.payments;
+        allocation.changedMovementIds.forEach((id) => reconciledCashierMovementIds.add(id));
 
         setMovements(movementsToUse);
         saveMovements(movementsToUse);
@@ -168,8 +179,8 @@ const AppContent: React.FC = () => {
         saveCustomers(customersToUse);
         setBerths(berthsToUse);
         saveBerths(berthsToUse);
-        setPayments(paymentsToUse);
-        savePayments(paymentsToUse);
+        setPayments(paymentsFinal);
+        savePayments(paymentsFinal);
 
         // Retry queued edits/deletes before reporting sync complete.
         await flushPendingSync();
@@ -191,6 +202,10 @@ const AppContent: React.FC = () => {
         const reconciledMovements = movementsToUse.filter((movement) => reconciledCashierMovementIds.has(movement.id));
         if (reconciledMovements.length > 0) {
           await Promise.all(reconciledMovements.map((movement) => syncMovementToSupabase(movement)));
+        }
+        const allocatedPayments = paymentsFinal.filter((payment) => allocation.changedPaymentIds.includes(payment.id));
+        if (allocatedPayments.length > 0) {
+          await Promise.all(allocatedPayments.map((payment) => syncPaymentToSupabase(payment)));
         }
         setCloudFeedback(resetDetected
           ? 'تم مسح البيانات المحلية القديمة بعد تجهيز النظام للتسليم.'
@@ -269,9 +284,15 @@ const AppContent: React.FC = () => {
       const updated = movements.map((m) =>
         m.id === editingMovement.id ? updatedMovement : m
       );
-      setMovements(updated);
-      saveMovements(updated);
-      void runCloudOperation(syncMovementToSupabase(updatedMovement));
+      const allocation = applyUnallocatedCustomerAdvances(updated, payments);
+      setMovements(allocation.movements);
+      saveMovements(allocation.movements);
+      setPayments(allocation.payments);
+      savePayments(allocation.payments);
+      void runCloudOperation(Promise.all([
+        ...allocation.movements.filter((m) => m.id === updatedMovement.id || allocation.changedMovementIds.includes(m.id)).map((m) => syncMovementToSupabase(m)),
+        ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
+      ]));
     } else {
       if (!canAddMovements) {
         alert('ليس لديك صلاحية لتسجيل حركات جديدة');
@@ -409,9 +430,15 @@ const AppContent: React.FC = () => {
   };
 
   const handleBatchUpdateMovements = (updatedMovements: Movement[]) => {
-    setMovements(updatedMovements);
-    saveMovements(updatedMovements);
-    void runCloudOperation(Promise.all(updatedMovements.map((m) => syncMovementToSupabase(m))));
+    const allocation = applyUnallocatedCustomerAdvances(updatedMovements, payments);
+    setMovements(allocation.movements);
+    saveMovements(allocation.movements);
+    setPayments(allocation.payments);
+    savePayments(allocation.payments);
+    void runCloudOperation(Promise.all([
+      ...allocation.movements.map((m) => syncMovementToSupabase(m)),
+      ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
+    ]));
   };
 
   // Customer Handlers
@@ -492,15 +519,15 @@ const AppContent: React.FC = () => {
       alert('ليس لديك صلاحية لتسجيل سندات القبض');
       return;
     }
-    const newPayments = [payment, ...payments];
-    setPayments(newPayments);
-    savePayments(newPayments);
-    void runCloudOperation(syncPaymentToSupabase(payment));
-
-    setMovements(updatedMovements);
-    saveMovements(updatedMovements);
-    // sync updated movements to Supabase
-    void runCloudOperation(Promise.all(updatedMovements.map((m) => syncMovementToSupabase(m))));
+    const allocation = applyUnallocatedCustomerAdvances(updatedMovements, [payment, ...payments]);
+    setPayments(allocation.payments);
+    savePayments(allocation.payments);
+    setMovements(allocation.movements);
+    saveMovements(allocation.movements);
+    void runCloudOperation(Promise.all([
+      ...allocation.payments.filter((p) => p.id === payment.id || allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
+      ...allocation.movements.filter((m) => allocation.changedMovementIds.includes(m.id) || updatedMovements.some((updated) => updated.id === m.id && updated !== movements.find((old) => old.id === m.id))).map((m) => syncMovementToSupabase(m)),
+    ]));
   };
 
   // Settings Handlers
@@ -715,6 +742,7 @@ const AppContent: React.FC = () => {
         onSavePayment={handleSavePayment}
         customers={customers}
         movements={movements}
+        payments={payments}
         initialCustomerId={paymentCustomerId}
       />
     </div>
