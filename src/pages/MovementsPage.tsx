@@ -603,22 +603,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
           {/* Clean 12-Column Table (NO financials) */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between no-print">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Truck className="w-4 h-4 text-rose-600" />
-                كشف الحركات المجمع — الاسطمبة الرسمية للمكتب
-                <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-bold">
-                  بدون مبالغ مالية
-                </span>
-              </h3>
-              <button
-              onClick={() => openManifestPrint('selected')}
-                className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
-              >
-                <FileDown className="w-3.5 h-3.5" />
-                <span>تنزيل PDF</span>
-              </button>
-            </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-xs text-right border-collapse">
                 <thead className="bg-rose-800 text-white font-bold">
@@ -669,21 +653,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 </tbody>
               </table>
             </div>
-            {/* Next Step Banner */}
-            {manifestMovements.length > 0 && (
-              <div className="bg-rose-50 border-t border-rose-200 p-3 flex items-center justify-between no-print">
-                <p className="text-xs text-rose-700 font-semibold">
-                  بعد تنزيل الكشف وإنهاء المحاسبة في الميناء، انتقل إلى تسجيل فواتير الكاشير.
-                </p>
-                <button
-                  onClick={() => setActiveStage('stage2_cashier')}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
-                >
-                  <span>الانتقال إلى فواتير الكاشير</span>
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -811,26 +780,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={canViewFinancials ? 12 : 7} className="p-8 text-center text-slate-400">لا توجد حركات. ابدأ بالمرحلة الأولى لرفع وتجميع الشيتات.</td></tr>
+                    <tr><td colSpan={canViewFinancials ? 12 : 7} className="p-8 text-center text-slate-400">لا توجد حركات مطابقة للبحث الحالي.</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
-            {/* Next Step Banner */}
-            {filteredMovements.filter(m => m.cashier_receipt_no).length > 0 && canViewFinancials && (
-              <div className="bg-emerald-50 border-t border-emerald-200 p-3 flex items-center justify-between no-print">
-                <p className="text-xs text-emerald-700 font-semibold">
-                  تم ربط {filteredMovements.filter(m => m.cashier_receipt_no).length} إيصال. انتقل إلى حسابات العملاء لعرض الملخص.
-                </p>
-                <button
-                  onClick={() => setActiveStage('stage3_clients')}
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
-                >
-                  <span>الانتقال إلى حسابات العملاء</span>
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}
