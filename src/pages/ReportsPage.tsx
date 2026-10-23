@@ -139,6 +139,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   };
 
   const handlePrint = () => {
+    if (!window.confirm('هل تريد طباعة التقرير الحالي؟')) return;
     window.print();
   };
 

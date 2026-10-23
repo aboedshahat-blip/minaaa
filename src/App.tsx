@@ -44,7 +44,6 @@ import { exportTemplateToExcel } from './lib/excelUtils';
 import { Navbar } from './components/Navbar';
 import { NavigationTabs, TabType } from './components/NavigationTabs';
 import { MovementsPage } from './pages/MovementsPage';
-import { SheetProcessingPage } from './pages/SheetProcessingPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -63,7 +62,7 @@ const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: 
   return localRows.filter((row) => !cloudIds.has(row.id));
 };
 
-const APP_TABS: TabType[] = ['movements', 'sheet_import', 'customers', 'accounts', 'reports', 'berths', 'settings', 'admin_control'];
+const APP_TABS: TabType[] = ['movements', 'customers', 'accounts', 'reports', 'berths', 'settings', 'admin_control'];
 const ACTIVE_TAB_KEY = 'pls_active_tab';
 
 const getStoredActiveTab = (): TabType => {
@@ -408,6 +407,24 @@ const AppContent: React.FC = () => {
     setCloudFeedback(`تم التراجع واستعادة البيانات السابقة: ${latestBackup.label}`);
   };
 
+  useEffect(() => {
+    const handleUndoShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      const editingText = target?.matches('input, textarea, [contenteditable="true"]');
+      // Leave Ctrl+Z to the browser while the user is editing a field.
+      if (editingText) return;
+      if (!getSafetyBackups().length) return;
+      event.preventDefault();
+      if (!window.confirm('سيتم التراجع عن آخر حذف واستعادة البيانات السابقة. هل تريد المتابعة؟')) return;
+      void handleUndoLatestDeletion().catch((error) => {
+        window.alert(error instanceof Error ? error.message : 'تعذر التراجع عن آخر حذف.');
+      });
+    };
+    window.addEventListener('keydown', handleUndoShortcut);
+    return () => window.removeEventListener('keydown', handleUndoShortcut);
+  }, [safetyBackups]);
+
   const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
     const batchAt = new Date().toISOString();
     const batchName = importedMovements[0]?.notes?.match(/(?:شيت|ملف):\s*(.+)$/)?.[1]?.trim()
@@ -581,8 +598,11 @@ const AppContent: React.FC = () => {
         {activeTab === 'movements' && (
           <MovementsPage
             movements={movements}
+            customers={customers}
             berths={berths}
             settings={settings}
+            currentMaxSeq={currentMaxSeq}
+            onImportMovements={handleImportMovements}
             onEditMovement={(m) => {
               setEditingMovement(m);
               setIsMovementModalOpen(true);
@@ -596,16 +616,6 @@ const AppContent: React.FC = () => {
               setIsPaymentModalOpen(true);
             }}
             onBatchUpdateMovements={handleBatchUpdateMovements}
-          />
-        )}
-
-        {activeTab === 'sheet_import' && (
-          <SheetProcessingPage
-            customers={customers}
-            berths={berths}
-            settings={settings}
-            currentMaxSeq={currentMaxSeq}
-            onImportMovements={handleImportMovements}
           />
         )}
 

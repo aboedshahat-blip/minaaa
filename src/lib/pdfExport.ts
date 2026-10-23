@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Movement, PaymentReceipt } from '../types';
+import vibLogoUrl from '../assets/vib-logo.jpeg';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
@@ -98,6 +99,7 @@ export async function exportMovementsToOfficialPdf(
   container.innerHTML = `
     <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 18px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <img src="${vibLogoUrl}" alt="شعار VIB" style="width:86px;height:86px;object-fit:contain;flex:none;" />
         <div style="text-align: right;">
           <h2 style="font-size: 20px; font-weight: 900; color: #0f172a; margin: 0;">منظومة VIB اللوجستية</h2>
           <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">إدارة حركة الشاحنات والحاويات بالميناء</p>
@@ -115,7 +117,7 @@ export async function exportMovementsToOfficialPdf(
       </div>
     </div>
 
-    <table style="width: 100%; border-collapse: collapse; font-size: 11.5px; border: 1.5px solid #0f172a; text-align: right;">
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; border: 1.5px solid #0f172a; text-align: right; overflow-wrap:anywhere;word-break:break-word;">
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 8px 4px; border: 1px solid #334155; width: 35px;">م</th>
@@ -263,7 +265,8 @@ export async function exportCustomerStatementPdf(
     .join('');
 
   container.innerHTML = `
-    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:92px;height:92px;object-fit:contain;flex:none;" />
       <div style="text-align: right;">
         <h2 style="font-size: 20px; font-weight: 900; color: #1e3a8a; margin: 0;">منظومة VIB اللوجستية</h2>
         <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">${escapeHtml(placeName)}</p>
@@ -299,7 +302,7 @@ export async function exportCustomerStatementPdf(
     </div>
 
     <!-- Movements Table -->
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; border: 1px solid #cbd5e1; text-align: right; margin-bottom: 15px;">
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; border: 1px solid #cbd5e1; text-align: right; margin-bottom: 15px; overflow-wrap:anywhere;word-break:break-word;">
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 7px 4px; border: 1px solid #334155; width: 30px;">م</th>
@@ -391,6 +394,7 @@ export async function exportCustomerStatementPdf(
   document.body.appendChild(container);
 
   try {
+    await Promise.all(Array.from(container.querySelectorAll('img')).map((image) => image.decode().catch(() => undefined)));
     const canvas = await html2canvas(container, {
       scale: 1.25,
       useCORS: true,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
 import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
+import vibLogoUrl from '../assets/vib-logo.jpeg';
 
 interface DriverInvoiceModalProps {
   isOpen: boolean;
@@ -63,6 +64,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
   };
 
   const handlePrint = () => {
+    if (!window.confirm(`هل تريد طباعة فاتورة ${driverName}؟`)) return;
     const printContent = document.getElementById('printable-driver-invoice');
     if (!printContent) {
       window.print();
@@ -82,7 +84,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
         <meta charset="utf-8" />
         <title>فاتورة حساب سائق - ${driverName}</title>
         <style>
-          @page { size: A4 portrait; margin: 10mm; }
+          @page { size: A4 landscape; margin: 8mm; }
           * { box-sizing: border-box; }
           body {
             font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
@@ -102,6 +104,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             align-items: center;
           }
           .title { font-size: 20px; font-weight: 900; margin: 0 0 4px 0; color: #1e3a8a; }
+          .brand-logo { width: 82px; height: 82px; object-fit: contain; border-radius: 8px; }
           .subtitle { font-size: 13px; font-weight: bold; color: #475569; margin: 0; }
           .meta-box {
             background-color: #f1f5f9;
@@ -119,6 +122,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           .meta-val { font-weight: bold; color: #0f172a; margin-top: 2px; }
           table {
             width: 100%;
+            table-layout: fixed;
             border-collapse: collapse;
             margin-bottom: 15px;
             font-size: 11px;
@@ -134,7 +138,11 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             padding: 6px 5px;
             border: 1px solid #cbd5e1;
             text-align: center;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.4;
           }
+          th { overflow-wrap: anywhere; line-height: 1.35; }
           tr:nth-child(even) { background-color: #f8fafc; }
           .totals-table {
             width: 50%;
@@ -156,6 +164,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           .sign-col { text-align: center; width: 30%; font-size: 12px; font-weight: bold; }
           .sign-line { margin-top: 45px; border-top: 1px solid #64748b; }
           .footer-note { text-align: center; font-size: 10px; color: #64748b; margin-top: 25px; }
+          @media print { body { padding: 0; font-size: 10px; } th, td { padding: 4px 3px !important; } tr { break-inside: avoid; } }
         </style>
       </head>
       <body>
@@ -229,6 +238,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           >
             {/* Invoice Header */}
             <div className="header-box border-b-2 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <img src={vibLogoUrl} alt="شعار VIB" className="brand-logo h-20 w-20 rounded-lg object-contain" />
               <div>
                 <h1 className="title text-xl font-black text-blue-900">{placeName}</h1>
                 <p className="subtitle text-xs font-bold text-slate-600 mt-1">

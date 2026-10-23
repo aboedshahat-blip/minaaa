@@ -2,6 +2,7 @@ import React from 'react';
 import { Movement } from '../types';
 import { X, Printer, Download, FileSpreadsheet, Check } from 'lucide-react';
 import { exportTemplateToExcel } from '../lib/excelUtils';
+import vibLogoUrl from '../assets/vib-logo.jpeg';
 
 interface OfficialSheetPrintModalProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
   if (!isOpen) return null;
 
   const handlePrint = () => {
+    if (!window.confirm(`هل تريد طباعة ${movements.length} حركة في الكشف الحالي؟`)) return;
     window.print();
   };
 
@@ -62,6 +64,9 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             size: landscape;
             margin: 8mm;
           }
+          #official-clean-manifest-print-zone table { table-layout: fixed; width: 100%; }
+          #official-clean-manifest-print-zone th, #official-clean-manifest-print-zone td { overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; padding: 4px 3px !important; font-size: 9px !important; }
+          #official-clean-manifest-print-zone tr { break-inside: avoid; }
         }
       `}</style>
 
@@ -122,6 +127,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             <div className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
               <div className="flex items-center justify-between text-xs text-slate-600 mb-2">
                 <div className="text-right">
+                  <img src={vibLogoUrl} alt="شعار VIB" className="w-20 h-20 object-contain mb-1" />
                   <p className="font-bold text-slate-900 text-sm">منظومة VIB اللوجستية</p>
                   <p>إدارة وتشغيل حركة الشاحنات والحاويات بالميناء</p>
                 </div>

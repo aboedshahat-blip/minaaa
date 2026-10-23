@@ -2,7 +2,6 @@ import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Truck,
-  FileSpreadsheet,
   Users,
   Wallet,
   BarChart3,
@@ -12,7 +11,6 @@ import {
 
 export type TabType =
   | 'movements'
-  | 'sheet_import'
   | 'customers'
   | 'accounts'
   | 'reports'
@@ -45,12 +43,6 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
       label: 'كشف الحركات (الاسطمبة)',
       icon: <Truck className="w-4 h-4" />,
       badge: movementCount,
-      visible: true,
-    },
-    {
-      id: 'sheet_import',
-      label: 'رفع الشيتات · المرحلة 1',
-      icon: <FileSpreadsheet className="w-4 h-4" />,
       visible: true,
     },
     {

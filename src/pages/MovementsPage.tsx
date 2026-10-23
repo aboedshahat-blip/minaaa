@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Berth, Movement } from '../types';
+import { Berth, Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel } from '../lib/excelUtils';
 import {
@@ -30,11 +30,15 @@ import { CashierLinkingModal } from '../components/CashierLinkingModal';
 import { CashierReportUploadModal } from '../components/CashierReportUploadModal';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
+import { SheetProcessingPage } from './SheetProcessingPage';
 
 interface MovementsPageProps {
   movements: Movement[];
+  customers: Customer[];
   berths: Berth[];
-  settings?: SystemSettings;
+  settings: SystemSettings;
+  currentMaxSeq: number;
+  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => void;
   onEditMovement: (movement: Movement) => void;
   onDeleteMovement: (id: string) => void;
   onClearAllMovements?: () => void;
@@ -65,8 +69,11 @@ const getMovementBatch = (movement: Movement) => {
 
 export const MovementsPage: React.FC<MovementsPageProps> = ({
   movements,
+  customers,
   berths,
   settings,
+  currentMaxSeq,
+  onImportMovements,
   onEditMovement,
   onDeleteMovement,
   onClearAllMovements,
@@ -85,7 +92,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [linkingMovement, setLinkingMovement] = useState<Movement | null>(null);
 
   // Workflow Stages: 1 = Aggregation & Official PDF | 2 = Cashier Linking | 3 = Client Accounts & Discounts | all = Master Table
-  const [activeStage, setActiveStage] = useState<'daily' | 'stage1_manifest' | 'stage2_cashier' | 'stage3_clients' | 'all'>('daily');
+  const [activeStage, setActiveStage] = useState<'daily' | 'stage0_import' | 'stage1_manifest' | 'stage2_cashier' | 'stage3_clients' | 'all'>('daily');
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -139,20 +146,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       window.alert(error instanceof Error ? error.message : 'تعذر التراجع عن الحذف.');
     }
   };
-
-  useEffect(() => {
-    if (activeStage !== 'daily' || !canUndoLatestDeletion) return;
-    const handleUndoShortcut = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTyping = target?.matches('input, textarea, select, [contenteditable="true"]');
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !isTyping) {
-        event.preventDefault();
-        void runUndoLatestDeletion();
-      }
-    };
-    window.addEventListener('keydown', handleUndoShortcut);
-    return () => window.removeEventListener('keydown', handleUndoShortcut);
-  }, [activeStage, canUndoLatestDeletion, onUndoLatestDeletion]);
 
   const getEntryDateTime = (movement: Movement) => {
     const date = new Date(movement.created_at);
@@ -423,10 +416,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Stage tab config
   const stageTabs = [
-    { key: 'daily' as const, icon: '📊', label: 'اليوم' },
-    { key: 'stage1_manifest' as const, icon: '1', label: 'تجميع الشيتات' },
-    { key: 'stage2_cashier' as const, icon: '2', label: 'فواتير الكاشير' },
-    ...(canViewFinancials ? [{ key: 'stage3_clients' as const, icon: '3', label: 'حسابات العملاء' }] : []),
+    { key: 'stage0_import' as const, icon: '1', label: 'إدخال البيانات' },
+    { key: 'stage1_manifest' as const, icon: '2', label: 'تجميع وطباعة الشيتات' },
+    { key: 'stage2_cashier' as const, icon: '3', label: 'فواتير الكاشير' },
+    ...(canViewFinancials ? [{ key: 'stage3_clients' as const, icon: '4', label: 'حسابات العملاء' }] : []),
+    { key: 'daily' as const, icon: '📊', label: 'لوحة اليوم' },
     { key: 'all' as const, icon: '☷', label: 'كل الحركات' },
   ];
 
@@ -439,6 +433,19 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           </button>
         ))}
       </nav>
+
+      {activeStage === 'stage0_import' && (
+        <SheetProcessingPage
+          customers={customers}
+          berths={berths}
+          settings={settings}
+          currentMaxSeq={currentMaxSeq}
+          onImportMovements={(importedMovements, newCustomers) => {
+            onImportMovements(importedMovements, newCustomers);
+            setActiveStage('stage1_manifest');
+          }}
+        />
+      )}
 
       {activeStage === 'daily' && (
         <section className="space-y-4">
