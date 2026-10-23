@@ -114,6 +114,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [selectedManifestBatch, setSelectedManifestBatch] = useState('latest');
   const [selectedManifestBatchIds, setSelectedManifestBatchIds] = useState<string[]>([]);
   const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all' | 'picked'>('selected');
+  const [isExportingPickedPdf, setIsExportingPickedPdf] = useState(false);
 
   const importBatches = useMemo(() => {
     const batches = new Map<string, { id: string; name: string; at: string; count: number }>();
@@ -257,6 +258,24 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     setSelectedManifestBatchIds((current) => current.includes(batchId)
       ? current.filter((id) => id !== batchId)
       : [...current, batchId]);
+  };
+
+  const downloadPickedBatchesPdf = async () => {
+    if (!pickedBatchMovements.length || isExportingPickedPdf) return;
+    setIsExportingPickedPdf(true);
+    try {
+      const { exportMovementsToOfficialPdf } = await import('../lib/pdfExport');
+      const title = `كشف الشيتات المحددة (${selectedManifestBatchIds.length} شيت)`;
+      const berthName = selectedBerth
+        ? berths.find((berth) => berth.id === selectedBerth || berth.name === selectedBerth)?.name
+        : undefined;
+      await exportMovementsToOfficialPdf(pickedBatchMovements, title, berthName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تجهيز ملف PDF.';
+      alert(`تعذر تنزيل كشف الشيتات المحددة: ${message}`);
+    } finally {
+      setIsExportingPickedPdf(false);
+    }
   };
 
   // Group movements by Customer / Driver for Stage 3 (Multi-truck consolidation)
@@ -696,6 +715,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <span className="me-auto text-xs font-bold text-slate-700">تم اختيار {selectedManifestBatchIds.length} شيت ({pickedBatchMovements.length} حركة)</span>
                 <button onClick={()=>setSelectedManifestBatch('picked')} disabled={!selectedManifestBatchIds.length} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800 disabled:opacity-50">عرض التجميع المحدد</button>
                 <button onClick={()=>openManifestPrint('picked')} disabled={!pickedBatchMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة الشيتات المحددة ({pickedBatchMovements.length})</button>
+                <button onClick={downloadPickedBatchesPdf} disabled={!pickedBatchMovements.length || isExportingPickedPdf} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Download className="inline h-3.5 w-3.5 ml-1"/>{isExportingPickedPdf?'جاري تجهيز PDF...':'تنزيل PDF للمحدد'}</button>
                 <button onClick={()=>setSelectedManifestBatchIds([])} disabled={!selectedManifestBatchIds.length} className="rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white disabled:opacity-50">إلغاء التحديد</button>
               </div>
             </>}
