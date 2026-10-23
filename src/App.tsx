@@ -510,6 +510,10 @@ const AppContent: React.FC = () => {
             onDeleteMovement={handleDeleteMovement}
             onClearAllMovements={handleClearAllMovements}
             onTogglePaid={handleTogglePaid}
+            onOpenPaymentModal={(cId) => {
+              setPaymentCustomerId(cId);
+              setIsPaymentModalOpen(true);
+            }}
             onBatchUpdateMovements={handleBatchUpdateMovements}
           />
         )}
