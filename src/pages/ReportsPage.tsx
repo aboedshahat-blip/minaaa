@@ -28,53 +28,34 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 }) => {
   const confirmAction = useConfirmAction();
   const [activeReport, setActiveReport] = useState<'detailed_client' | 'statistics'>('detailed_client');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>(() => customers.map((customer) => customer.id));
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
-  // Selected customer details
-  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+  const selectedCustomers = useMemo(
+    () => customers.filter((customer) => selectedCustomerIds.includes(customer.id)),
+    [customers, selectedCustomerIds],
+  );
 
-  // Movements of selected customer filtered by date
-  const clientMovements = useMemo(() => {
-    if (!selectedCustomer) return [];
-    return movements.filter((m) => {
-      const matchCust = m.customer_id === selectedCustomer.id || m.customer_name === selectedCustomer.name;
-      if (!matchCust) return false;
-      if (dateFrom && m.movement_date < dateFrom) return false;
-      if (dateTo && m.movement_date > dateTo) return false;
+  const selectedCustomerReports = useMemo(() => selectedCustomers.map((customer) => {
+    const clientMovements = movements.filter((movement) => {
+      const matchesCustomer = movement.customer_id === customer.id || movement.customer_name === customer.name;
+      if (!matchesCustomer) return false;
+      if (dateFrom && movement.movement_date < dateFrom) return false;
+      if (dateTo && movement.movement_date > dateTo) return false;
       return true;
     });
-  }, [movements, selectedCustomer, dateFrom, dateTo]);
-
-  // Client summary stats
-  const clientStats = useMemo(() => {
-    let cashier = 0;
-    let sysComm = 0;
-    let nafez = 0;
-    let total = 0;
-    let paid = 0;
-    let remaining = 0;
-
-    for (const m of clientMovements) {
-      cashier += Number(m.cashier_invoice) || 0;
-      sysComm += Number(m.system_commission) || 0;
-      nafez += Number(m.nafez_commission) || 0;
-      total += Number(m.total_amount) || 0;
-      paid += Number(m.paid_amount) || 0;
-      remaining += Number(m.remaining_amount) || 0;
-    }
-
-    return {
-      count: clientMovements.length,
-      cashier,
-      sysComm,
-      nafez,
-      total,
-      paid,
-      remaining,
-    };
-  }, [clientMovements]);
+    const stats = clientMovements.reduce((totals, movement) => ({
+      count: totals.count + 1,
+      cashier: totals.cashier + (Number(movement.cashier_invoice) || 0),
+      sysComm: totals.sysComm + (Number(movement.system_commission) || 0),
+      nafez: totals.nafez + (Number(movement.nafez_commission) || 0),
+      total: totals.total + (Number(movement.total_amount) || 0),
+      paid: totals.paid + (Number(movement.paid_amount) || 0),
+      remaining: totals.remaining + (Number(movement.remaining_amount) || 0),
+    }), { count: 0, cashier: 0, sysComm: 0, nafez: 0, total: 0, paid: 0, remaining: 0 });
+    return { customer, movements: clientMovements, stats };
+  }), [selectedCustomers, movements, dateFrom, dateTo]);
 
   // Statistical analytics for all clients
   const statistics = useMemo(() => {
@@ -112,36 +93,38 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
   // Export Client Detailed Report
   const handleExportClientExcel = async () => {
-    if (!selectedCustomer) return;
+    if (selectedCustomerReports.length === 0) return;
     const XLSX = await import('xlsx');
-
-    const data = clientMovements.map((m, idx) => ({
-      'م': m.seq || idx + 1,
-      'تاريخ الحركة': m.movement_date,
-      'رقم الشاحنة': m.truck_no,
-      'رقم المقطورة': m.trailer_no || '',
-      'اسم السائق': m.driver_name || '',
-      'رقم الحاوية': m.container_no || '',
-      'رقم الاقرار': m.declaration_no || '',
-      'الرصيف': m.berth_name || '',
-      'فاتورة كاشير': m.cashier_invoice || 0,
-      'عمولة المنظومة': m.system_commission || 0,
-      'عمولة نافذ': m.nafez_commission || 0,
-      'الإجمالي': m.total_amount || 0,
-      'المدفوع': m.paid_amount || 0,
-      'المتبقي': m.remaining_amount || 0,
-      'حالة السداد': m.payment_status === 'paid' ? 'مدفوع' : m.payment_status === 'partial' ? 'جزئي' : 'غير مدفوع',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    ws['!views'] = [{ rightToLeft: true }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `تقرير_${selectedCustomer.name}`);
-    XLSX.writeFile(wb, `تقرير_حركات_${selectedCustomer.code}_${selectedCustomer.name}.xlsx`);
+    selectedCustomerReports.forEach(({ customer, movements: clientMovements }, reportIndex) => {
+      const data = clientMovements.map((m, idx) => ({
+        'م': m.seq || idx + 1,
+        'تاريخ الحركة': m.movement_date,
+        'رقم الشاحنة': m.truck_no,
+        'رقم المقطورة': m.trailer_no || '',
+        'اسم السائق': m.driver_name || '',
+        'رقم الحاوية': m.container_no || '',
+        'رقم الاقرار': m.declaration_no || '',
+        'الرصيف': m.berth_name || '',
+        'فاتورة كاشير': m.cashier_invoice || 0,
+        'عمولة المنظومة': m.system_commission || 0,
+        'عمولة نافذ': m.nafez_commission || 0,
+        'الإجمالي': m.total_amount || 0,
+        'المدفوع': m.paid_amount || 0,
+        'المتبقي': m.remaining_amount || 0,
+        'حالة السداد': m.payment_status === 'paid' ? 'مدفوع' : m.payment_status === 'partial' ? 'جزئي' : 'غير مدفوع',
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      ws['!views'] = [{ rightToLeft: true }];
+      const sheetName = `${reportIndex + 1}_${customer.code}_${customer.name}`.replace(/[\\/?*:[\]]/g, ' ').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName || `عميل_${reportIndex + 1}`);
+    });
+    XLSX.writeFile(wb, `تقارير_العملاء_${selectedCustomerReports.length}_عميل.xlsx`);
   };
 
   const handlePrint = async () => {
-    if (!await confirmAction('هل تريد طباعة التقرير الحالي؟', 'نعم، اطبع')) return;
+    if (selectedCustomerReports.length === 0) return;
+    if (!await confirmAction(`سيتم طباعة التقارير المحددة لـ ${selectedCustomerReports.length} عميل. هل تريد المتابعة؟`, 'نعم، اطبع التقارير')) return;
     window.print();
   };
 
@@ -191,21 +174,34 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
           {/* Controls Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 no-print">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  اختر العميل لعرض تقريره
-                </label>
-                <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-800"
-                >
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      [{c.code}] {c.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="relative">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">العملاء المشمولون في التقرير</label>
+                <details className="group">
+                  <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800">
+                    <span>{selectedCustomers.length === customers.length ? `كل العملاء (${customers.length})` : `تم تحديد ${selectedCustomers.length} من ${customers.length}`}</span>
+                    <span className="text-slate-400">⌄</span>
+                  </summary>
+                  <div className="absolute right-0 top-full z-20 mt-1 max-h-64 w-full min-w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
+                    <label className="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-2 py-2 text-xs font-bold text-blue-800">
+                      <input
+                        type="checkbox"
+                        checked={customers.length > 0 && selectedCustomers.length === customers.length}
+                        onChange={(event) => setSelectedCustomerIds(event.target.checked ? customers.map((customer) => customer.id) : [])}
+                      />
+                      تحديد الكل للطباعة
+                    </label>
+                    {customers.map((customer) => (
+                      <label key={customer.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-slate-700 hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          checked={selectedCustomerIds.includes(customer.id)}
+                          onChange={(event) => setSelectedCustomerIds((current) => event.target.checked ? [...current, customer.id] : current.filter((id) => id !== customer.id))}
+                        />
+                        <span>[{customer.code}] {customer.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
               </div>
 
               <div>
@@ -235,6 +231,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleExportClientExcel}
+                  disabled={selectedCustomerReports.length === 0}
                   className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 transition"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -243,6 +240,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
                 <button
                   onClick={handlePrint}
+                  disabled={selectedCustomerReports.length === 0}
                   className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition"
                 >
                   <Printer className="w-3.5 h-3.5" />
@@ -253,8 +251,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
           </div>
 
           {/* Client Statement Card */}
-          {selectedCustomer && (
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+          {selectedCustomerReports.length === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+              حدد عميلًا واحدًا على الأقل لعرض التقرير أو طباعته.
+            </div>
+          )}
+          {selectedCustomerReports.map(({ customer: selectedCustomer, movements: clientMovements, stats: clientStats }) => (
+            <div key={selectedCustomer.id} className="client-report-print bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6 print:break-before-page">
               {/* Header Box */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 gap-4">
                 <div>
@@ -382,7 +385,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 </div>
               </div>
             </div>
-          )}
+          ))}
         </div>
       )}
 
