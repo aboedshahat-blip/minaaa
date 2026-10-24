@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Anchor, ShieldCheck, UserCheck, Lock, LogOut, Plus } from 'lucide-react';
+import { ShieldCheck, UserCheck, Lock, LogOut, Plus } from 'lucide-react';
+import vibLogoUrl from '../assets/vib-logo.jpeg';
 
 interface NavbarProps {
   onOpenQuickAdd: () => void;
@@ -11,28 +12,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenQuickAdd,
   onExportTemplate,
 }) => {
-  const { currentUser, users, setCurrentUserId, canViewFinancials, logout } = useAuth();
-
-  const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCurrentUserId(e.target.value);
-  };
+  const { currentUser, canViewFinancials, logout } = useAuth();
 
   return (
     <header className="bg-slate-900 text-white shadow-md border-b border-slate-800 sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-16 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[76px] py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
         {/* Brand */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="bg-blue-600 p-1.5 sm:p-2 rounded-lg text-white shadow-sm flex items-center justify-center shrink-0">
-            <Anchor className="w-5 h-5 sm:w-6 sm:h-6" />
+          <div className="h-12 w-12 sm:h-14 sm:w-14 overflow-hidden rounded-xl bg-white p-0.5 shadow-sm ring-1 ring-white/20 shrink-0">
+            <img src={vibLogoUrl} alt="شعار VIB للنقل والحاويات" className="h-full w-full object-contain" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm sm:text-lg text-white truncate">منظومة VIB اللوجستية</span>
-              <span className="hidden md:inline text-xs bg-blue-900/60 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full font-mono font-bold">
-                VIB Operations
-              </span>
-            </div>
-            <p className="hidden sm:block text-xs text-slate-400">إدارة حركات الشاحنات والحاويات والحسابات</p>
+            <span className="block font-extrabold text-sm sm:text-base text-white truncate">VIB للنقل وتجارة الحاويات</span>
+            <p className="mt-0.5 hidden sm:block text-[11px] text-slate-300">إدارة التشغيل والحركات والحسابات</p>
           </div>
         </div>
 
@@ -40,7 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 min-w-0">
           <button
             onClick={onOpenQuickAdd}
-            className="inline-flex items-center gap-1 sm:gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] sm:text-xs font-medium px-2 sm:px-3 py-2.5 sm:py-2 rounded-lg shadow-sm transition min-h-11 sm:min-h-0"
+            className="inline-flex items-center gap-1 sm:gap-1.5 bg-blue-600 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 text-white text-[11px] sm:text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-lg shadow-sm transition min-h-11"
           >
             <Plus className="w-4 h-4" /><span>إدخال يدوي</span>
           </button>

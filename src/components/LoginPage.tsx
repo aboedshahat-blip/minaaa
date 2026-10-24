@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  Anchor,
   ShieldCheck,
-  UserCheck,
   Lock,
   Eye,
   EyeOff,
   ArrowRight,
-  Database,
-  CheckCircle2,
   AlertCircle,
-  Truck,
 } from 'lucide-react';
+import vibLogoUrl from '../assets/vib-logo.jpeg';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -50,19 +46,15 @@ export const LoginPage: React.FC = () => {
       <div className="max-w-md w-full relative z-10 space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center p-3.5 bg-blue-600 text-white rounded-2xl shadow-xl shadow-blue-500/20 border border-blue-400/30 mb-2">
-            <Anchor className="w-8 h-8" />
+          <div className="mx-auto mb-3 h-28 w-28 overflow-hidden rounded-3xl bg-white p-1.5 shadow-xl shadow-blue-950/30 ring-1 ring-white/15 sm:h-32 sm:w-32">
+            <img src={vibLogoUrl} alt="شعار VIB للنقل وتجارة الحاويات" className="h-full w-full rounded-2xl object-contain" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            منظومة VIB اللوجستية
+            VIB للنقل وتجارة الحاويات
           </h1>
           <p className="text-xs sm:text-sm text-slate-400">
-            إدارة تسجيل حركات الشاحنات والحسابات والعمولات
+            إدارة التشغيل وحركات الشاحنات والحسابات
           </p>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mt-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>نظام سحابي آمن ومحمي ومحدث دائماً</span>
-          </div>
         </div>
 
         {/* Login Card */}
@@ -136,11 +128,11 @@ export const LoginPage: React.FC = () => {
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
                 <span>سياسة الأمان والسرية المشددة:</span>
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono">حماية 100%</span>
+              <span className="text-[10px] text-slate-500">دخول حسب الصلاحيات</span>
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
-              🔒 <strong>يلزم كتابة اسم المستخدم وكلمة المرور الخاصة بك يدوياً</strong> للدخول. لا يُسمح بالتبديل بين الحسابات إلا بعد تسجيل الخروج وإدخال كلمة المرور منعاً لتداخل الصلاحيات.
+              <strong>أدخل بيانات الحساب المخصصة لك.</strong> تُحدد صلاحيات الوصول وفق دور المستخدم.
             </p>
 
             <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
@@ -162,7 +154,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer info */}
         <div className="text-center text-xs text-slate-500">
-          منظومة VIB لإدارة الموانئ والشاحنات © {new Date().getFullYear()} - جميع الحقوق محفوظة
+          VIB للنقل وتجارة الحاويات © {new Date().getFullYear()} - جميع الحقوق محفوظة
         </div>
       </div>
     </div>
