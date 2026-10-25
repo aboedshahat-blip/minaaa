@@ -330,7 +330,8 @@ const MAX_CASHIER_MATCH_DAYS = 4;
 export const getCashierEntryCandidates = (
   entries: CashierInvoiceEntry[],
   movements: Movement[],
-): CashierEntryCandidateSet[] => entries.map((entry) => {
+): CashierEntryCandidateSet[] => {
+  const candidateSets = entries.map((entry) => {
   const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits].filter(Boolean)));
   const receiptDate = getReceiptDate(entry.receipt_no);
   const currentOwners = movements.filter((movement) => getMovementReceiptNumbers(movement).includes(entry.receipt_no));
@@ -396,9 +397,28 @@ export const getCashierEntryCandidates = (
     return bBatch - aBatch || b.movementSeq - a.movementSeq;
   });
   const currentMovementId = currentOwners.length === 1 ? currentOwners[0].id : '';
-  const suggestedMovementId = currentMovementId || (candidates.length === 1 ? candidates[0].movementId : '');
-  return { entry, candidates, currentMovementId, suggestedMovementId };
-});
+  return { entry, candidates, currentMovementId, suggestedMovementId: currentMovementId };
+  });
+
+  // A single candidate per receipt is not enough to safely auto-link: several
+  // receipts may point to the same vehicle movement, especially when plates
+  // repeat across clients or the cashier report has split/duplicate lines.
+  const entriesPerMovement = new Map<string, number>();
+  candidateSets.forEach(({ candidates, currentMovementId }) => {
+    if (currentMovementId) return;
+    candidates.forEach(({ movementId }) => {
+      entriesPerMovement.set(movementId, (entriesPerMovement.get(movementId) || 0) + 1);
+    });
+  });
+
+  return candidateSets.map((candidateSet) => {
+    if (candidateSet.suggestedMovementId || candidateSet.candidates.length !== 1) return candidateSet;
+    const onlyCandidate = candidateSet.candidates[0];
+    return (entriesPerMovement.get(onlyCandidate.movementId) || 0) === 1
+      ? { ...candidateSet, suggestedMovementId: onlyCandidate.movementId }
+      : candidateSet;
+  });
+};
 
 /** Applies only explicit receipt-to-movement selections; an empty choice stays unmatched. */
 export const applyCashierMatches = (

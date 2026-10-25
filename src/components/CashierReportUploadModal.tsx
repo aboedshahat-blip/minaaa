@@ -56,6 +56,17 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
   if (!isOpen) return null;
 
+  const candidateReceiptCountByMovement = new Map<string, number>();
+  matchCandidates.forEach(({ candidates, currentMovementId }) => {
+    if (currentMovementId) return;
+    candidates.forEach(({ movementId }) => {
+      candidateReceiptCountByMovement.set(
+        movementId,
+        (candidateReceiptCountByMovement.get(movementId) || 0) + 1,
+      );
+    });
+  });
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -196,6 +207,19 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     if (matchResults.length === 0) {
       alert('اختر حركة واحدة على الأقل لربط الفاتورة بها');
       return;
+    }
+
+    const receiptCountByMovement = new Map<string, number>();
+    Object.values(selectedMovementByReceipt).filter(Boolean).forEach((movementId) => {
+      receiptCountByMovement.set(movementId, (receiptCountByMovement.get(movementId) || 0) + 1);
+    });
+    const multipleReceiptGroups = Array.from(receiptCountByMovement.entries()).filter(([, count]) => count > 1);
+    if (multipleReceiptGroups.length > 0) {
+      const descriptions = multipleReceiptGroups.map(([movementId, count]) => {
+        const movement = movements.find(({ id }) => id === movementId);
+        return `${movement?.customer_name || 'عميل غير محدد'} — الحركة ${movement?.seq ?? ''}: ${count} إيصالات`;
+      }).join('\n');
+      if (!await confirmAction(`تم اختيار أكثر من إيصال للحركة نفسها، وسيتم جمع مبالغها عليها:\n${descriptions}\nهل راجعت أرقام الإيصالات وتريد ربطها كلها؟`, 'نعم، اربط الإيصالات كلها')) return;
     }
 
     if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
@@ -505,7 +529,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
                                   {candidates.length > 1 && <span className="font-bold text-amber-700">أكثر من حركة بنفس المركبة؛ راجع العميل قبل الحفظ.</span>}
                                   {isReassigning && <span className="font-bold text-rose-700">سيُنقل الإيصال من العميل المرتبط حاليًا إلى الاختيار الجديد.</span>}
-                                  {candidates.length === 1 && !currentMovementId && <span className="text-emerald-700">اقتراح وحيد حسب أرقام المركبة والتاريخ؛ يمكنك تغييره.</span>}
+                                  {candidates.length === 1 && !currentMovementId && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) > 1 && <span className="font-bold text-amber-700">عدة إيصالات مرشحة لنفس الحركة؛ لم يتم اختيارها تلقائيًا. راجع رقم الإيصال واختر المناسب.</span>}
+                                  {candidates.length === 1 && !currentMovementId && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) === 1 && <span className="text-emerald-700">اقتراح وحيد حسب أرقام المركبة والتاريخ؛ يمكنك تغييره.</span>}
                                 </div>
                               </td>
                             </tr>
