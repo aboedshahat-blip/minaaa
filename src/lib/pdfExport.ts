@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Movement, PaymentReceipt } from '../types';
-import vibLogoUrl from '../assets/vib-logo.jpeg';
+import vibLogoUrl from '../assets/vib-logo.png';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
@@ -255,7 +255,7 @@ export async function exportCustomerStatementPdf(
 
   container.innerHTML = `
     <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 155px minmax(0,1fr) 175px; align-items: center; gap: 16px;">
-      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:120px;object-fit:contain;justify-self:center;" />
+      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:92px;object-fit:cover;object-position:center;border-radius:8px;justify-self:center;" />
       <div style="text-align: center; min-width:0; overflow-wrap:anywhere;">
         <span style="display: inline-block; max-width:100%; white-space:normal; overflow-wrap:anywhere; background-color: #1e3a8a; color: #ffffff; padding: 7px 16px; border-radius: 8px; font-size: 16px; line-height:1.5; font-weight: bold;">
           فاتورة ومطالبة حساب عميل / سائق

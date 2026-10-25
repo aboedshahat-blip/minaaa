@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { ShieldCheck, UserCheck, Lock, LogOut, Plus } from 'lucide-react';
-import vibLogoUrl from '../assets/vib-logo.jpeg';
+import vibLogoUrl from '../assets/vib-logo.png';
 
 interface NavbarProps {
   onOpenQuickAdd: () => void;
@@ -19,8 +19,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[76px] py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
         {/* Brand */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="h-12 w-12 sm:h-14 sm:w-14 overflow-hidden rounded-xl bg-white p-0.5 shadow-sm ring-1 ring-white/20 shrink-0">
-            <img src={vibLogoUrl} alt="شعار VIB للنقل والحاويات" className="h-full w-full object-contain" />
+          <div className="h-11 w-14 sm:h-12 sm:w-16 overflow-hidden rounded-xl bg-slate-950 shadow-sm ring-1 ring-white/20 shrink-0">
+            <img src={vibLogoUrl} alt="شعار VIB للنقل والحاويات" className="h-full w-full object-cover object-center" />
           </div>
           <div className="min-w-0">
             <span className="block font-extrabold text-sm sm:text-base text-white truncate">VIB للنقل وتجارة الحاويات</span>

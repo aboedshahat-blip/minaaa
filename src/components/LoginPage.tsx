@@ -8,7 +8,7 @@ import {
   ArrowRight,
   AlertCircle,
 } from 'lucide-react';
-import vibLogoUrl from '../assets/vib-logo.jpeg';
+import vibLogoUrl from '../assets/vib-logo.png';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -46,8 +46,8 @@ export const LoginPage: React.FC = () => {
       <div className="max-w-md w-full relative z-10 space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="mx-auto mb-3 h-28 w-28 overflow-hidden rounded-3xl bg-white p-1.5 shadow-xl shadow-blue-950/30 ring-1 ring-white/15 sm:h-32 sm:w-32">
-            <img src={vibLogoUrl} alt="شعار VIB للنقل وتجارة الحاويات" className="h-full w-full rounded-2xl object-contain" />
+          <div className="mx-auto mb-3 h-24 w-36 overflow-hidden rounded-2xl bg-black shadow-xl shadow-blue-950/30 ring-1 ring-amber-300/25 sm:h-28 sm:w-40">
+            <img src={vibLogoUrl} alt="شعار VIB للنقل وتجارة الحاويات" className="h-full w-full object-cover object-center" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             VIB للنقل وتجارة الحاويات

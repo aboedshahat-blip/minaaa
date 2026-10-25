@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
 import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
-import vibLogoUrl from '../assets/vib-logo.jpeg';
+import vibLogoUrl from '../assets/vib-logo.png';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface DriverInvoiceModalProps {
@@ -107,7 +107,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           }
           .title { font-size: 20px; font-weight: 900; margin: 0 0 4px 0; color: #1e3a8a; }
           .office-name { max-width: 620px; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
-          .brand-logo { width: 82px; height: 82px; object-fit: contain; border-radius: 8px; }
+          .brand-logo { width: 108px; height: 76px; object-fit: cover; object-position: center; border-radius: 8px; }
           .subtitle { font-size: 13px; font-weight: bold; color: #475569; margin: 0; }
           .meta-box {
             background-color: #f1f5f9;
@@ -242,7 +242,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           >
             {/* Invoice Header */}
             <div className="header-box border-b-2 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <img src={vibLogoUrl} alt="شعار VIB" className="brand-logo h-20 w-20 rounded-lg object-contain" />
+              <img src={vibLogoUrl} alt="شعار VIB" className="brand-logo rounded-lg" />
               <div>
                 <h1 className="title office-name text-xl font-black text-blue-900">{placeName}</h1>
                 <p className="subtitle text-xs font-bold text-slate-600 mt-1">

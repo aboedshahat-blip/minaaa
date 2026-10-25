@@ -2,7 +2,7 @@ import React from 'react';
 import { Movement } from '../types';
 import { X, Printer, Download, FileSpreadsheet, Check } from 'lucide-react';
 import { exportTemplateToExcel } from '../lib/excelUtils';
-import vibLogoUrl from '../assets/vib-logo.jpeg';
+import vibLogoUrl from '../assets/vib-logo.png';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface OfficialSheetPrintModalProps {
@@ -68,7 +68,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             margin: 8mm;
           }
           #official-clean-manifest-print-zone header { padding-bottom: 5mm !important; margin-bottom: 5mm !important; }
-          #official-clean-manifest-print-zone header img { width: 34mm !important; height: 28mm !important; }
+          #official-clean-manifest-print-zone header img { width: 34mm !important; height: 24mm !important; object-fit: cover !important; object-position: center !important; border-radius: 2mm !important; }
           #official-clean-manifest-print-zone header .manifest-title { font-size: 15pt !important; line-height: 1.5 !important; padding: 3mm 5mm !important; white-space: normal !important; }
           #official-clean-manifest-print-zone .manifest-meta { font-size: 10pt !important; line-height: 1.7 !important; }
           #official-clean-manifest-print-zone table { table-layout: fixed; width: 100%; direction: rtl; }
@@ -136,7 +136,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             <header className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
               <div className="flex items-center justify-between gap-4 text-xs text-slate-600 mb-2">
                 <div className="text-right">
-                  <img src={vibLogoUrl} alt="شعار مكتب النقل" className="w-28 h-24 object-contain" />
+                  <img src={vibLogoUrl} alt="شعار مكتب النقل" className="w-28 h-20 rounded-lg object-cover object-center" />
                 </div>
                 <div className="text-center flex-1 min-w-0">
                   <span className="manifest-title inline-block bg-slate-900 text-white font-bold text-base px-5 py-2 rounded-lg shadow-sm">
