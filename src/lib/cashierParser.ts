@@ -324,6 +324,8 @@ export const parseUploadedCashierReport = async (file: File): Promise<CashierInv
 const getMovementReceiptNumbers = (movement: Movement): string[] =>
   (movement.cashier_receipt_no || '').split(/[,،\n]+/).map((receipt) => receipt.trim()).filter(Boolean);
 
+const MAX_CASHIER_MATCH_DAYS = 4;
+
 /** Returns every plausible booking row so repeated vehicles can be confirmed by customer. */
 export const getCashierEntryCandidates = (
   entries: CashierInvoiceEntry[],
@@ -349,7 +351,7 @@ export const getCashierEntryCandidates = (
     const dayDistance = receiptDate != null && movementDate != null
       ? Math.round(Math.abs(receiptDate - movementDate) / 86_400_000)
       : null;
-    if (dayDistance != null && dayDistance > 7) return;
+    if (dayDistance != null && dayDistance > MAX_CASHIER_MATCH_DAYS) return;
 
     const candidate: CashierMovementCandidate = {
       movementId: movement.id,
