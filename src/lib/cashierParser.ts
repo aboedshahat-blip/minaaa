@@ -120,6 +120,12 @@ export const extractDigits = (text: string): string => {
   return extractPlateDigits(text);
 };
 
+const normalizePlateSignature = (digits: string, letters: string): string => {
+  const normalizedDigits = normalizeNumerals(digits).replace(/\D/g, '');
+  const normalizedLetters = normalizeArabic(extractPlateLetters(letters)).replace(/[^ء-ي]/g, '');
+  return normalizedDigits && normalizedLetters ? `${normalizedLetters}:${normalizedDigits}` : '';
+};
+
 /**
  * Extracts clean Arabic letters from a string, ignoring colors and common words.
  */
@@ -332,20 +338,27 @@ export const getCashierEntryCandidates = (
   movements: Movement[],
 ): CashierEntryCandidateSet[] => {
   const candidateSets = entries.map((entry) => {
-  const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits].filter(Boolean)));
+  const entryPlateCount = [entry.truck_digits, entry.trailer_digits].filter(Boolean).length;
+  const entryPlates = Array.from(new Set([
+    normalizePlateSignature(entry.truck_digits, entry.truck_letters),
+    normalizePlateSignature(entry.trailer_digits, entry.trailer_letters),
+  ].filter(Boolean)));
   const receiptDate = getReceiptDate(entry.receipt_no);
   const currentOwners = movements.filter((movement) => getMovementReceiptNumbers(movement).includes(entry.receipt_no));
   const candidateMap = new Map<string, CashierMovementCandidate>();
 
   movements.forEach((movement) => {
-    const movementDigits = Array.from(new Set([
-      extractDigits(movement.truck_no || ''),
-      extractDigits(movement.trailer_no || ''),
+    const movementPlates = Array.from(new Set([
+      normalizePlateSignature(extractDigits(movement.truck_no || ''), movement.truck_no || ''),
+      normalizePlateSignature(extractDigits(movement.trailer_no || ''), movement.trailer_no || ''),
     ].filter(Boolean)));
-    const exactPair = entryDigits.length >= 2
-      && movementDigits.length === 2
-      && entryDigits.every((digits) => movementDigits.includes(digits));
-    const singlePlate = entryDigits.length === 1 && movementDigits.includes(entryDigits[0]);
+    const exactPair = entryPlateCount === 2
+      && entryPlates.length === 2
+      && movementPlates.length === 2
+      && entryPlates.every((plate) => movementPlates.includes(plate));
+    const singlePlate = entryPlateCount === 1
+      && entryPlates.length === 1
+      && movementPlates.includes(entryPlates[0]);
     if (!exactPair && !singlePlate) return;
 
     const movementDate = getMovementDate(movement.movement_date || '');

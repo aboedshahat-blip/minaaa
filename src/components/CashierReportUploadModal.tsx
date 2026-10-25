@@ -509,7 +509,10 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                             <tr key={entry.receipt_no} className="align-top hover:bg-slate-50">
                               <td className="p-2 font-mono font-bold text-slate-800 whitespace-nowrap">{entry.receipt_no}</td>
                               <td className="p-2 text-center font-mono font-bold text-indigo-800 whitespace-nowrap">
-                                {[entry.truck_digits, entry.trailer_digits].filter(Boolean).join(' / ') || 'غير مقروء'}
+                                {[
+                                  [entry.truck_letters, entry.truck_digits].filter(Boolean).join(' '),
+                                  [entry.trailer_letters, entry.trailer_digits].filter(Boolean).join(' '),
+                                ].filter(Boolean).join(' / ') || 'غير مقروء'}
                               </td>
                               <td className="p-2 text-center font-mono font-black whitespace-nowrap">{entry.amount.toLocaleString()} ج.م</td>
                               <td className="p-2">
@@ -630,7 +633,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                       <thead className="bg-amber-50/60 text-amber-900 sticky top-0">
                         <tr>
                           <th className="p-2">مسلسل الإيصال</th>
-                          <th className="p-2">أرقام اللوحات المقروءة</th>
+                          <th className="p-2">الحروف والأرقام المقروءة</th>
                           <th className="p-2 text-center">المبلغ</th>
                         </tr>
                       </thead>
@@ -638,7 +641,10 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                         {unmatchedEntries.map((entry) => (
                           <tr key={entry.receipt_no}>
                             <td className="p-2 font-mono font-bold">{entry.receipt_no}</td>
-                            <td className="p-2 font-mono">{[entry.truck_digits, entry.trailer_digits].filter(Boolean).join(' / ') || 'لم تُقرأ لوحة'}</td>
+                            <td className="p-2 font-mono">{[
+                              [entry.truck_letters, entry.truck_digits].filter(Boolean).join(' '),
+                              [entry.trailer_letters, entry.trailer_digits].filter(Boolean).join(' '),
+                            ].filter(Boolean).join(' / ') || 'لم تُقرأ لوحة'}</td>
                             <td className="p-2 text-center font-bold">{entry.amount.toLocaleString()} ج.م</td>
                           </tr>
                         ))}
