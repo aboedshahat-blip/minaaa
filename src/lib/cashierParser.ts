@@ -168,8 +168,6 @@ const extractLettersNearPlateDigits = (text: string, digits: string): string => 
   return beforeDistance <= afterDistance ? beforeLetters : afterLetters;
 };
 
-const reverseArabicPlateLetters = (letters: string): string => Array.from(letters).reverse().join('');
-
 /**
  * Parses vehicle string formatted like:
  * "د س ى - 2312 - أحمر / د ن ر - 3597 - أحمر"
@@ -203,17 +201,24 @@ export const parseVehicleString = (
   const trailerPart = parts[1] || '';
 
   const plateDigits = extractAllPlateDigits(vehicleStr);
-  const truck_digits = plateDigits[0] || extractDigits(truckPart);
-  const trailer_digits = plateDigits[1] || extractDigits(trailerPart);
-  const rawFirstPlateLetters = extractLettersNearPlateDigits(vehicleStr, truck_digits);
-  const rawSecondPlateLetters = extractLettersNearPlateDigits(vehicleStr, trailer_digits);
+  // Cashier PDF tables emit the trailer plate before the truck plate in their
+  // text order, while the app expects truck first. Keep each nearby letter run
+  // attached to its own digits instead of reversing or cross-pairing them.
+  const truck_digits = pdfRtlPlateOrder
+    ? plateDigits[1] || extractDigits(truckPart)
+    : plateDigits[0] || extractDigits(truckPart);
+  const trailer_digits = pdfRtlPlateOrder
+    ? plateDigits[0] || extractDigits(trailerPart)
+    : plateDigits[1] || extractDigits(trailerPart);
+  const rawFirstPlateLetters = extractLettersNearPlateDigits(vehicleStr, plateDigits[0] || truck_digits);
+  const rawSecondPlateLetters = extractLettersNearPlateDigits(vehicleStr, plateDigits[1] || trailer_digits);
   const truck_letters = pdfRtlPlateOrder
-    ? reverseArabicPlateLetters(rawSecondPlateLetters)
+    ? rawFirstPlateLetters || extractPlateLetters(truckPart)
     : rawFirstPlateLetters || extractPlateLetters(truckPart);
   const truck_no = `${truck_letters.split('').join(' ')} ${truck_digits}`.trim();
 
   const trailer_letters = pdfRtlPlateOrder
-    ? reverseArabicPlateLetters(rawFirstPlateLetters)
+    ? rawSecondPlateLetters || extractPlateLetters(trailerPart)
     : rawSecondPlateLetters || extractPlateLetters(trailerPart);
   const trailer_no = `${trailer_letters.split('').join(' ')} ${trailer_digits}`.trim();
 
