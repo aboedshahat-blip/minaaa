@@ -420,11 +420,11 @@ export const getCashierEntryCandidates = (
     const sameSingleDigit = entryPlateCount === 1
       && entryDigits.length === 1
       && movementDigits.includes(entryDigits[0]);
+    // Always expose a same-number candidate for manual inspection when the
+    // full letter+digit signature cannot be proven. PDFs can lose or reorder
+    // Arabic plate glyphs, but this fallback must never auto-select a client.
     const requiresManualReview = !exactPair && !singlePlate && (
-      pairWithReversedTextDirection ||
-      singlePlateWithReversedTextDirection ||
-      (sameDigitPair && (entryPlates.length < 2 || movementPlates.length < 2)) ||
-      (sameSingleDigit && (entryPlates.length < 1 || movementPlates.length < 1))
+      sameDigitPair || sameSingleDigit || pairWithReversedTextDirection || singlePlateWithReversedTextDirection
     );
     if (!exactPair && !singlePlate && !requiresManualReview) return;
 
