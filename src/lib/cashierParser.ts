@@ -325,8 +325,8 @@ export const matchCashierEntriesWithMovements = (
     const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits].filter(Boolean)));
     if (entryDigits.length === 0) return;
 
-    const exactCandidates: Array<{ index: number; dayDistance: number | null }> = [];
-    const singlePlateCandidates: Array<{ index: number; dayDistance: number | null }> = [];
+    const exactCandidates: Array<{ index: number; dayDistance: number | null; batchTime: number | null }> = [];
+    const singlePlateCandidates: Array<{ index: number; dayDistance: number | null; batchTime: number | null }> = [];
     const receiptDate = getReceiptDate(entry.receipt_no);
     updatedMovements.forEach((movement, movementIndex) => {
       const movementDigits = Array.from(new Set([
@@ -339,23 +339,33 @@ export const matchCashierEntriesWithMovements = (
       const dayDistance = receiptDate != null && movementDate != null
         ? Math.round(Math.abs(receiptDate - movementDate) / 86_400_000)
         : null;
-      // Receipt serials contain their issue date. Use it to distinguish repeated
-      // truck pairs from different trips; old reports stay unmatched for review.
-      if (dayDistance != null && dayDistance > 3) return;
+      const parsedBatchTime = movement.import_batch_at ? Date.parse(movement.import_batch_at) : Number.NaN;
+      const batchTime = Number.isFinite(parsedBatchTime) ? parsedBatchTime : null;
+      // Booking sheets often have no trip date, so movements receive their import
+      // date. Cashier receipts may be issued a few days earlier; allow a short
+      // delay and use the newest imported booking batch to identify today's sheet.
+      if (dayDistance != null && dayDistance > 7) return;
 
       if (entryDigits.length >= 2 && entryDigits.every((digits) => movementDigits.includes(digits))) {
-        exactCandidates.push({ index: movementIndex, dayDistance });
+        exactCandidates.push({ index: movementIndex, dayDistance, batchTime });
       } else if (entryDigits.length === 1 && movementDigits.includes(entryDigits[0])) {
-        singlePlateCandidates.push({ index: movementIndex, dayDistance });
+        singlePlateCandidates.push({ index: movementIndex, dayDistance, batchTime });
       } else if (entryDigits.length >= 2 && movementDigits.length === 1 && entryDigits.includes(movementDigits[0])) {
-        singlePlateCandidates.push({ index: movementIndex, dayDistance });
+        singlePlateCandidates.push({ index: movementIndex, dayDistance, batchTime });
       }
     });
 
     const candidates = exactCandidates.length > 0 ? exactCandidates : singlePlateCandidates;
     if (candidates.length === 0) return;
-    const datedCandidates = candidates.filter((candidate) => candidate.dayDistance != null);
-    const scoredCandidates = datedCandidates.length > 0 ? datedCandidates : candidates;
+    const candidatesWithBatch = candidates.filter((candidate) => candidate.batchTime != null);
+    const newestBatchTime = candidatesWithBatch.length > 0
+      ? Math.max(...candidatesWithBatch.map((candidate) => candidate.batchTime as number))
+      : null;
+    const batchPreferredCandidates = newestBatchTime == null
+      ? candidates
+      : candidates.filter((candidate) => candidate.batchTime === newestBatchTime);
+    const datedCandidates = batchPreferredCandidates.filter((candidate) => candidate.dayDistance != null);
+    const scoredCandidates = datedCandidates.length > 0 ? datedCandidates : batchPreferredCandidates;
     const bestDistance = scoredCandidates.reduce<number | null>((best, candidate) =>
       candidate.dayDistance == null ? best : best == null ? candidate.dayDistance : Math.min(best, candidate.dayDistance), null);
     const bestCandidates = bestDistance == null
