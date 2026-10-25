@@ -534,7 +534,6 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
                                   {candidates.length > 1 && <span className="font-bold text-amber-700">أكثر من حركة بنفس المركبة؛ راجع العميل قبل الحفظ.</span>}
                                   {isReassigning && <span className="font-bold text-rose-700">سيُنقل الإيصال من العميل المرتبط حاليًا إلى الاختيار الجديد.</span>}
-                                  {candidates.some((candidate) => candidate.requiresManualReview) && <span className="font-bold text-amber-700">تحتاج اللوحة لمراجعة يدوية بسبب اختلاف تنسيق الحروف أو نقصها؛ راجع اللوحة والعميل قبل الاختيار.</span>}
                                   {candidates.length === 1 && !currentMovementId && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) > 1 && <span className="font-bold text-amber-700">عدة إيصالات مرشحة لنفس الحركة؛ لم يتم اختيارها تلقائيًا. راجع رقم الإيصال واختر المناسب.</span>}
                                   {candidates.length === 1 && !currentMovementId && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) === 1 && <span className="text-emerald-700">اقتراح وحيد حسب أرقام المركبة والتاريخ؛ يمكنك تغييره.</span>}
                                 </div>

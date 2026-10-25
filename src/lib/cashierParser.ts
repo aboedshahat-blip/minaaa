@@ -41,7 +41,6 @@ export interface CashierMovementCandidate {
   containerNo: string;
   movementDate: string;
   exactPair: boolean;
-  requiresManualReview: boolean;
   isCurrentOwner: boolean;
 }
 
@@ -127,19 +126,11 @@ const normalizePlateSignature = (digits: string, letters: string): string => {
   return normalizedDigits && normalizedLetters ? `${normalizedLetters}:${normalizedDigits}` : '';
 };
 
-const reversePlateSignatureLetters = (signature: string): string => {
-  const separator = signature.lastIndexOf(':');
-  if (separator < 0) return signature;
-  return `${Array.from(signature.slice(0, separator)).reverse().join('')}${signature.slice(separator)}`;
-};
-
-const samePlateSet = (left: string[], right: string[], allowReversedLetters = false): boolean => {
+const samePlateSet = (left: string[], right: string[]): boolean => {
   if (left.length === 0 || left.length !== right.length) return false;
   const unmatched = [...right];
   return left.every((plate) => {
-    const index = unmatched.findIndex((candidate) => candidate === plate || (
-      allowReversedLetters && reversePlateSignatureLetters(candidate) === plate
-    ));
+    const index = unmatched.findIndex((candidate) => candidate === plate);
     if (index < 0) return false;
     unmatched.splice(index, 1);
     return true;
@@ -378,9 +369,6 @@ export const getCashierEntryCandidates = (
 ): CashierEntryCandidateSet[] => {
   const candidateSets = entries.map((entry) => {
   const entryPlateCount = [entry.truck_digits, entry.trailer_digits].filter(Boolean).length;
-  const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits]
-    .filter(Boolean)
-    .map((digits) => normalizeNumerals(digits).replace(/\D/g, ''))));
   const entryPlates = Array.from(new Set([
     normalizePlateSignature(entry.truck_digits, entry.truck_letters),
     normalizePlateSignature(entry.trailer_digits, entry.trailer_letters),
@@ -390,10 +378,6 @@ export const getCashierEntryCandidates = (
   const candidateMap = new Map<string, CashierMovementCandidate>();
 
   movements.forEach((movement) => {
-    const movementDigits = Array.from(new Set([
-      extractDigits(movement.truck_no || ''),
-      extractDigits(movement.trailer_no || ''),
-    ].filter(Boolean)));
     const movementPlates = Array.from(new Set([
       normalizePlateSignature(extractDigits(movement.truck_no || ''), movement.truck_no || ''),
       normalizePlateSignature(extractDigits(movement.trailer_no || ''), movement.trailer_no || ''),
@@ -401,32 +385,10 @@ export const getCashierEntryCandidates = (
     const exactPair = entryPlateCount === 2
       && entryPlates.length === 2
       && samePlateSet(entryPlates, movementPlates);
-    const pairWithReversedTextDirection = entryPlateCount === 2
-      && entryPlates.length === 2
-      && movementPlates.length === 2
-      && samePlateSet(entryPlates, movementPlates, true)
-      && !exactPair;
-    const singlePlate = entryPlateCount === 1
-      && entryPlates.length === 1
-      && movementPlates.includes(entryPlates[0]);
-    const singlePlateWithReversedTextDirection = entryPlateCount === 1
-      && entryPlates.length === 1
-      && movementPlates.some((plate) => reversePlateSignatureLetters(plate) === entryPlates[0])
-      && !singlePlate;
-    const sameDigitPair = entryPlateCount === 2
-      && entryDigits.length === 2
-      && movementDigits.length === 2
-      && entryDigits.every((digits) => movementDigits.includes(digits));
-    const sameSingleDigit = entryPlateCount === 1
-      && entryDigits.length === 1
-      && movementDigits.includes(entryDigits[0]);
-    // Always expose a same-number candidate for manual inspection when the
-    // full letter+digit signature cannot be proven. PDFs can lose or reorder
-    // Arabic plate glyphs, but this fallback must never auto-select a client.
-    const requiresManualReview = !exactPair && !singlePlate && (
-      sameDigitPair || sameSingleDigit || pairWithReversedTextDirection || singlePlateWithReversedTextDirection
-    );
-    if (!exactPair && !singlePlate && !requiresManualReview) return;
+    // An automatic or selectable match requires both full plate signatures:
+    // Arabic letters and digits for truck and trailer. Number-only or partial
+    // plate matches are deliberately excluded to protect customer accounts.
+    if (!exactPair) return;
 
     const movementDate = getMovementDate(movement.movement_date || '');
     const dayDistance = receiptDate != null && movementDate != null
@@ -444,7 +406,6 @@ export const getCashierEntryCandidates = (
       containerNo: movement.container_no || '',
       movementDate: movement.movement_date || '',
       exactPair,
-      requiresManualReview,
       isCurrentOwner: currentOwners.some((owner) => owner.id === movement.id),
     };
     candidateMap.set(movement.id, candidate);
@@ -464,7 +425,6 @@ export const getCashierEntryCandidates = (
       containerNo: movement.container_no || '',
       movementDate: movement.movement_date || '',
       exactPair: false,
-      requiresManualReview: false,
       isCurrentOwner: true,
     });
   });
@@ -494,7 +454,7 @@ export const getCashierEntryCandidates = (
   });
 
   return candidateSets.map((candidateSet) => {
-    if (candidateSet.suggestedMovementId || candidateSet.candidates.length !== 1 || candidateSet.candidates[0].requiresManualReview) return candidateSet;
+    if (candidateSet.suggestedMovementId || candidateSet.candidates.length !== 1) return candidateSet;
     const onlyCandidate = candidateSet.candidates[0];
     return (entriesPerMovement.get(onlyCandidate.movementId) || 0) === 1
       ? { ...candidateSet, suggestedMovementId: onlyCandidate.movementId }
