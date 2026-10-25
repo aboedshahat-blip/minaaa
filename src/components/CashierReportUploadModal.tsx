@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { Movement, SystemSettings } from '../types';
 import type {
+  CashierEntryCandidateSet,
   CashierInvoiceEntry,
   CashierMatchResult,
 } from '../lib/cashierParser';
@@ -35,6 +36,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 }) => {
   const confirmAction = useConfirmAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const applyCashierMatchesRef = useRef<typeof import('../lib/cashierParser').applyCashierMatches | null>(null);
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState('');
   const [parsedEntries, setParsedEntries] = useState<CashierInvoiceEntry[]>([]);
@@ -42,6 +44,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const [updatedMovementsList, setUpdatedMovementsList] = useState<Movement[]>([]);
   const [unmatchedCount, setUnmatchedCount] = useState(0);
   const [unmatchedEntries, setUnmatchedEntries] = useState<CashierInvoiceEntry[]>([]);
+  const [matchCandidates, setMatchCandidates] = useState<CashierEntryCandidateSet[]>([]);
+  const [selectedMovementByReceipt, setSelectedMovementByReceipt] = useState<Record<string, string>>({});
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isImageMode, setIsImageMode] = useState(false);
   const [selectedMovementId, setSelectedMovementId] = useState('');
@@ -61,6 +65,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     setUpdatedMovementsList([]);
     setUnmatchedCount(0);
     setUnmatchedEntries([]);
+    setMatchCandidates([]);
+    setSelectedMovementByReceipt({});
     setLoading(true);
     setFileName(file.name);
 
@@ -79,7 +85,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
     try {
       // 1. Parse Cashier report
-      const { parseUploadedCashierReport, matchCashierEntriesWithMovements } = await import('../lib/cashierParser');
+      const { parseUploadedCashierReport, getCashierEntryCandidates, applyCashierMatches } = await import('../lib/cashierParser');
+      applyCashierMatchesRef.current = applyCashierMatches;
       const entries = await parseUploadedCashierReport(file);
       setParsedEntries(entries);
 
@@ -90,24 +97,50 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
         return;
       }
 
-      // 2. Automatically match with existing movements
-      const { matchedMovements, matchResults: matches, unmatchedEntries } =
-        matchCashierEntriesWithMovements(
-          entries,
-          movements,
-          settings.default_system_commission ?? 200
-        );
-
-      setMatchResults(matches);
-      setUpdatedMovementsList(matchedMovements);
-      setUnmatchedCount(unmatchedEntries.length);
-      setUnmatchedEntries(unmatchedEntries);
+      // Suggest only when a receipt has one plausible movement. Repeated vehicle
+      // pairs require the user to pick the correct customer before any update.
+      const candidates = getCashierEntryCandidates(entries, movements);
+      const initialSelections = Object.fromEntries(
+        candidates
+          .filter((candidateSet) => candidateSet.suggestedMovementId)
+          .map((candidateSet) => [candidateSet.entry.receipt_no, candidateSet.suggestedMovementId]),
+      );
+      const preview = applyCashierMatches(
+        entries,
+        movements,
+        initialSelections,
+        settings.default_system_commission ?? 200,
+      );
+      setMatchCandidates(candidates);
+      setSelectedMovementByReceipt(initialSelections);
+      setMatchResults(preview.matchResults);
+      setUpdatedMovementsList(preview.matchedMovements);
+      setUnmatchedCount(preview.unmatchedEntries.length);
+      setUnmatchedEntries(preview.unmatchedEntries);
     } catch (err: any) {
       console.error(err);
       alert(`خطأ أثناء قراءة تقرير الكاشير: ${err.message || 'يرجى مراجعة الملف وصيغته'}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCandidateChange = (receiptNo: string, movementId: string) => {
+    const apply = applyCashierMatchesRef.current;
+    if (!apply) return;
+    const nextSelections = { ...selectedMovementByReceipt, [receiptNo]: movementId };
+    if (!movementId) delete nextSelections[receiptNo];
+    const preview = apply(
+      parsedEntries,
+      movements,
+      nextSelections,
+      settings.default_system_commission ?? 200,
+    );
+    setSelectedMovementByReceipt(nextSelections);
+    setMatchResults(preview.matchResults);
+    setUpdatedMovementsList(preview.matchedMovements);
+    setUnmatchedCount(preview.unmatchedEntries.length);
+    setUnmatchedEntries(preview.unmatchedEntries);
   };
 
   const handleLinkFromImage = async () => {
@@ -161,14 +194,14 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
   const handleApplyUpdates = async () => {
     if (matchResults.length === 0) {
-      alert('لا توجد شحنات مطابقة لتحديثها');
+      alert('اختر حركة واحدة على الأقل لربط الفاتورة بها');
       return;
     }
 
-    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة من تقرير الكاشير وربط الفواتير المطابقة. هل تريد المتابعة؟`, 'نعم، حدّث الحركات')) return;
+    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
     onBatchUpdateMovements(updatedMovementsList);
     alert(
-      `✓ تم بنجاح تحديث وربط ${matchResults.length} فاتورة كاشير مع الحركات والشاحنات وحسابات العملاء تلقائياً!`
+      `✓ تم حفظ الربط الذي اخترته وتحديث ${matchResults.length} حركة. يمكنك إعادة رفع التقرير وتغيير الحركة إذا احتجت تصحيح الربط.`
     );
     onClose();
   };
@@ -421,6 +454,68 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                   </span>
                 </div>
               </div>
+
+              {matchCandidates.some((candidateSet) => candidateSet.candidates.length > 0) && (
+                <div className="border border-indigo-200 rounded-xl overflow-hidden shadow-sm">
+                  <div className="bg-indigo-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-black text-indigo-950">تأكيد العميل والحركة لكل إيصال</h3>
+                      <p className="mt-1 text-[11px] text-indigo-800">راجع اسم العميل واختر الحركة الصحيحة عند تكرار أرقام المركبات. يمكنك تغيير الاختيار قبل الحفظ.</p>
+                    </div>
+                    <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-indigo-800 border border-indigo-200">
+                      {Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال محدد
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto max-h-72">
+                    <table className="w-full text-xs text-right border-collapse">
+                      <thead className="bg-slate-100 text-slate-700 sticky top-0 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="p-2">إيصال الكاشير</th>
+                          <th className="p-2 text-center">أرقام المركبات</th>
+                          <th className="p-2 text-center">المبلغ</th>
+                          <th className="p-2 min-w-80">اختر العميل والحركة</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white">
+                        {matchCandidates.filter((candidateSet) => candidateSet.candidates.length > 0).map((candidateSet) => {
+                          const { entry, candidates, currentMovementId } = candidateSet;
+                          const selectedId = selectedMovementByReceipt[entry.receipt_no] || '';
+                          const isReassigning = Boolean(currentMovementId && selectedId && currentMovementId !== selectedId);
+                          return (
+                            <tr key={entry.receipt_no} className="align-top hover:bg-slate-50">
+                              <td className="p-2 font-mono font-bold text-slate-800 whitespace-nowrap">{entry.receipt_no}</td>
+                              <td className="p-2 text-center font-mono font-bold text-indigo-800 whitespace-nowrap">
+                                {[entry.truck_digits, entry.trailer_digits].filter(Boolean).join(' / ') || 'غير مقروء'}
+                              </td>
+                              <td className="p-2 text-center font-mono font-black whitespace-nowrap">{entry.amount.toLocaleString()} ج.م</td>
+                              <td className="p-2">
+                                <select
+                                  value={selectedId}
+                                  onChange={(event) => handleCandidateChange(entry.receipt_no, event.target.value)}
+                                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                                  aria-label={`اختيار العميل لإيصال ${entry.receipt_no}`}
+                                >
+                                  <option value="">اترك الإيصال بدون ربط</option>
+                                  {candidates.map((candidate) => (
+                                    <option key={candidate.movementId} value={candidate.movementId}>
+                                      {candidate.customerName} — حركة {candidate.movementSeq} — {candidate.movementDate || 'بدون تاريخ'} — شاحنة {candidate.truckNo || '—'} / مقطورة {candidate.trailerNo || '—'} — حاوية {candidate.containerNo || '—'}{candidate.isCurrentOwner ? ' — الربط الحالي' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                                  {candidates.length > 1 && <span className="font-bold text-amber-700">أكثر من حركة بنفس المركبة؛ راجع العميل قبل الحفظ.</span>}
+                                  {isReassigning && <span className="font-bold text-rose-700">سيُنقل الإيصال من العميل المرتبط حاليًا إلى الاختيار الجديد.</span>}
+                                  {candidates.length === 1 && !currentMovementId && <span className="text-emerald-700">اقتراح وحيد حسب أرقام المركبة والتاريخ؛ يمكنك تغييره.</span>}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Matched Details Table */}
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
