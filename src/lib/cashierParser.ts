@@ -168,13 +168,16 @@ const extractLettersNearPlateDigits = (text: string, digits: string): string => 
   return beforeDistance <= afterDistance ? beforeLetters : afterLetters;
 };
 
+const reverseArabicPlateLetters = (letters: string): string => Array.from(letters).reverse().join('');
+
 /**
  * Parses vehicle string formatted like:
  * "د س ى - 2312 - أحمر / د ن ر - 3597 - أحمر"
  * or "ط و س 7919 / ص ه س 7625"
  */
 export const parseVehicleString = (
-  vehicleStr: string
+  vehicleStr: string,
+  pdfRtlPlateOrder = false,
 ): {
   truck_no: string;
   truck_digits: string;
@@ -201,11 +204,17 @@ export const parseVehicleString = (
 
   const plateDigits = extractAllPlateDigits(vehicleStr);
   const truck_digits = plateDigits[0] || extractDigits(truckPart);
-  const truck_letters = extractLettersNearPlateDigits(truckPart, truck_digits) || extractPlateLetters(truckPart);
+  const trailer_digits = plateDigits[1] || extractDigits(trailerPart);
+  const rawFirstPlateLetters = extractLettersNearPlateDigits(vehicleStr, truck_digits);
+  const rawSecondPlateLetters = extractLettersNearPlateDigits(vehicleStr, trailer_digits);
+  const truck_letters = pdfRtlPlateOrder
+    ? reverseArabicPlateLetters(rawSecondPlateLetters)
+    : rawFirstPlateLetters || extractPlateLetters(truckPart);
   const truck_no = `${truck_letters.split('').join(' ')} ${truck_digits}`.trim();
 
-  const trailer_digits = plateDigits[1] || extractDigits(trailerPart);
-  const trailer_letters = extractLettersNearPlateDigits(trailerPart, trailer_digits) || extractPlateLetters(trailerPart);
+  const trailer_letters = pdfRtlPlateOrder
+    ? reverseArabicPlateLetters(rawFirstPlateLetters)
+    : rawSecondPlateLetters || extractPlateLetters(trailerPart);
   const trailer_no = `${trailer_letters.split('').join(' ')} ${trailer_digits}`.trim();
 
   return {
@@ -221,7 +230,7 @@ export const parseVehicleString = (
 /**
  * Extract Cashier Entries from raw text lines.
  */
-export const parseCashierTextLines = (lines: string[]): CashierInvoiceEntry[] => {
+export const parseCashierTextLines = (lines: string[], pdfRtlPlateOrder = false): CashierInvoiceEntry[] => {
   const entries: CashierInvoiceEntry[] = [];
 
   // Regex pattern for RSCT receipt number like: 0047-01-1/01-261021 or 0103-03-1/01-261021
@@ -263,7 +272,7 @@ export const parseCashierTextLines = (lines: string[]): CashierInvoiceEntry[] =>
       // Remove receipt number from context so its internal slash and digits do not pollute plate numbers
       const vehicleStr = context.replace(receipt_no, ' ');
 
-      const parsedVeh = parseVehicleString(vehicleStr);
+      const parsedVeh = parseVehicleString(vehicleStr, pdfRtlPlateOrder);
 
       if (parsedVeh.truck_digits || parsedVeh.truck_letters) {
         entries.push({
@@ -322,7 +331,7 @@ export const parseCashierPdf = async (file: File): Promise<CashierInvoiceEntry[]
     });
   }
 
-  return parseCashierTextLines(allLines);
+  return parseCashierTextLines(allLines, true);
 };
 
 /**
