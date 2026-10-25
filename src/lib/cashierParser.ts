@@ -318,9 +318,10 @@ export const matchCashierEntriesWithMovements = (
   const matchedEntryIndexes = new Set<number>();
   const entriesByMovement = new Map<number, Array<{ entry: CashierInvoiceEntry; entryIndex: number; dayDistance: number | null }>>();
 
-  // Match each receipt against the full unordered truck/trailer pair. If the
-  // report exposes only one plate number, accept it only when it identifies
-  // exactly one movement; ambiguous receipts remain for manual review.
+  // Match each receipt against the full unordered truck/trailer pair. When a
+  // receipt contains both plates, do not attach it to an incomplete movement
+  // using only one shared number. A genuinely single-plate receipt may match
+  // only a unique movement candidate; ambiguous receipts stay for review.
   entries.forEach((entry, entryIndex) => {
     const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits].filter(Boolean)));
     if (entryDigits.length === 0) return;
@@ -349,8 +350,6 @@ export const matchCashierEntriesWithMovements = (
       if (entryDigits.length >= 2 && entryDigits.every((digits) => movementDigits.includes(digits))) {
         exactCandidates.push({ index: movementIndex, dayDistance, batchTime });
       } else if (entryDigits.length === 1 && movementDigits.includes(entryDigits[0])) {
-        singlePlateCandidates.push({ index: movementIndex, dayDistance, batchTime });
-      } else if (entryDigits.length >= 2 && movementDigits.length === 1 && entryDigits.includes(movementDigits[0])) {
         singlePlateCandidates.push({ index: movementIndex, dayDistance, batchTime });
       }
     });
