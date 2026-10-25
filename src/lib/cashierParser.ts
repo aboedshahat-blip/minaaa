@@ -41,6 +41,7 @@ export interface CashierMovementCandidate {
   containerNo: string;
   movementDate: string;
   exactPair: boolean;
+  requiresManualReview: boolean;
   isCurrentOwner: boolean;
 }
 
@@ -126,6 +127,25 @@ const normalizePlateSignature = (digits: string, letters: string): string => {
   return normalizedDigits && normalizedLetters ? `${normalizedLetters}:${normalizedDigits}` : '';
 };
 
+const reversePlateSignatureLetters = (signature: string): string => {
+  const separator = signature.lastIndexOf(':');
+  if (separator < 0) return signature;
+  return `${Array.from(signature.slice(0, separator)).reverse().join('')}${signature.slice(separator)}`;
+};
+
+const samePlateSet = (left: string[], right: string[], allowReversedLetters = false): boolean => {
+  if (left.length === 0 || left.length !== right.length) return false;
+  const unmatched = [...right];
+  return left.every((plate) => {
+    const index = unmatched.findIndex((candidate) => candidate === plate || (
+      allowReversedLetters && reversePlateSignatureLetters(candidate) === plate
+    ));
+    if (index < 0) return false;
+    unmatched.splice(index, 1);
+    return true;
+  });
+};
+
 /**
  * Extracts clean Arabic letters from a string, ignoring colors and common words.
  */
@@ -133,9 +153,28 @@ export const extractPlateLetters = (text: string): string => {
   if (!text) return '';
   // Remove known common words like colors
   const clean = text
+    .normalize('NFKC')
     .replace(/أحمر|احمر|ازرق|أزرق|ابيض|أبيض|اصفر|أصفر|اخضر|أخضر|شاحنة|شاحنه|مقطورة|مقطوره|فارغة|فارغه|نقدي/g, '')
     .replace(/[^ء-ي]/g, '');
   return clean;
+};
+
+const extractLettersNearPlateDigits = (text: string, digits: string): string => {
+  if (!digits) return '';
+  const normalized = normalizeNumerals(text.normalize('NFKC'));
+  const digitIndex = normalized.indexOf(digits);
+  if (digitIndex < 0) return '';
+  const before = extractPlateLetters(normalized.slice(Math.max(0, digitIndex - 24), digitIndex));
+  const after = extractPlateLetters(normalized.slice(digitIndex + digits.length, digitIndex + digits.length + 24));
+  const beforeLetters = before.slice(-3);
+  const afterLetters = after.slice(0, 3);
+  if (beforeLetters.length < 3) return afterLetters;
+  if (afterLetters.length < 3) return beforeLetters;
+  // PDF text extraction may emit RTL letters on either side of the digits.
+  // Use the closest three-letter run rather than Arabic text elsewhere in the row.
+  const beforeDistance = digitIndex - normalized.lastIndexOf(beforeLetters, digitIndex);
+  const afterDistance = normalized.indexOf(afterLetters, digitIndex + digits.length) - (digitIndex + digits.length);
+  return beforeDistance <= afterDistance ? beforeLetters : afterLetters;
 };
 
 /**
@@ -171,11 +210,11 @@ export const parseVehicleString = (
 
   const plateDigits = extractAllPlateDigits(vehicleStr);
   const truck_digits = plateDigits[0] || extractDigits(truckPart);
-  const truck_letters = extractPlateLetters(truckPart);
+  const truck_letters = extractLettersNearPlateDigits(truckPart, truck_digits) || extractPlateLetters(truckPart);
   const truck_no = `${truck_letters.split('').join(' ')} ${truck_digits}`.trim();
 
   const trailer_digits = plateDigits[1] || extractDigits(trailerPart);
-  const trailer_letters = extractPlateLetters(trailerPart);
+  const trailer_letters = extractLettersNearPlateDigits(trailerPart, trailer_digits) || extractPlateLetters(trailerPart);
   const trailer_no = `${trailer_letters.split('').join(' ')} ${trailer_digits}`.trim();
 
   return {
@@ -270,7 +309,7 @@ export const parseCashierPdf = async (file: File): Promise<CashierInvoiceEntry[]
     const lineBuckets: { y: number; items: { x: number; str: string }[] }[] = [];
 
     content.items.forEach((item: any) => {
-      const str = (item.str || '').trim();
+      const str = (item.str || '').normalize('NFKC').trim();
       if (!str) return;
       const y = Math.round(item.transform[5]);
       const x = Math.round(item.transform[4]);
@@ -339,6 +378,9 @@ export const getCashierEntryCandidates = (
 ): CashierEntryCandidateSet[] => {
   const candidateSets = entries.map((entry) => {
   const entryPlateCount = [entry.truck_digits, entry.trailer_digits].filter(Boolean).length;
+  const entryDigits = Array.from(new Set([entry.truck_digits, entry.trailer_digits]
+    .filter(Boolean)
+    .map((digits) => normalizeNumerals(digits).replace(/\D/g, ''))));
   const entryPlates = Array.from(new Set([
     normalizePlateSignature(entry.truck_digits, entry.truck_letters),
     normalizePlateSignature(entry.trailer_digits, entry.trailer_letters),
@@ -348,18 +390,43 @@ export const getCashierEntryCandidates = (
   const candidateMap = new Map<string, CashierMovementCandidate>();
 
   movements.forEach((movement) => {
+    const movementDigits = Array.from(new Set([
+      extractDigits(movement.truck_no || ''),
+      extractDigits(movement.trailer_no || ''),
+    ].filter(Boolean)));
     const movementPlates = Array.from(new Set([
       normalizePlateSignature(extractDigits(movement.truck_no || ''), movement.truck_no || ''),
       normalizePlateSignature(extractDigits(movement.trailer_no || ''), movement.trailer_no || ''),
     ].filter(Boolean)));
     const exactPair = entryPlateCount === 2
       && entryPlates.length === 2
+      && samePlateSet(entryPlates, movementPlates);
+    const pairWithReversedTextDirection = entryPlateCount === 2
+      && entryPlates.length === 2
       && movementPlates.length === 2
-      && entryPlates.every((plate) => movementPlates.includes(plate));
+      && samePlateSet(entryPlates, movementPlates, true)
+      && !exactPair;
     const singlePlate = entryPlateCount === 1
       && entryPlates.length === 1
       && movementPlates.includes(entryPlates[0]);
-    if (!exactPair && !singlePlate) return;
+    const singlePlateWithReversedTextDirection = entryPlateCount === 1
+      && entryPlates.length === 1
+      && movementPlates.some((plate) => reversePlateSignatureLetters(plate) === entryPlates[0])
+      && !singlePlate;
+    const sameDigitPair = entryPlateCount === 2
+      && entryDigits.length === 2
+      && movementDigits.length === 2
+      && entryDigits.every((digits) => movementDigits.includes(digits));
+    const sameSingleDigit = entryPlateCount === 1
+      && entryDigits.length === 1
+      && movementDigits.includes(entryDigits[0]);
+    const requiresManualReview = !exactPair && !singlePlate && (
+      pairWithReversedTextDirection ||
+      singlePlateWithReversedTextDirection ||
+      (sameDigitPair && (entryPlates.length < 2 || movementPlates.length < 2)) ||
+      (sameSingleDigit && (entryPlates.length < 1 || movementPlates.length < 1))
+    );
+    if (!exactPair && !singlePlate && !requiresManualReview) return;
 
     const movementDate = getMovementDate(movement.movement_date || '');
     const dayDistance = receiptDate != null && movementDate != null
@@ -377,6 +444,7 @@ export const getCashierEntryCandidates = (
       containerNo: movement.container_no || '',
       movementDate: movement.movement_date || '',
       exactPair,
+      requiresManualReview,
       isCurrentOwner: currentOwners.some((owner) => owner.id === movement.id),
     };
     candidateMap.set(movement.id, candidate);
@@ -396,6 +464,7 @@ export const getCashierEntryCandidates = (
       containerNo: movement.container_no || '',
       movementDate: movement.movement_date || '',
       exactPair: false,
+      requiresManualReview: false,
       isCurrentOwner: true,
     });
   });
@@ -425,7 +494,7 @@ export const getCashierEntryCandidates = (
   });
 
   return candidateSets.map((candidateSet) => {
-    if (candidateSet.suggestedMovementId || candidateSet.candidates.length !== 1) return candidateSet;
+    if (candidateSet.suggestedMovementId || candidateSet.candidates.length !== 1 || candidateSet.candidates[0].requiresManualReview) return candidateSet;
     const onlyCandidate = candidateSet.candidates[0];
     return (entriesPerMovement.get(onlyCandidate.movementId) || 0) === 1
       ? { ...candidateSet, suggestedMovementId: onlyCandidate.movementId }

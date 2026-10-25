@@ -121,7 +121,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     const lineBuckets: { y: number; items: { x: number; str: string; dir?: string; width?: number }[] }[] = [];
 
     content.items.forEach((item: any) => {
-      const str = (item.str || '').trim();
+      const str = (item.str || '').normalize('NFKC').trim();
       if (!str) return;
       const y = Math.round(item.transform[5]);
       const x = Math.round(item.transform[4]);
@@ -350,10 +350,10 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
             return String(index >= 0 ? index : '۰۱۲۳۴۵۶۷۸۹'.indexOf(digit));
           }).replace(/\D/g, ''))
           .join('');
-        const truckLetterItems = truckItems.filter((item) => /[ء-ي]/.test(item.str));
+        const truckLetterItems = truckItems.filter((item) => /[ء-ي]/.test(item.str.normalize('NFKC')));
         const truckLetters = truckLetterItems.length > 1 && truckLetterItems.every((item) => item.dir === 'rtl')
-          ? [...truckLetterItems].sort((a, b) => b.x - a.x).map((item) => item.str).join(' ')
-          : truckLetterItems.map((item) => item.str).join(' ');
+          ? [...truckLetterItems].sort((a, b) => b.x - a.x).map((item) => item.str.normalize('NFKC')).join(' ')
+          : truckLetterItems.map((item) => item.str.normalize('NFKC')).join(' ');
         truck_no = [truckDigits.length >= 3 && truckDigits.length <= 4 ? truckDigits : '', truckLetters]
           .filter(Boolean)
           .join(' - ');
