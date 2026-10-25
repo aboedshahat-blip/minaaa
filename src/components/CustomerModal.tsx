@@ -93,8 +93,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     }
 
     const customerData: Customer = {
-      id: editingCustomer ? editingCustomer.id : `c-${Date.now()}`,
-      code: code.trim() || `C-${100 + existingCount + 1}`,
+      id: editingCustomer ? editingCustomer.id : `c-${crypto.randomUUID()}`,
+      code: code.trim() || `C-${100 + existingCount + 1}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),

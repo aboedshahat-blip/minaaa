@@ -24,7 +24,7 @@ interface SheetProcessingPageProps {
   berths: Berth[];
   settings: SystemSettings;
   currentMaxSeq: number;
-  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => void;
+  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => Promise<boolean>;
 }
 
 export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
@@ -133,8 +133,8 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
         } else {
           customerSeq += 1;
           const newCust: Customer = {
-            id: `c-drv-${Date.now()}-${customerSeq}`,
-            code: `DRV-${customerSeq}`,
+            id: `c-drv-${crypto.randomUUID()}`,
+            code: `DRV-${customerSeq}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
             name: cleanDriver,
             phone: '',
             trucks: [
@@ -163,7 +163,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       const total = cashier + systemCommission + nafezCommission;
 
       return {
-        id: `m-imp-${Date.now()}-${seqCounter}`,
+        id: `m-imp-${crypto.randomUUID()}`,
         seq: seqCounter,
         movement_date: r.movement_date || now,
         berth_id: targetBerth?.id || berths[0]?.id || '',
@@ -195,10 +195,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     });
 
     const newCustomersList = Array.from(newCustomersMap.values());
-    onImportMovements(finalizedMovements, newCustomersList);
+    const synced = await onImportMovements(finalizedMovements, newCustomersList);
 
     const custMsg = newCustomersList.length > 0 ? ` وتم تكويد ${newCustomersList.length} عميل (سائق) جديد تلقائياً` : '';
-    alert(`تم بنجاح إضافة وتصفية ${finalizedMovements.length} حركة شاحنة وحفظها في المنظومة!${custMsg}`);
+    alert(synced
+      ? `تم حفظ ${finalizedMovements.length} حركة ومزامنتها مع قاعدة البيانات${custMsg}.`
+      : `تم حفظ ${finalizedMovements.length} حركة على هذا الجهاز${custMsg}، لكن المزامنة السحابية لم تكتمل بعد. لا تعِد رفع الشيت؛ ستُعاد المحاولة تلقائيًا.`);
     setRows([]);
     setFileName('');
   };

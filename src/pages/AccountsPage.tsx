@@ -39,7 +39,7 @@ interface AccountsPageProps {
   customers: Customer[];
   payments: PaymentReceipt[];
   onOpenPaymentModal: (customerId?: string) => void;
-  onBatchUpdateMovements?: (updatedMovements: Movement[]) => void;
+  onBatchUpdateMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
 }
 
 export const AccountsPage: React.FC<AccountsPageProps> = ({

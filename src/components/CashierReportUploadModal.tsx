@@ -23,7 +23,7 @@ interface CashierReportUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   movements: Movement[];
-  onBatchUpdateMovements: (updatedMovements: Movement[]) => void;
+  onBatchUpdateMovements: (updatedMovements: Movement[]) => Promise<boolean>;
   settings: SystemSettings;
 }
 
@@ -196,8 +196,10 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     });
 
     if (!await confirmAction(`هل تريد ربط الفاتورة وتحديث الحركة المحددة؟ المبلغ: ${cashierVal.toLocaleString()} ج.م`, 'نعم، اربطها')) return;
-    onBatchUpdateMovements(updated);
-    alert('✓ تم بنجاح ربط وتحديث فاتورة الكاشير للشاحنة المختارة وحساب العميل!');
+    const synced = await onBatchUpdateMovements(updated);
+    alert(synced
+      ? 'تم ربط فاتورة الكاشير وحفظ التحديث في قاعدة البيانات.'
+      : 'تم حفظ الربط على هذا الجهاز، لكن المزامنة السحابية لم تكتمل بعد. لا تعِد ربط الإيصال؛ ستُعاد المحاولة تلقائيًا.');
     setManualReceiptNo('');
     setManualAmount('');
     setSelectedMovementId('');
@@ -223,10 +225,10 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     }
 
     if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
-    onBatchUpdateMovements(updatedMovementsList);
-    alert(
-      `✓ تم حفظ الربط الذي اخترته وتحديث ${matchResults.length} حركة. يمكنك إعادة رفع التقرير وتغيير الحركة إذا احتجت تصحيح الربط.`
-    );
+    const synced = await onBatchUpdateMovements(updatedMovementsList);
+    alert(synced
+      ? `تم حفظ الربط الذي اخترته ومزامنة ${matchResults.length} حركة. يمكنك إعادة رفع التقرير وتغيير الحركة إذا احتجت تصحيح الربط.`
+      : `تم حفظ الربط على هذا الجهاز، لكن المزامنة السحابية لم تكتمل بعد. لا تعِد رفع الإيصالات؛ ستُعاد المحاولة تلقائيًا.`);
     onClose();
   };
 

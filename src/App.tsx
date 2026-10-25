@@ -330,7 +330,7 @@ const AppContent: React.FC = () => {
       }
       const newMovement: Movement = {
         ...movementData,
-        id: `m-${Date.now()}`,
+        id: `m-${crypto.randomUUID()}`,
         seq: movementData.seq || currentMaxSeq + 1,
         created_at: new Date().toISOString(),
       } as Movement;
@@ -426,7 +426,7 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleUndoShortcut);
   }, [safetyBackups, confirmAction]);
 
-  const handleImportMovements = (importedMovements: Movement[], newCustomers?: Customer[]) => {
+  const handleImportMovements = async (importedMovements: Movement[], newCustomers?: Customer[]): Promise<boolean> => {
     const batchAt = new Date().toISOString();
     const batchName = importedMovements[0]?.notes?.match(/(?:شيت|ملف):\s*(.+)$/)?.[1]?.trim()
       || `دفعة ${new Date(batchAt).toLocaleString('ar-EG')}`;
@@ -452,25 +452,39 @@ const AppContent: React.FC = () => {
         saveCustomers(customersAfterImport);
       }
     }
-    void runCloudOperation((async () => {
+    try {
       // Customer rows are referenced by movements, so sync them first to avoid
       // foreign-key failures that would otherwise leave one device out of date.
       const referencedCustomerIds = new Set(importedBatch.map((movement) => movement.customer_id).filter(Boolean));
       const referencedCustomers = customersAfterImport.filter((customer) => referencedCustomerIds.has(customer.id));
       await syncImportedBatchToSupabase(referencedCustomers, importedBatch);
-    })());
+      setCloudFeedback('تم حفظ الحركات والعملاء في قاعدة البيانات السحابية ومزامنتها.');
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تأكيد مزامنة الشيت.';
+      setCloudFeedback(`${message} حُفظت البيانات محليًا وستتم إعادة المزامنة عند عودة الاتصال.`);
+      return false;
+    }
   };
 
-  const handleBatchUpdateMovements = (updatedMovements: Movement[]) => {
+  const handleBatchUpdateMovements = async (updatedMovements: Movement[]): Promise<boolean> => {
     const allocation = applyUnallocatedCustomerAdvances(updatedMovements, payments);
     setMovements(allocation.movements);
     saveMovements(allocation.movements);
     setPayments(allocation.payments);
     savePayments(allocation.payments);
-    void runCloudOperation(Promise.all([
-      ...allocation.movements.map((m) => syncMovementToSupabase(m)),
-      ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
-    ]));
+    try {
+      await Promise.all([
+        ...allocation.movements.map((m) => syncMovementToSupabase(m)),
+        ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
+      ]);
+      setCloudFeedback('تم حفظ ربط الفواتير وتحديث الحركات في قاعدة البيانات السحابية.');
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تأكيد مزامنة ربط الفواتير.';
+      setCloudFeedback(`${message} حُفظت البيانات محليًا وستتم إعادة المزامنة عند عودة الاتصال.`);
+      return false;
+    }
   };
 
   // Customer Handlers

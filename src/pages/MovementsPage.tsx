@@ -38,14 +38,14 @@ interface MovementsPageProps {
   berths: Berth[];
   settings: SystemSettings;
   currentMaxSeq: number;
-  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => void;
+  onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => Promise<boolean>;
   onEditMovement: (movement: Movement) => void;
   onDeleteMovement: (id: string) => void;
   onClearAllMovements?: () => void;
   onOpenPaymentModal?: (customerId?: string) => void;
   onUndoLatestDeletion?: () => Promise<void>;
   canUndoLatestDeletion?: boolean;
-  onBatchUpdateMovements?: (updatedMovements: Movement[]) => void;
+  onBatchUpdateMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
 }
 
 const getMovementBatch = (movement: Movement) => {
@@ -450,9 +450,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           berths={berths}
           settings={settings}
           currentMaxSeq={currentMaxSeq}
-          onImportMovements={(importedMovements, newCustomers) => {
-            onImportMovements(importedMovements, newCustomers);
+          onImportMovements={async (importedMovements, newCustomers) => {
+            const synced = await onImportMovements(importedMovements, newCustomers);
             setActiveStage('stage1_manifest');
+            return synced;
           }}
         />
       )}

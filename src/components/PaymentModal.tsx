@@ -147,8 +147,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     });
 
     const paymentReceipt: PaymentReceipt = {
-      id: `rec-${Date.now()}`,
-      receipt_no: `REC-${Math.floor(100000 + Math.random() * 900000)}`,
+      id: `rec-${crypto.randomUUID()}`,
+      receipt_no: `REC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
       date: new Date().toISOString().split('T')[0],
       customer_id: currentCustomer.id,
       customer_name: currentCustomer.name,
