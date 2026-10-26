@@ -19,6 +19,11 @@ import {
   FileDown,
 } from 'lucide-react';
 
+const getLocalDateTimeInputValue = (date = new Date()) => {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 16);
+};
+
 interface SheetProcessingPageProps {
   customers: Customer[];
   berths: Berth[];
@@ -44,6 +49,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   const [rows, setRows] = useState<Partial<Movement>[]>([]);
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashier, setDefaultCashier] = useState<number>(0);
+  const [movementDateTime, setMovementDateTime] = useState(() => getLocalDateTimeInputValue());
   const [applyCommission, setApplyCommission] = useState(true);
   const [isOfficialSheetModalOpen, setIsOfficialSheetModalOpen] = useState(false);
   const customerMatchSummary = useMemo(
@@ -57,6 +63,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
 
     setLoading(true);
     setFileName(file.name);
+    setMovementDateTime(getLocalDateTimeInputValue());
     try {
       const res = await parseUploadedSheet(file);
       setRows(res.rows);
@@ -103,12 +110,17 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       alert('لا توجد بيانات للاستيراد');
       return;
     }
+    if (!movementDateTime || Number.isNaN(new Date(movementDateTime).getTime())) {
+      alert('اختر تاريخ ووقت الحركة قبل اعتماد الشيت.');
+      return;
+    }
     if (!await confirmAction(`هل راجعت بيانات الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${rows.length}.`, 'نعم، راجعت البيانات')) return;
     if (!await confirmAction(`هل تريد رفع ${rows.length} حركة إلى السيستم ومزامنتها مع الأجهزة الأخرى؟`, 'نعم، ارفع الشيت')) return;
 
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
-    const now = new Date().toISOString().split('T')[0];
+    const movementTimestamp = new Date(movementDateTime).toISOString();
+    const movementDate = movementDateTime.slice(0, 10);
     const defaultSysComm = settings.default_system_commission ?? 200;
     const defaultNafezComm = settings.default_nafez_commission ?? 0;
 
@@ -165,7 +177,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       return {
         id: `m-imp-${crypto.randomUUID()}`,
         seq: seqCounter,
-        movement_date: r.movement_date || now,
+        movement_date: movementDate,
         berth_id: targetBerth?.id || berths[0]?.id || '',
         berth_name: targetBerth?.name || berths[0]?.name || 'رصيف 1',
         customer_id: rowCustomer?.id || '',
@@ -189,7 +201,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
         payment_status: 'unpaid',
         paid_amount: 0,
         remaining_amount: total,
-        created_at: new Date().toISOString(),
+        created_at: movementTimestamp,
         notes: `مستورد ومصفى من ملف: ${fileName}`,
       };
     });
@@ -394,6 +406,20 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
 
           {/* Batch Settings Bar */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="sheet-movement-datetime" className="block text-xs font-semibold text-slate-700 mb-1">
+                تاريخ ووقت الحركات في الشيت
+              </label>
+              <input
+                id="sheet-movement-datetime"
+                type="datetime-local"
+                value={movementDateTime}
+                onChange={(e) => setMovementDateTime(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold"
+                required
+              />
+              <span className="mt-1 block text-[10px] text-slate-500">سيُطبق على كل حركات الشيت لضبط التاريخ والبحث ومطابقة الكاشير.</span>
+            </div>
             <div>
               <span className="block text-xs font-bold text-slate-800 mb-1">ربط العميل تلقائيًا بالاسم</span>
               <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-900">

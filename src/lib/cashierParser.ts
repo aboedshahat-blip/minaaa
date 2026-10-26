@@ -374,7 +374,8 @@ export const parseUploadedCashierReport = async (file: File): Promise<CashierInv
 const getMovementReceiptNumbers = (movement: Movement): string[] =>
   (movement.cashier_receipt_no || '').split(/[,،\n]+/).map((receipt) => receipt.trim()).filter(Boolean);
 
-const MAX_CASHIER_MATCH_DAYS = 4;
+// A cashier report may arrive up to a week after the booking sheet.
+const MAX_CASHIER_MATCH_DAYS = 7;
 
 /** Returns every plausible booking row so repeated vehicles can be confirmed by customer. */
 export const getCashierEntryCandidates = (
