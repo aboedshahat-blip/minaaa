@@ -86,6 +86,18 @@ const extractContainerNumbers = (text: string): string[] => {
   return Array.from(new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase())));
 };
 
+const normalizePdfArabicText = (value: string) => value
+  .normalize('NFKC')
+  .replace(/[\s\u0640\u064B-\u065F\u0670]/g, '');
+
+const reversePdfText = (value: string) => Array.from(value).reverse().join('');
+
+const pdfTextContainsArabicLabel = (text: string, label: string) => {
+  const normalizedText = normalizePdfArabicText(text);
+  const normalizedLabel = normalizePdfArabicText(label);
+  return normalizedText.includes(normalizedLabel) || normalizedText.includes(reversePdfText(normalizedLabel));
+};
+
 /**
  * Extracts structured movements from PDF documents (Page-by-Page with anchor awareness)
  */
@@ -138,21 +150,22 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
 
     const driverHeader = lineBuckets.find((bucket) => {
       const text = bucket.items.map((item) => item.str).join('');
-      return text.includes('اسم') && text.includes('السائق');
+      return pdfTextContainsArabicLabel(text, 'اسم') && pdfTextContainsArabicLabel(text, 'السائق');
     });
     const containerHeader = lineBuckets.find((bucket) => {
       const text = bucket.items.map((item) => item.str).join('');
-      return text.includes('الحاوية') || text.includes('الحاويه');
+      return pdfTextContainsArabicLabel(text, 'الحاوية') || pdfTextContainsArabicLabel(text, 'الحاويه');
     });
     const findContainerColumnCenter = (keyword: string) => {
-      const item = containerHeader?.items.find((candidate) => candidate.str.includes(keyword));
+      const item = containerHeader?.items.find((candidate) => pdfTextContainsArabicLabel(candidate.str, keyword));
       return item ? item.x + (item.width || item.str.length * 5) / 2 : null;
     };
     const containerPathCenter = findContainerColumnCenter('مسار');
     const containerDescCenter = findContainerColumnCenter('وصف');
-    const containerHeaderCells = (containerHeader?.items || []).filter((item) => item.str.includes('الحاوية'));
+    const containerHeaderCells = (containerHeader?.items || []).filter((item) => pdfTextContainsArabicLabel(item.str, 'الحاوية'));
     const containerNoHeaderCell = containerHeaderCells.find((item) =>
-      containerDescCenter != null && item.x > containerDescCenter
+      containerDescCenter != null && item.x > containerDescCenter &&
+      !pdfTextContainsArabicLabel(item.str, 'وصف') && !pdfTextContainsArabicLabel(item.str, 'مسار')
     );
     const containerNoCenter = containerNoHeaderCell
       ? containerNoHeaderCell.x + (containerNoHeaderCell.width || containerNoHeaderCell.str.length * 5) / 2
@@ -199,16 +212,8 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       const lineText = rowTokens.join(' ');
 
       // Filter out table headers, titles, and metadata
-      if (
-        lineText.includes('مسار') ||
-        lineText.includes('الحاويه') ||
-        lineText.includes('الحاوية') ||
-        lineText.includes('الرخصة') ||
-        lineText.includes('محاور') ||
-        lineText.includes('واقع') ||
-        lineText.includes('كشف') ||
-        lineText.includes('صفحة')
-      ) {
+      if (['مسار', 'الحاويه', 'الحاوية', 'الرخصة', 'محاور', 'واقع', 'كشف', 'صفحة']
+        .some((label) => pdfTextContainsArabicLabel(lineText, label))) {
         return;
       }
 
@@ -275,7 +280,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       const valueAtColumn = (bounds: { left: number; right: number } | null) => {
         if (!bounds) return '';
         const fragments = bucket.items
-          .filter((item) => item.str.trim() && (item.width || 0) < 80)
+          .filter((item) => item.str.trim())
           .filter((item) => {
             const center = item.x + (item.width || item.str.length * 5) / 2;
             return center >= bounds.left && center < bounds.right;
@@ -286,8 +291,12 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         const orderedFragments = fragments.length > 1 && fragments.every((item) => item.dir === 'rtl')
           ? [...fragments].reverse()
           : fragments;
-        const text = orderedFragments.map((item) => item.str.replace(/[\s\u0640]/g, '')).join('');
-        return ['وارد', 'صادر', 'فارغ', 'ترانزيت'].find((value) => value === text) || '';
+        const rawText = orderedFragments.map((item) => item.str.trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+        const text = normalizePdfArabicText(rawText);
+        const knownValue = ['وارد', 'صادر', 'فارغ', 'ترانزيت'].find((value) =>
+          value === text || value === reversePdfText(text)
+        );
+        return knownValue || rawText;
       };
       const container_path = valueAtColumn(containerPathBounds);
       const container_desc = valueAtColumn(containerDescBounds);
@@ -386,7 +395,13 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       dataRowYs.push(bucket.y);
     });
 
-    if (dataRowYs.length > 0 && driverHeader && !ocrUnavailable) {
+    const rowsNeedingOcr = dataRowYs.flatMap((rowY, index) => {
+      const movementIndex = dataRowMovementIndexes[index]?.[0];
+      const driverName = movementIndex == null ? '' : allMovements[movementIndex]?.driver_name || '';
+      return /[\u0600-\u06ff]{2,}/.test(driverName) ? [] : [{ rowY, movementIndexes: dataRowMovementIndexes[index] || [] }];
+    });
+
+    if (rowsNeedingOcr.length > 0 && driverHeader && !ocrUnavailable) {
       try {
         if (!ocrWorker) {
           const { createWorker, PSM } = await import('tesseract.js');
@@ -398,13 +413,13 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         }
         const recognizedNames = await readArabicNamesFromPdf(
           page,
-          dataRowYs,
+          rowsNeedingOcr.map((row) => row.rowY),
           driverColumnCenter,
           driverColumnWidth,
           ocrWorker,
         );
         recognizedNames.forEach(({ name, confidence }, index) => {
-          const movementIndexes = dataRowMovementIndexes[index] || [];
+          const movementIndexes = rowsNeedingOcr[index]?.movementIndexes || [];
           if (name && /[\u0600-\u06ff]/.test(name)) {
             movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = name; });
             if (confidence < 70) needsDriverReview = true;
@@ -417,7 +432,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         ocrUnavailable = true;
         needsDriverReview = true;
       }
-    } else if (dataRowYs.length > 0) {
+    } else if (rowsNeedingOcr.length > 0) {
       needsDriverReview = true;
     }
   }

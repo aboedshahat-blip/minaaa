@@ -297,6 +297,20 @@ const setPendingUpsert = <T extends { id: string }>(table: SyncTable, row: T) =>
   savePendingSync(pending);
 };
 
+const setPendingUpserts = <T extends { id: string }>(table: SyncTable, rows: T[]) => {
+  if (rows.length === 0) return;
+  const pending = getPendingSync();
+  const upserts = { ...pending.upserts[table] };
+  const deletes = new Set(pending.deletes[table] || []);
+  for (const row of rows) {
+    upserts[row.id] = row;
+    deletes.delete(row.id);
+  }
+  pending.upserts[table] = upserts;
+  pending.deletes[table] = Array.from(deletes);
+  savePendingSync(pending);
+};
+
 const clearPendingUpsert = (table: SyncTable, id: string) => {
   const pending = getPendingSync();
   const rows = { ...pending.upserts[table] };
@@ -408,11 +422,9 @@ export const flushPendingSync = async () => {
 
 /** Queue and sync an imported batch in bulk, without waiting on unrelated backlog. */
 export const syncImportedBatchToSupabase = async (customers: Customer[], movements: Movement[]) => {
-  customers.forEach((customer) => {
-    const cloudCustomer = customerForCloud(customer);
-    setPendingUpsert('customers', cloudCustomer as unknown as Customer);
-  });
-  movements.forEach((movement) => setPendingUpsert('movements', movement));
+  const cloudCustomers = customers.map(customerForCloud);
+  setPendingUpserts('customers', cloudCustomers as unknown as Customer[]);
+  setPendingUpserts('movements', movements);
 
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
@@ -420,8 +432,8 @@ export const syncImportedBatchToSupabase = async (customers: Customer[], movemen
 
   // This call receives the local customer records referenced by the batch.
   // Persist them first to satisfy movements.customer_id foreign keys.
-  if (customers.length) {
-    const { error } = await supabase.from('customers').upsert(customers.map(customerForCloud) as never);
+  if (cloudCustomers.length) {
+    const { error } = await supabase.from('customers').upsert(cloudCustomers as never);
     if (error) throw new Error(`تعذرت مزامنة العملاء: ${error.message}`);
   }
 
@@ -799,11 +811,11 @@ export const restoreLocalDataToSupabase = async (data: {
   expenses?: OfficeExpense[];
 }) => {
   const customers = data.customers.filter((customer) => !isSystemCustomer(customer));
-  data.movements.forEach((row) => setPendingUpsert('movements', row));
-  customers.forEach((row) => setPendingUpsert('customers', customerForCloud(row) as unknown as Customer));
-  data.berths.forEach((row) => setPendingUpsert('berths', row));
-  data.payments.forEach((row) => setPendingUpsert('payments', row));
-  (data.expenses || []).forEach((row) => setPendingUpsert('office_expenses', row));
+  setPendingUpserts('movements', data.movements);
+  setPendingUpserts('customers', customers.map(customerForCloud) as unknown as Customer[]);
+  setPendingUpserts('berths', data.berths);
+  setPendingUpserts('payments', data.payments);
+  setPendingUpserts('office_expenses', data.expenses || []);
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');

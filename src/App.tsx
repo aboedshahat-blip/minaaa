@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import {
   Berth,
@@ -132,6 +132,8 @@ const AppContent: React.FC = () => {
   const [safetyBackups, setSafetyBackups] = useState<OperationalSafetyBackup[]>(getSafetyBackups);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
   const [cloudFeedback, setCloudFeedback] = useState<string | null>(null);
+  const movementImportRevisionRef = useRef(0);
+  const cloudRefreshRequestRef = useRef(0);
 
   useEffect(() => {
     if (isAuthLoading || !isAuthenticated || canViewFinancials) return;
@@ -163,9 +165,15 @@ const AppContent: React.FC = () => {
 
   // Initial cloud fetch from Supabase on mount
   const refreshDataFromCloud = async (restoreDeviceOnlyData = false, quiet = false) => {
+    const refreshRequestId = ++cloudRefreshRequestRef.current;
+    const importRevisionAtStart = movementImportRevisionRef.current;
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
+        // A slower cloud read must not replace a just-imported sheet with the
+        // older snapshot it fetched before the import finished.
+        if (refreshRequestId !== cloudRefreshRequestRef.current ||
+            importRevisionAtStart !== movementImportRevisionRef.current) return;
         let financeSyncNotice: string | null = null;
         let effectiveSettings = settings;
         const cloudCommissionSettings = cloudData.commissionSettings;
@@ -361,6 +369,8 @@ const AppContent: React.FC = () => {
         }
       }
     } catch (e) {
+      if (refreshRequestId !== cloudRefreshRequestRef.current ||
+          importRevisionAtStart !== movementImportRevisionRef.current) return;
       console.warn('Cloud sync error:', e);
       const message = e instanceof Error ? e.message : 'تعذر الاتصال بقاعدة البيانات السحابية.';
       setCloudFeedback(`${message} احتفظنا بالبيانات المحلية كما هي.`);
@@ -578,6 +588,7 @@ const AppContent: React.FC = () => {
   }, [safetyBackups, confirmAction]);
 
   const handleImportMovements = async (importedMovements: Movement[], newCustomers?: Customer[]): Promise<boolean> => {
+    movementImportRevisionRef.current += 1;
     const batchAt = new Date().toISOString();
     const batchName = importedMovements[0]?.notes?.match(/(?:شيت|ملف):\s*(.+)$/)?.[1]?.trim()
       || `دفعة ${new Date(batchAt).toLocaleString('ar-EG')}`;
@@ -615,6 +626,9 @@ const AppContent: React.FC = () => {
       const message = error instanceof Error ? error.message : 'تعذر تأكيد مزامنة الشيت.';
       setCloudFeedback(`${message} حُفظت البيانات محليًا وستتم إعادة المزامنة عند عودة الاتصال.`);
       return false;
+    } finally {
+      // Also invalidate reads that started while the import was syncing.
+      movementImportRevisionRef.current += 1;
     }
   };
 
