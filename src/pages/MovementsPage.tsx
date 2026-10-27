@@ -160,7 +160,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   }, [movements]);
   const latestBatchId = (importBatches.find((batch) => batch.id !== 'legacy-unassigned') || importBatches[0])?.id || '';
   useEffect(() => {
-    if (latestBatchId) setSelectedManifestBatch('latest');
+    if (latestBatchId) {
+      setSelectedManifestBatch('latest');
+      setSelectedManifestBatchIds([latestBatchId]);
+    }
   }, [latestBatchId]);
   const openManifestPrint = (scope: 'selected' | 'all' | 'picked') => {
     setManifestPrintScope(scope);

@@ -395,13 +395,10 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       dataRowYs.push(bucket.y);
     });
 
-    const rowsNeedingOcr = dataRowYs.flatMap((rowY, index) => {
-      const movementIndex = dataRowMovementIndexes[index]?.[0];
-      const driverName = movementIndex == null ? '' : allMovements[movementIndex]?.driver_name || '';
-      return /[\u0600-\u06ff]{2,}/.test(driverName) ? [] : [{ rowY, movementIndexes: dataRowMovementIndexes[index] || [] }];
-    });
-
-    if (rowsNeedingOcr.length > 0 && driverHeader && !ocrUnavailable) {
+    // The source PDFs often place route/declaration fragments beside the
+    // driver name in text extraction. OCR the complete driver column so those
+    // fragments cannot leak into the saved driver name.
+    if (dataRowYs.length > 0 && driverHeader && !ocrUnavailable) {
       try {
         if (!ocrWorker) {
           const { createWorker, PSM } = await import('tesseract.js');
@@ -413,13 +410,13 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         }
         const recognizedNames = await readArabicNamesFromPdf(
           page,
-          rowsNeedingOcr.map((row) => row.rowY),
+          dataRowYs,
           driverColumnCenter,
           driverColumnWidth,
           ocrWorker,
         );
         recognizedNames.forEach(({ name, confidence }, index) => {
-          const movementIndexes = rowsNeedingOcr[index]?.movementIndexes || [];
+          const movementIndexes = dataRowMovementIndexes[index] || [];
           if (name && /[\u0600-\u06ff]/.test(name)) {
             movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = name; });
             if (confidence < 70) needsDriverReview = true;
@@ -432,7 +429,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         ocrUnavailable = true;
         needsDriverReview = true;
       }
-    } else if (rowsNeedingOcr.length > 0) {
+    } else if (dataRowYs.length > 0) {
       needsDriverReview = true;
     }
   }
