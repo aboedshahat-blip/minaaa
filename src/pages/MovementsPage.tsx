@@ -105,7 +105,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onRepairZeroFinancialMovements,
 }) => {
   const confirmAction = useConfirmAction();
-  const { canViewFinancials, isAdmin, canManagePayments, canEditCommissions } = useAuth();
+  const { canViewFinancials, canAddMovements, canUploadSheets, isAdmin, canManagePayments, canEditCommissions } = useAuth();
 
   // Modals state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -588,7 +588,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Stage tab config
   const stageTabs = [
-    { key: 'stage0_import' as const, label: 'إدخال البيانات' },
+    ...(canAddMovements || canUploadSheets ? [{ key: 'stage0_import' as const, label: 'إدخال البيانات' }] : []),
     { key: 'stage1_manifest' as const, label: 'كشوف الميناء' },
     { key: 'stage2_cashier' as const, label: 'فواتير الكاشير' },
     ...(canViewFinancials ? [{ key: 'stage3_clients' as const, label: 'حسابات العملاء' }] : []),

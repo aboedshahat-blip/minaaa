@@ -545,6 +545,26 @@ export const saveOfficeExpenses = (expenses: OfficeExpense[]) => {
 
 // ---------------- LIVE SUPABASE SYNC ENGINE ----------------
 
+type PagedQueryResult<T> = {
+  data: T[] | null;
+  error: { message: string; code?: string } | null;
+};
+
+const fetchAllPages = async <T>(
+  fetchPage: (from: number, to: number) => PromiseLike<PagedQueryResult<T>>,
+): Promise<PagedQueryResult<T>> => {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await fetchPage(from, from + pageSize - 1);
+    if (error) return { data: null, error };
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return { data: rows, error: null };
+};
+
 export const fetchAllFromSupabase = async () => {
   const settings = getStoredSettings();
   const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
@@ -553,12 +573,20 @@ export const fetchAllFromSupabase = async () => {
   try {
     const canViewFinancials = await canViewCloudFinancials(supabase);
     const [movementsRes, customersRes, berthsRes, paymentsRes, expensesRes, financialsRes, commissionSettingsRes] = await Promise.all([
-      supabase.from('movements').select('*').order('seq', { ascending: false }),
-      supabase.from('customers').select('*').order('created_at', { ascending: false }),
-      supabase.from('berths').select('*').order('code', { ascending: true }),
-      supabase.from('payments').select('*').order('date', { ascending: false }),
-      supabase.from('office_expenses').select('*').order('expense_date', { ascending: false }),
-      canViewFinancials ? supabase.from('movement_financials').select('*') : Promise.resolve({ data: [], error: null }),
+      fetchAllPages<Movement>((from, to) => supabase.from('movements').select('*')
+        .order('seq', { ascending: true }).order('id', { ascending: true }).range(from, to)),
+      fetchAllPages<Customer>((from, to) => supabase.from('customers').select('*')
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to)),
+      fetchAllPages<Berth>((from, to) => supabase.from('berths').select('*')
+        .order('code', { ascending: true }).order('id', { ascending: true }).range(from, to)),
+      fetchAllPages<PaymentReceipt>((from, to) => supabase.from('payments').select('*')
+        .order('date', { ascending: false }).order('id', { ascending: false }).range(from, to)),
+      fetchAllPages<OfficeExpense>((from, to) => supabase.from('office_expenses').select('*')
+        .order('expense_date', { ascending: false }).order('id', { ascending: false }).range(from, to)),
+      canViewFinancials
+        ? fetchAllPages<Record<string, unknown>>((from, to) => supabase.from('movement_financials').select('*')
+          .order('movement_id', { ascending: true }).range(from, to))
+        : Promise.resolve({ data: [], error: null }),
       canViewFinancials ? supabase.from('system_settings').select('value').eq('key', 'commissions').maybeSingle() : Promise.resolve({ data: null, error: null }),
     ]);
 
@@ -574,7 +602,7 @@ export const fetchAllFromSupabase = async () => {
       ? cloudMovements.filter((row) => !financialByMovement.has(row.id)).map((row) => row.id)
       : [];
     return {
-      movements: cloudMovements.map((row) => movementWithFinancials(row, financialByMovement.get(row.id))),
+      movements: cloudMovements.slice().reverse().map((row) => movementWithFinancials(row, financialByMovement.get(row.id))),
       missingFinancialMovementIds,
       commissionSettings: canViewFinancials && commissionSettingsRes.data?.value
         ? commissionSettingsRes.data.value as Partial<SystemSettings> & { vib_configured_at?: string }

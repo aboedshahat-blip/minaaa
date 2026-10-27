@@ -110,6 +110,7 @@ const AppContent: React.FC = () => {
     finishPasswordRecovery,
     canViewFinancials,
     canAddMovements,
+    canUploadSheets,
     canEditMovements,
     canDeleteMovements,
     canManageCustomers,
@@ -588,6 +589,10 @@ const AppContent: React.FC = () => {
   }, [safetyBackups, confirmAction]);
 
   const handleImportMovements = async (importedMovements: Movement[], newCustomers?: Customer[]): Promise<boolean> => {
+    if (!canAddMovements && !canUploadSheets) {
+      setCloudFeedback('ليس لديك صلاحية رفع الشيتات أو إضافة الحركات. لم تُحفظ أي بيانات.');
+      throw new Error('ليس لديك صلاحية رفع الشيتات أو إضافة الحركات. اطلب من المدير تفعيل الصلاحية المناسبة.');
+    }
     movementImportRevisionRef.current += 1;
     const batchAt = new Date().toISOString();
     const batchName = importedMovements[0]?.notes?.match(/(?:شيت|ملف):\s*(.+)$/)?.[1]?.trim()

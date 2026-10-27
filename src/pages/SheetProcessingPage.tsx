@@ -211,7 +211,13 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     });
 
     const newCustomersList = Array.from(newCustomersMap.values());
-    const synced = await onImportMovements(finalizedMovements, newCustomersList);
+    let synced: boolean;
+    try {
+      synced = await onImportMovements(finalizedMovements, newCustomersList);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'تعذر اعتماد الشيت. بقيت المعاينة كما هي ولم تُحفظ البيانات.');
+      return;
+    }
 
     const custMsg = newCustomersList.length > 0 ? ` وتم تكويد ${newCustomersList.length} عميل (سائق) جديد تلقائياً` : '';
     alert(synced
