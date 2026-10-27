@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { normalizeCustomerName } from '../lib/customerName';
 import {
   Users,
   Plus,
@@ -38,6 +39,49 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 24;
 
+  const customerById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
+  const customerByNormalizedName = useMemo(() => {
+    const grouped = new Map<string, Customer[]>();
+    customers.forEach((customer) => {
+      const key = normalizeCustomerName(customer.name);
+      grouped.set(key, [...(grouped.get(key) || []), customer]);
+    });
+    return new Map(Array.from(grouped.entries())
+      .filter(([, matches]) => matches.length === 1)
+      .map(([key, [customer]]) => [key, customer]));
+  }, [customers]);
+
+  const customerFleet = useMemo(() => {
+    const fleets = new Map<string, Array<{ truck_no: string; trailer_no: string; driver_names: string[]; fromMovement: boolean }>>();
+    const addVehicle = (customerId: string, vehicle: { truck_no?: string; trailer_no?: string; driver_name?: string }, fromMovement: boolean) => {
+      const truckNo = (vehicle.truck_no || '').trim();
+      if (!truckNo || normalizeCustomerName(truckNo) === 'غير محدد') return;
+      const trailerNo = (vehicle.trailer_no || '').trim();
+      const truckKey = `${normalizeCustomerName(truckNo)}|${normalizeCustomerName(trailerNo)}`;
+      const rows = fleets.get(customerId) || [];
+      const existing = rows.find((row) => `${normalizeCustomerName(row.truck_no)}|${normalizeCustomerName(row.trailer_no)}` === truckKey);
+      const driverName = (vehicle.driver_name || '').trim();
+      if (existing) {
+        if (driverName && !existing.driver_names.some((name) => normalizeCustomerName(name) === normalizeCustomerName(driverName))) {
+          existing.driver_names.push(driverName);
+        }
+        existing.fromMovement ||= fromMovement;
+      } else {
+        rows.push({ truck_no: truckNo, trailer_no: trailerNo, driver_names: driverName ? [driverName] : [], fromMovement });
+        fleets.set(customerId, rows);
+      }
+    };
+
+    customers.forEach((customer) => (customer.trucks || []).forEach((truck) => addVehicle(customer.id, truck, false)));
+    movements.forEach((movement) => {
+      const directId = movement.customer_id?.trim();
+      const customer = (directId && customerById.get(directId))
+        || customerByNormalizedName.get(normalizeCustomerName(movement.customer_name || movement.driver_name || ''));
+      if (customer) addVehicle(customer.id, movement, true);
+    });
+    return fleets;
+  }, [customers, movements, customerById, customerByNormalizedName]);
+
   const filteredCustomers = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase('ar-EG');
     return customers
@@ -53,11 +97,11 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   const visibleCustomers = filteredCustomers.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const customerStats = useMemo(() => {
-    const byId = new Map(customers.map((customer) => [customer.id, customer.id]));
-    const byName = new Map(customers.map((customer) => [customer.name.trim().toLocaleLowerCase('ar-EG'), customer.id]));
     const stats = new Map(customers.map((customer) => [customer.id, { count: 0, totalBilled: 0, totalPaid: 0, totalRemaining: 0 }]));
     movements.forEach((movement) => {
-      const customerId = byId.get(movement.customer_id || '') || byName.get((movement.customer_name || '').trim().toLocaleLowerCase('ar-EG'));
+      const directId = movement.customer_id?.trim();
+      const customerId = (directId && customerById.get(directId)?.id)
+        || customerByNormalizedName.get(normalizeCustomerName(movement.customer_name || movement.driver_name || ''))?.id;
       const current = customerId ? stats.get(customerId) : undefined;
       if (!current) return;
       current.count += 1;
@@ -66,7 +110,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       current.totalRemaining += Number(movement.remaining_amount) || 0;
     });
     return stats;
-  }, [customers, movements]);
+  }, [customers, movements, customerById, customerByNormalizedName]);
 
   const toggleExpand = (id: string) => {
     setExpandedCustomerId(expandedCustomerId === id ? null : id);
@@ -124,6 +168,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {visibleCustomers.map((customer) => {
           const stats = customerStats.get(customer.id) || { count: 0, totalBilled: 0, totalPaid: 0, totalRemaining: 0 };
+          const fleet = customerFleet.get(customer.id) || [];
           const isExpanded = expandedCustomerId === customer.id;
 
           return (
@@ -209,7 +254,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                 >
                   <div className="flex items-center gap-1.5">
                     <Truck className="w-4 h-4 text-blue-600" />
-                    <span>السيارات المسجلة ({customer.trucks?.length || 0})</span>
+                    <span>المركبات المسجلة والحركات ({fleet.length})</span>
                   </div>
                   <button className="text-slate-400">
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -218,23 +263,24 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
 
                 {isExpanded && (
                   <div className="mt-3 space-y-2 border-t pt-2">
-                    {customer.trucks && customer.trucks.length > 0 ? (
-                      customer.trucks.map((truck, idx) => (
+                    {fleet.length > 0 ? (
+                      fleet.map((truck, idx) => (
                         <div
-                          key={idx}
+                          key={`${normalizeCustomerName(truck.truck_no)}-${normalizeCustomerName(truck.trailer_no)}-${idx}`}
                           className="bg-slate-50 p-2 rounded-lg text-xs border border-slate-100"
                         >
-                          <div className="font-bold text-blue-900">
-                            شاحنة: {truck.truck_no}
+                          <div className="flex flex-wrap items-center gap-2 font-bold text-blue-900">
+                            <span>شاحنة: {truck.truck_no}</span>
+                            {truck.fromMovement && <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">من الحركات</span>}
                           </div>
                           {truck.trailer_no && (
                             <div className="text-slate-500 text-[11px]">
                               مقطورة: {truck.trailer_no}
                             </div>
                           )}
-                          {truck.driver_name && (
+                          {truck.driver_names.length > 0 && (
                             <div className="text-slate-600 text-[11px]">
-                              السائق: {truck.driver_name}
+                              السائق: {truck.driver_names.join('، ')}
                             </div>
                           )}
                         </div>
