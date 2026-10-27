@@ -92,6 +92,11 @@ const normalizePdfArabicText = (value: string) => value
 
 const reversePdfText = (value: string) => Array.from(value).reverse().join('');
 
+const joinArabicNameFragments = (value: string) => value
+  .replace(/(^|\s)([ء-ي])\s+(?=[ء-ي])/g, '$1$2')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 const pdfTextContainsArabicLabel = (text: string, label: string) => {
   const normalizedText = normalizePdfArabicText(text);
   const normalizedLabel = normalizePdfArabicText(label);
@@ -120,6 +125,8 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   let knownContainerPathCenter: number | null = null;
   let knownContainerDescCenter: number | null = null;
   let knownContainerNoCenter: number | null = null;
+  let knownDriverColumnCenter: number | null = null;
+  let knownDriverColumnWidth = 0;
 
   // Iterate strictly page by page so Y coordinates never conflict across pages
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -196,21 +203,25 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     };
     const containerPathBounds = getContainerFieldBounds(containerPathCenter);
     const containerDescBounds = getContainerFieldBounds(containerDescCenter);
-    let driverColumnCenter = 0;
-    let driverColumnWidth = 0;
+    let detectedDriverColumnCenter: number | null = null;
+    let detectedDriverColumnWidth = 0;
     if (driverHeader) {
       const labelItems = driverHeader.items.filter((item) => item.str.includes('اسم') || item.str.includes('السائق'));
       const left = Math.min(...labelItems.map((item) => item.x));
       const right = Math.max(...labelItems.map((item) => item.x + (item.width || item.str.length * 5)));
-      driverColumnCenter = (left + right) / 2;
+      detectedDriverColumnCenter = (left + right) / 2;
       const nearestOtherHeader = driverHeader.items
         .filter((item) => !labelItems.includes(item) && item.str.trim())
-        .map((item) => Math.abs(item.x + (item.width || item.str.length * 5) / 2 - driverColumnCenter))
+        .map((item) => Math.abs(item.x + (item.width || item.str.length * 5) / 2 - detectedDriverColumnCenter!))
         .sort((a, b) => a - b)[0];
-      driverColumnWidth = nearestOtherHeader
+      detectedDriverColumnWidth = nearestOtherHeader
         ? Math.max(48, Math.min(90, nearestOtherHeader * 1.35))
         : 62;
+      knownDriverColumnCenter = detectedDriverColumnCenter;
+      knownDriverColumnWidth = detectedDriverColumnWidth;
     }
+    const driverColumnCenter = detectedDriverColumnCenter ?? knownDriverColumnCenter ?? 0;
+    const driverColumnWidth = detectedDriverColumnWidth || knownDriverColumnWidth;
     const dataRowYs: number[] = [];
     const dataRowMovementIndexes: number[][] = [];
     let lastMovementIndex: number | null = null;
@@ -321,13 +332,21 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       // Find trailer axles index ('30' or '20')
       const axleIdx = afterDec.findIndex((t) => t === '30' || t === '20');
       let driver_name = '';
+      if (driverColumnWidth > 0) {
+        const driverLeft = driverColumnCenter - driverColumnWidth / 2;
+        const driverRight = driverColumnCenter + driverColumnWidth / 2;
+        const driverItems = bucket.items.filter((item) => {
+          const center = item.x + (item.width || item.str.length * 5) / 2;
+          return center >= driverLeft && center < driverRight && /[ء-ي]/.test(item.str);
+        });
+        const orderedDriverItems = driverItems.length > 1 && driverItems.every((item) => item.dir === 'rtl')
+          ? [...driverItems].sort((a, b) => b.x - a.x)
+          : driverItems;
+        driver_name = joinArabicNameFragments(orderedDriverItems.map((item) => item.str).join(' '));
+      } else if (axleIdx > 0) {
+        driver_name = joinArabicNameFragments(afterDec.slice(0, axleIdx).join(' '));
+      }
       if (axleIdx > 0) {
-        const driverItems = afterDecItems.slice(0, axleIdx);
-        // PDF.js reports Arabic runs as visual fragments. Reorder only the
-        // fragments inside the driver cell into right-to-left reading order.
-        driver_name = driverItems.length > 1 && driverItems.every((item) => item.dir === 'rtl')
-          ? [...driverItems].sort((a, b) => b.x - a.x).map((item) => item.str).join(' ')
-          : afterDec.slice(0, axleIdx).join(' ');
         trailer_axles = Number(afterDec[axleIdx]) || 30;
       }
 
@@ -362,7 +381,12 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         // Some booking PDFs split the plate digits into adjacent text items
         // (e.g. "7" + "487" for 7487). The row sequence is on a separate
         // baseline, so keep and join all digit fragments in the truck cell.
-        const truckItems = afterDecItems.slice(sevenIdx + 1);
+        const sequenceItem = bucket.items
+          .filter((item) => /^\d{1,2}$/.test(item.str.trim()) && item.x > page.view[2] * 0.9)
+          .sort((a, b) => b.x - a.x)[0];
+        const truckItems = afterDecItems.slice(sevenIdx + 1).filter((item) =>
+          !sequenceItem || item.x < sequenceItem.x
+        );
         const truckDigits = truckItems
           .map((item) => item.str.replace(/[٠-٩۰-۹]/g, (digit) => {
             const index = '٠١٢٣٤٥٦٧٨٩'.indexOf(digit);
@@ -406,10 +430,15 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       dataRowYs.push(bucket.y);
     });
 
-    // The source PDFs often place route/declaration fragments beside the
-    // driver name in text extraction. OCR the complete driver column so those
-    // fragments cannot leak into the saved driver name.
-    if (dataRowYs.length > 0 && driverHeader && !ocrUnavailable) {
+    // Use OCR only for rows whose driver cell could not be read from the PDF
+    // text. The saved column position is reused when later pages omit headers.
+    const rowsNeedingOcr = dataRowYs.flatMap((rowY, index) => {
+      const movementIndex = dataRowMovementIndexes[index]?.[0];
+      const driverName = movementIndex == null ? '' : allMovements[movementIndex]?.driver_name || '';
+      return driverName ? [] : [{ rowY, movementIndexes: dataRowMovementIndexes[index] || [] }];
+    });
+
+    if (rowsNeedingOcr.length > 0 && driverColumnWidth > 0 && !ocrUnavailable) {
       try {
         if (!ocrWorker) {
           const { createWorker, PSM } = await import('tesseract.js');
@@ -421,13 +450,13 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         }
         const recognizedNames = await readArabicNamesFromPdf(
           page,
-          dataRowYs,
+          rowsNeedingOcr.map((row) => row.rowY),
           driverColumnCenter,
           driverColumnWidth,
           ocrWorker,
         );
         recognizedNames.forEach(({ name, confidence }, index) => {
-          const movementIndexes = dataRowMovementIndexes[index] || [];
+          const movementIndexes = rowsNeedingOcr[index]?.movementIndexes || [];
           if (name && /[\u0600-\u06ff]/.test(name)) {
             movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = name; });
             if (confidence < 70) needsDriverReview = true;
@@ -440,7 +469,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         ocrUnavailable = true;
         needsDriverReview = true;
       }
-    } else if (dataRowYs.length > 0) {
+    } else if (rowsNeedingOcr.length > 0) {
       needsDriverReview = true;
     }
   }
