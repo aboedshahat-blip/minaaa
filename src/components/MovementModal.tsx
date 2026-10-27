@@ -2,6 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 're
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import { X, Calculator, Truck, FileText, Check } from 'lucide-react';
 
 interface MovementModalProps {
@@ -396,7 +397,9 @@ export const MovementModal: React.FC<MovementModalProps> = ({
         customer_id: cust.id,
         customer_code: cust.code,
         customer_name: cust.name,
-        system_commission: cust.system_commission ?? settings.default_system_commission ?? 200,
+        system_commission: getMovementService(prev.booking_category, prev.container_path)
+          ? getServiceCommission(settings, getMovementService(prev.booking_category, prev.container_path))
+          : cust.system_commission ?? settings.default_system_commission ?? 200,
         nafez_commission: cust.nafez_commission ?? settings.default_nafez_commission ?? 0,
         truck_no: firstTruck ? firstTruck.truck_no : prev.truck_no,
         trailer_no: firstTruck ? firstTruck.trailer_no || '' : prev.trailer_no,
@@ -679,7 +682,17 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   type="text"
                   placeholder="مسار أ / بوابة 3 / فحص..."
                   value={formData.container_path || ''}
-                  onChange={(e) => setFormData({ ...formData, container_path: e.target.value })}
+                  onChange={(e) => {
+                    const service = getMovementService(undefined, e.target.value);
+                    setFormData({
+                      ...formData,
+                      container_path: e.target.value,
+                      ...(service ? {
+                        booking_category: getMovementServiceLabel(service),
+                        system_commission: getServiceCommission(settings, service),
+                      } : {}),
+                    });
+                  }}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm"
                 />
               </div>
@@ -722,7 +735,14 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                   </label>
                   <select
                     value={formData.booking_category || 'وارد حاويات'}
-                    onChange={(e) => setFormData({ ...formData, booking_category: e.target.value })}
+                    onChange={(e) => {
+                      const service = getMovementService(e.target.value, formData.container_path);
+                      setFormData({
+                        ...formData,
+                        booking_category: e.target.value,
+                        ...(service ? { system_commission: getServiceCommission(settings, service) } : {}),
+                      });
+                    }}
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold text-slate-800"
                   >
                     <option value="وارد حاويات">وارد حاويات</option>
@@ -760,7 +780,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
                     onChange={(e) => setFormData({ ...formData, system_commission: Number(e.target.value) })}
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-blue-800"
                   />
-                  <span className="text-[10px] text-slate-500">يُستخدم سعر العميل المحفوظ، ويمكن تغييره لهذه الحركة فقط.</span>
+                  <span className="text-[10px] text-slate-500">تُحدد تلقائيًا حسب مسار الوارد أو الصادر أو الفارغ، ويمكن تعديلها لهذه الحركة فقط.</span>
                 </div>
 
                 <div>

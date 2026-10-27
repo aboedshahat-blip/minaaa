@@ -200,12 +200,12 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
           {canEditCommissions && <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
             <div className="mb-3">
-              <h3 className="text-sm font-bold text-slate-900">عمولات هذا العميل لكل حركة</h3>
-              <p className="mt-1 text-[11px] text-slate-600">تُستخدم تلقائيًا عند تسجيل أو استيراد حركة جديدة، وتظل الحركات القديمة بقيمها المحفوظة.</p>
+              <h3 className="text-sm font-bold text-slate-900">العمولة الاحتياطية لهذا العميل</h3>
+              <p className="mt-1 text-[11px] text-slate-600">إذا لم يحدد مسار الحاوية نوع الخدمة تُستخدم هذه القيمة. عند تحديد وارد أو صادر أو فارغ، تُطبق تعريفة النوع من الإعدادات المالية. الحركات القديمة لا تتغير.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="text-xs font-semibold text-blue-900">
-                عمولة المنظومة (ج.م)
+                عمولة احتياطية (ج.م)
                 <input type="number" min="0" step="0.01" value={systemCommission} onChange={(e) => setSystemCommission(Number(e.target.value))} className="mt-1 w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-bold" />
               </label>
               <label className="text-xs font-semibold text-teal-900">

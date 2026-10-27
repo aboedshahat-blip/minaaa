@@ -30,6 +30,7 @@ import { CashierReportUploadModal } from '../components/CashierReportUploadModal
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
 import { SheetProcessingPage } from './SheetProcessingPage';
+import { getMovementService, type MovementService } from '../lib/serviceFees';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface MovementsPageProps {
@@ -99,6 +100,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBerth, setSelectedBerth] = useState('');
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('');
+  const [selectedServiceType, setSelectedServiceType] = useState<MovementService | ''>('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [entryDateFrom, setEntryDateFrom] = useState(new Date().toLocaleDateString('en-CA'));
@@ -155,6 +157,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   };
 
   const dashboardMovements = useMemo(() => movements.filter((m) => {
+    if (selectedServiceType && getMovementService(m.booking_category, m.container_path) !== selectedServiceType) return false;
     const created = getEntryDateTime(m);
     const createdDate = created?.toLocaleDateString('en-CA');
     if (entryDateFrom && (!createdDate || createdDate < entryDateFrom)) return false;
@@ -171,7 +174,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     }
     if (canViewFinancials && selectedPaymentStatus && m.payment_status !== selectedPaymentStatus) return false;
     return true;
-  }), [movements, entryDateFrom, entryDateTo, entryTimeFrom, entryTimeTo, searchTerm, selectedPaymentStatus, canViewFinancials]);
+  }), [movements, entryDateFrom, entryDateTo, entryTimeFrom, entryTimeTo, searchTerm, selectedPaymentStatus, selectedServiceType, canViewFinancials]);
 
   const dashboardTotals = useMemo(() => dashboardMovements.reduce((totals, m) => {
     totals.due += Number(m.total_amount) || 0;
@@ -219,6 +222,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       // Date range filter
       if (startDate && m.movement_date < startDate) return false;
       if (endDate && m.movement_date > endDate) return false;
+      if (selectedServiceType && getMovementService(m.booking_category, m.container_path) !== selectedServiceType) return false;
 
       return true;
     });
@@ -229,6 +233,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     selectedPaymentStatus,
     startDate,
     endDate,
+    selectedServiceType,
   ]);
 
   const pickedBatchMovements = useMemo(() => {
@@ -420,6 +425,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     setSearchTerm('');
     setSelectedBerth('');
     setSelectedPaymentStatus('');
+    setSelectedServiceType('');
     setStartDate('');
     setEndDate('');
   };
@@ -484,18 +490,19 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               </div>
             </div>
             <details className="mt-3 border-t border-slate-100 pt-2">
-              <summary className="cursor-pointer text-xs font-bold text-slate-600">تحديد فترة البحث بالتاريخ والوقت وحالة الدفع</summary>
+              <summary className="cursor-pointer text-xs font-bold text-slate-600">تحديد الفترة ونوع الخدمة وحالة الدفع</summary>
               <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <label className="text-xs font-semibold text-slate-600">من تاريخ<input type="date" value={entryDateFrom} onChange={(e) => { setEntryDateFrom(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
                   <label className="text-xs font-semibold text-slate-600">من وقت<input type="time" value={entryTimeFrom} onChange={(e) => { setEntryTimeFrom(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
                   <label className="text-xs font-semibold text-slate-600">إلى تاريخ<input type="date" value={entryDateTo} onChange={(e) => { setEntryDateTo(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
                   <label className="text-xs font-semibold text-slate-600">إلى وقت<input type="time" value={entryTimeTo} onChange={(e) => { setEntryTimeTo(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></label>
+                  <label className="text-xs font-semibold text-slate-600">نوع الخدمة<select value={selectedServiceType} onChange={(e) => { setSelectedServiceType(e.target.value as MovementService | ''); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"><option value="">كل الخدمات</option><option value="inbound">وارد</option><option value="outbound">صادر</option><option value="empty">فارغ</option></select></label>
                   {canViewFinancials && <label className="text-xs font-semibold text-slate-600">حالة الدفع<select value={selectedPaymentStatus} onChange={(e) => { setSelectedPaymentStatus(e.target.value); setDailyPage(1); }} className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"><option value="">كل الحالات</option><option value="unpaid">لم يدفع</option><option value="partial">دفع جزئي</option><option value="paid">مدفوع</option></select></label>}
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
                 <span className="text-xs text-slate-600">الفترة: <b dir="ltr">{entryDateFrom || 'بلا بداية'}{entryTimeFrom ? ` ${entryTimeFrom}` : ''}</b> — <b dir="ltr">{entryDateTo || 'بلا نهاية'}{entryTimeTo ? ` ${entryTimeTo}` : ''}</b></span>
-                <button onClick={() => { setEntryDateFrom(''); setEntryDateTo(''); setEntryTimeFrom(''); setEntryTimeTo(''); setSelectedPaymentStatus(''); setSearchTerm(''); setDailyPage(1); }} className="rounded-lg px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">مسح البحث والفلاتر</button>
+                <button onClick={() => { setEntryDateFrom(''); setEntryDateTo(''); setEntryTimeFrom(''); setEntryTimeTo(''); setSelectedPaymentStatus(''); setSelectedServiceType(''); setSearchTerm(''); setDailyPage(1); }} className="rounded-lg px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50">مسح البحث والفلاتر</button>
               </div></div>
             </details>
           </div>
@@ -985,7 +992,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               </div>
             </div>
             {/* Filter Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2">
               <div className="md:col-span-2 relative">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
                 <input type="text" placeholder="بحث باسم العميل أو السائق أو رقم الشاحنة والحاوية..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
@@ -994,6 +1001,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <option value="">جميع الأرصفة</option>
                 {berths.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
+              <select value={selectedServiceType} onChange={(e) => setSelectedServiceType(e.target.value as MovementService | '')} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
+                <option value="">كل الخدمات</option><option value="inbound">وارد</option><option value="outbound">صادر</option><option value="empty">فارغ</option>
+              </select>
+              <label className="flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-2 text-[11px] font-semibold text-slate-600">من<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="min-w-0 bg-transparent px-1 py-2 text-xs text-slate-800"/></label>
+              <label className="flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-2 text-[11px] font-semibold text-slate-600">إلى<input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="min-w-0 bg-transparent px-1 py-2 text-xs text-slate-800"/></label>
               {canViewFinancials && (
                 <select value={selectedPaymentStatus} onChange={(e) => setSelectedPaymentStatus(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
                   <option value="">حالة السداد (الكل)</option>

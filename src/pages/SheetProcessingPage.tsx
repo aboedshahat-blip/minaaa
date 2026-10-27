@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import {
   FileSpreadsheet,
   Upload,
@@ -131,6 +132,8 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     const finalizedMovements: Movement[] = rows.map((r) => {
       seqCounter += 1;
       const cashier = r.cashier_invoice || defaultCashier || 0;
+      const service = getMovementService(r.booking_category, r.container_path);
+      const serviceCommission = getServiceCommission(settings, service);
       // Smart Driver = Customer mapping
       const cleanDriver = (r.driver_name || '').trim();
       let rowCustomer: Customer | undefined;
@@ -167,7 +170,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       }
 
       const systemCommission = applyCommission
-        ? (rowCustomer?.system_commission ?? defaultSysComm)
+        ? (service ? serviceCommission : rowCustomer?.system_commission ?? defaultSysComm)
         : 0;
       const nafezCommission = applyCommission
         ? (rowCustomer?.nafez_commission ?? defaultNafezComm)
@@ -194,6 +197,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
         container_no: r.container_no || '',
         container_desc: r.container_desc || '',
         container_path: r.container_path || '',
+        booking_category: getMovementServiceLabel(service) || r.booking_category,
         cashier_invoice: cashier,
         system_commission: systemCommission,
         nafez_commission: nafezCommission,
@@ -469,7 +473,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
                       onChange={(e) => setApplyCommission(e.target.checked)}
                       className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                     />
-                    <span>إضافة عمولة المنظومة ({settings.default_system_commission} ج.م)</span>
+                    <span>تطبيق عمولة الخدمة حسب مسار الحاوية</span>
                   </label>
                 </div>
               </>

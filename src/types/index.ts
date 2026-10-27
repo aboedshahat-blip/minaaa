@@ -118,6 +118,9 @@ export interface PaymentReceipt {
 
 export interface SystemSettings {
   default_system_commission: number; // e.g. 200
+  default_inbound_commission?: number;
+  default_outbound_commission?: number;
+  default_empty_commission?: number;
   default_nafez_commission: number; // e.g. 0
   default_truck_axles: number; // 20
   default_truck_weight: number; // 7.5

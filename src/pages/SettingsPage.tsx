@@ -35,7 +35,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
           <span>إعدادات العمولات المتغيرة والقيم التشغيلية</span>
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-                تحديد القيم الافتراضية للعملاء الجدد، مع إمكانية تخصيص عمولة المنظومة ونافذ لكل عميل من شاشة بيانات العميل
+                اضبط تعريفة الوارد والصادر والحاويات الفارغة، ورسوم نافذ الافتراضية، وأوزان ومحاور الاسطمبة.
         </p>
       </div>
 
@@ -46,18 +46,42 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
             <DollarSign className="w-5 h-5 text-blue-600" />
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                العمولات المتغيرة لحساب كل حركة شاحنة
+                عمولة المنظومة حسب نوع الخدمة
               </h2>
               <p className="text-xs text-slate-500">
-                تُستخدم هذه القيم كافتراضي للعملاء الجدد أو العملاء الذين لم تُحدد لهم عمولة خاصة
+                تُطبق على الحركات الجديدة بحسب مسار الحاوية. أي تعديل هنا لا يغير حسابات الحركات المسجلة سابقًا.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-200">
+              <label className="block text-xs font-bold text-emerald-900 mb-1">عمولة الوارد (ج.م)</label>
+              <input type="number" min="0" step="0.01" value={formData.default_inbound_commission ?? formData.default_system_commission ?? 200}
+                onChange={(e) => setFormData({ ...formData, default_inbound_commission: Number(e.target.value) })}
+                className="w-full bg-white border border-emerald-200 rounded-lg px-3 py-2 text-sm font-bold text-emerald-900" />
+              <span className="text-[11px] text-emerald-700 mt-1 block">تُستخدم عندما يكون مسار الحاوية واردًا.</span>
+            </div>
+
+            <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200">
+              <label className="block text-xs font-bold text-blue-900 mb-1">عمولة الصادر (ج.م)</label>
+              <input type="number" min="0" step="0.01" value={formData.default_outbound_commission ?? formData.default_system_commission ?? 200}
+                onChange={(e) => setFormData({ ...formData, default_outbound_commission: Number(e.target.value) })}
+                className="w-full bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm font-bold text-blue-900" />
+              <span className="text-[11px] text-blue-700 mt-1 block">تُستخدم عندما يكون مسار الحاوية صادرًا.</span>
+            </div>
+
+            <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200">
+              <label className="block text-xs font-bold text-amber-900 mb-1">عمولة الحاوية الفارغة (ج.م)</label>
+              <input type="number" min="0" step="0.01" value={formData.default_empty_commission ?? formData.default_system_commission ?? 200}
+                onChange={(e) => setFormData({ ...formData, default_empty_commission: Number(e.target.value) })}
+                className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-sm font-bold text-amber-900" />
+              <span className="text-[11px] text-amber-700 mt-1 block">تُستخدم للحاوية الفارغة أو التعتيق أو الاستلام.</span>
+            </div>
+
             <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
               <label className="block text-xs font-bold text-blue-900 mb-1">
-                قيمة عمولة المنظومة الافتراضية (ج.م) *
+                العمولة الافتراضية عند عدم وضوح المسار (ج.م) *
               </label>
               <input
                 type="number"
@@ -69,7 +93,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 required
               />
               <span className="text-[11px] text-blue-600 mt-1 block">
-                قيمة افتراضية فقط؛ يمكن تحديد قيمة مختلفة لكل عميل من شاشة تعديل بياناته.
+                تُستخدم كحل احتياطي إذا لم يحدد مسار الحاوية نوع الخدمة.
               </span>
             </div>
 

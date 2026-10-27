@@ -2,6 +2,9 @@ import { Customer, Berth, Movement, SystemSettings, ManagedUser } from '../types
 
 export const initialSettings: SystemSettings = {
   default_system_commission: 200,
+  default_inbound_commission: 200,
+  default_outbound_commission: 200,
+  default_empty_commission: 200,
   default_nafez_commission: 50,
   default_truck_axles: 20,
   default_truck_weight: 7.5,
