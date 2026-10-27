@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { ManagedUser, RolePermissions, UserRole } from '../types';
 import { getStoredSettings } from '../lib/storage';
 import { getSupabaseClient } from '../lib/supabase';
@@ -9,6 +10,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   isPasswordRecovery: boolean;
+  sessionNotice: string;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
   requestPasswordRecovery: (email: string) => Promise<{ success: boolean; message?: string }>;
   completePasswordRecovery: (password: string) => Promise<{ success: boolean; message?: string }>;
@@ -66,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState('');
 
   const supabase = useMemo(() => {
     const settings = getStoredSettings();
@@ -117,7 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(anonymousUser);
         setIsAuthenticated(false);
         setIsLoading(false);
-        void supabase.auth.signOut();
+        void supabase.auth.signOut({ scope: 'local' });
         return;
       }
       const profile = fromProfile(data as Record<string, unknown>);
@@ -125,9 +128,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(anonymousUser);
         setIsAuthenticated(false);
         setIsLoading(false);
-        void supabase.auth.signOut();
+        void supabase.auth.signOut({ scope: 'local' });
         return;
       }
+      const { data: sessionClaimed, error: sessionClaimError } = await supabase.rpc('claim_app_user_session');
+      if (!active || currentRevision !== revision) return;
+      if (sessionClaimError || sessionClaimed !== true) {
+        setCurrentUser(anonymousUser);
+        setUsers([]);
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        setSessionNotice(sessionClaimError
+          ? 'تعذر التحقق من جلسة الدخول. حدّث الصفحة أو تواصل مع مدير النظام.'
+          : 'هذا الحساب مفتوح بالفعل على جهاز آخر. سجّل الخروج من الجهاز الآخر ثم حاول مرة أخرى.');
+        void supabase.auth.signOut({ scope: 'local' });
+        return;
+      }
+      setSessionNotice('');
       setCurrentUser(profile);
       setIsAuthenticated(true);
       setIsLoading(false);
@@ -154,6 +171,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [supabase]);
 
+  useEffect(() => {
+    if (!supabase || !isAuthenticated) return;
+    let checking = false;
+    let failedHeartbeats = 0;
+    const heartbeat = window.setInterval(async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const { data, error } = await supabase.rpc('heartbeat_app_user_session');
+        if (error) {
+          failedHeartbeats += 1;
+          if (failedHeartbeats < 3) return;
+        } else if (data === true) {
+          failedHeartbeats = 0;
+          return;
+        }
+        if (error || data !== true) {
+          setSessionNotice('انتهت جلسة هذا الجهاز أو فُتح الحساب على جهاز آخر. سجّل الدخول من جديد.');
+          await supabase.auth.signOut({ scope: 'local' });
+        }
+      } finally {
+        checking = false;
+      }
+    }, 60_000);
+    return () => window.clearInterval(heartbeat);
+  }, [supabase, isAuthenticated]);
+
   const login = async (username: string, password: string) => {
     if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل. تواصل مع مدير النظام.' };
     const cleanUsername = username.trim().normalize('NFKC').toLowerCase();
@@ -174,13 +218,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (sessionError || !sessionData.session) return { success: false, message: 'تعذر إنشاء جلسة آمنة. حاول مرة أخرى.' };
     const { data: profile, error: profileError } = await supabase.from('app_user_profiles').select('is_active').eq('user_id', sessionData.session.user.id).maybeSingle();
     if (profileError || !profile) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       return { success: false, message: 'حسابك غير مهيأ في النظام. تواصل مع المدير العام.' };
     }
     if (!profile.is_active) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       return { success: false, message: 'هذا الحساب معطل. تواصل مع المدير العام.' };
     }
+    const { data: sessionClaimed, error: sessionClaimError } = await supabase.rpc('claim_app_user_session');
+    if (sessionClaimError || sessionClaimed !== true) {
+      await supabase.auth.signOut({ scope: 'local' });
+      return {
+        success: false,
+        message: sessionClaimError
+          ? 'تعذر التحقق من جلسة الدخول. حدّث الصفحة أو تواصل مع مدير النظام.'
+          : 'هذا الحساب مفتوح بالفعل على جهاز آخر. سجّل الخروج من الجهاز الآخر ثم حاول مرة أخرى.',
+      };
+    }
+    setSessionNotice('');
     return { success: true };
   };
 
@@ -206,13 +261,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const finishPasswordRecovery = () => setIsPasswordRecovery(false);
 
-  const logout = () => { if (supabase) void supabase.auth.signOut(); };
+  const logout = () => {
+    if (!supabase) return;
+    void (async () => {
+      await supabase.rpc('release_app_user_session');
+      await supabase.auth.signOut({ scope: 'local' });
+    })();
+  };
   const setCurrentUserId = (_id: string) => { /* User identity now comes from the verified Supabase session. */ };
 
   const verifyCurrentPassword = async (password: string) => {
     if (!supabase || !currentUser.email) return false;
-    const { error } = await supabase.auth.signInWithPassword({ email: currentUser.email, password });
-    if (!error) await supabase.auth.refreshSession();
+    // Validate on an isolated, non-persistent client so password checks do not rotate
+    // the active app session and accidentally release or replace its single-session lock.
+    const settings = getStoredSettings();
+    const verifier = createClient(
+      settings.supabase_url || import.meta.env.VITE_SUPABASE_URL || 'https://jfhmarmaebrzdnsvkqzv.supabase.co',
+      settings.supabase_anon_key || import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+      {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      },
+    );
+    const { error } = await verifier.auth.signInWithPassword({ email: currentUser.email, password });
+    if (!error) await verifier.auth.signOut({ scope: 'local' });
     return !error;
   };
 
@@ -236,7 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = isAuthenticated && currentUser.role === 'admin';
   const perms = isAdmin ? { ...emptyPermissions, ...currentUser.permissions } : currentUser.permissions;
   return <AuthContext.Provider value={{
-    currentUser, users, isAuthenticated, isLoading, isPasswordRecovery, login,
+    currentUser, users, isAuthenticated, isLoading, isPasswordRecovery, sessionNotice, login,
     requestPasswordRecovery, completePasswordRecovery, finishPasswordRecovery,
     logout, setCurrentUserId, verifyCurrentPassword,
     updateUserPermissions, updateUserStatus, updateUserPassword, addNewUser, deleteUser,

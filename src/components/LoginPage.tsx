@@ -11,7 +11,7 @@ import {
 import { vibLogoUrl } from '../lib/branding';
 
 export const LoginPage: React.FC = () => {
-  const { login, requestPasswordRecovery } = useAuth();
+  const { login, requestPasswordRecovery, sessionNotice } = useAuth();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -92,10 +92,10 @@ export const LoginPage: React.FC = () => {
             <span className="text-xs text-slate-400">دخول آمن باسم المستخدم</span>
           </div>
 
-          {errorMessage && (
+          {(errorMessage || sessionNotice) && (
             <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{errorMessage}</span>
+              <span>{errorMessage || sessionNotice}</span>
             </div>
           )}
           {recoveryMessage && (
