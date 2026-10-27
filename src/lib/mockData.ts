@@ -1,4 +1,4 @@
-import { Customer, Berth, Movement, SystemSettings, ManagedUser } from '../types';
+import { Customer, Berth, Movement, SystemSettings } from '../types';
 
 export const initialSettings: SystemSettings = {
   default_system_commission: 200,
@@ -15,80 +15,7 @@ export const initialSettings: SystemSettings = {
   admin_pin: '1234',
 };
 
-export const initialUsers: ManagedUser[] = [
-  {
-    id: 'u-admin',
-    username: 'admin',
-    password: 'admin123',
-    name: 'المدير العام (أدمن المنظومة)',
-    role: 'admin',
-    pin_code: '1234',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    permissions: {
-      can_view_financials: true,
-      can_view_system_revenue: true,
-      can_add_movements: true,
-      can_edit_movements: true,
-      can_delete_movements: true,
-      can_upload_sheets: true,
-      can_export_excel: true,
-      can_manage_customers: true,
-      can_delete_customers: true,
-      can_manage_payments: true,
-      can_manage_berths: true,
-      can_edit_commissions: true,
-    },
-  },
-  {
-    id: 'u-accountant',
-    username: 'accountant',
-    password: 'acc123',
-    name: 'المحاسب المالي',
-    role: 'accountant',
-    pin_code: '2233',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    permissions: {
-      can_view_financials: true,
-      can_view_system_revenue: false, // الأدمن يتحكم فيها
-      can_add_movements: true,
-      can_edit_movements: true,
-      can_delete_movements: false,
-      can_upload_sheets: true,
-      can_export_excel: true,
-      can_manage_customers: true,
-      can_delete_customers: false,
-      can_manage_payments: true,
-      can_manage_berths: false,
-      can_edit_commissions: false,
-    },
-  },
-  {
-    id: 'u-dataentry',
-    username: 'dataentry',
-    password: 'entry123',
-    name: 'مدخل بيانات الشاحنات',
-    role: 'data_entry',
-    pin_code: '1122',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    permissions: {
-      can_view_financials: false, // محجوب عنه الحسابات وفواتير الكاشير نهائياً
-      can_view_system_revenue: false,
-      can_add_movements: true,
-      can_edit_movements: false,
-      can_delete_movements: false,
-      can_upload_sheets: true,
-      can_export_excel: true,
-      can_manage_customers: false,
-      can_delete_customers: false,
-      can_manage_payments: false,
-      can_manage_berths: false,
-      can_edit_commissions: false,
-    },
-  },
-];
+// User accounts and passwords are managed by Supabase Auth, never hard-coded here.
 
 export const initialBerths: Berth[] = [
   {

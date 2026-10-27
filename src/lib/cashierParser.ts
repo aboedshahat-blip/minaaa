@@ -1,6 +1,3 @@
-import * as XLSX from 'xlsx';
-import * as mammoth from 'mammoth';
-import { pdfjsLib } from './pdfjs';
 import { Movement } from '../types';
 import { getMovementService } from './serviceFees';
 
@@ -25,6 +22,8 @@ export interface CashierMatchResult {
   truckNo: string;
   driverName: string;
   containerNo: string;
+  containerDesc: string;
+  containerPath: string;
   oldCashierInvoice: number;
   newCashierInvoice: number;
   cashierReceiptNo: string;
@@ -313,6 +312,7 @@ export const parseCashierTextLines = (lines: string[], pdfRtlPlateOrder = false)
  * Parses PDF document for Cashier Invoice report.
  */
 export const parseCashierPdf = async (file: File): Promise<CashierInvoiceEntry[]> => {
+  const { pdfjsLib } = await import('./pdfjs');
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({
     data: new Uint8Array(arrayBuffer),
@@ -358,6 +358,7 @@ export const parseCashierPdf = async (file: File): Promise<CashierInvoiceEntry[]
  * Parses Excel file of Cashier Invoice report.
  */
 export const parseCashierExcel = async (file: File): Promise<CashierInvoiceEntry[]> => {
+  const XLSX = await import('xlsx');
   const data = await file.arrayBuffer();
   const workbook = XLSX.read(data, { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
@@ -378,6 +379,7 @@ export const parseUploadedCashierReport = async (file: File): Promise<CashierInv
   } else if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
     return parseCashierExcel(file);
   } else if (name.endsWith('.docx') || name.endsWith('.doc')) {
+    const mammoth = await import('mammoth');
     const arrayBuffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer });
     const lines = result.value.split('\n');
@@ -600,6 +602,8 @@ export const applyCashierMatches = (
       truckNo: movement.truck_no,
       driverName: movement.driver_name || movement.customer_name,
       containerNo: movement.container_no,
+      containerDesc: movement.container_desc || '',
+      containerPath: movement.container_path || '',
       oldCashierInvoice: Number(original.cashier_invoice) || 0,
       newCashierInvoice: Number(movement.cashier_invoice) || 0,
       cashierReceiptNo: movementEntries.map((entry) => entry.receipt_no).join(', '),

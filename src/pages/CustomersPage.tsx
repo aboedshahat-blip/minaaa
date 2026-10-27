@@ -42,9 +42,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
     const query = searchTerm.trim().toLocaleLowerCase('ar-EG');
     return customers
       .filter((customer) => !query || [customer.name, customer.code, customer.phone, ...(customer.trucks || []).map((truck) => truck.truck_no)]
-        .some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(query)))
+        .some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(query)) || movements.some((movement) =>
+          (movement.customer_id === customer.id || movement.customer_name === customer.name) &&
+          [movement.driver_name, movement.truck_no, movement.trailer_no, movement.container_no, movement.container_desc, movement.container_path, movement.declaration_no, movement.movement_date]
+            .some((value) => value?.toLocaleLowerCase('ar-EG').includes(query))))
       .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-  }, [customers, searchTerm]);
+  }, [customers, movements, searchTerm]);
   const pageCount = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
   const safePage = Math.min(currentPage, pageCount);
   const visibleCustomers = filteredCustomers.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -99,7 +102,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
           <Search className="w-4 h-4 absolute right-3 top-3 text-slate-400" />
           <input
             type="text"
-            placeholder="بحث باسم العميل، كود العميل، أو رقم الهاتف..."
+            placeholder="ابحث بالعميل أو السائق أو رقم الشاحنة أو الحاوية أو وصفها أو التاريخ..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs focus:ring-1 focus:ring-blue-500"

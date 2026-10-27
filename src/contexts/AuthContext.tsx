@@ -1,23 +1,22 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ManagedUser, RolePermissions } from '../types';
-import { getStoredUsers, saveUsers, getStoredSettings } from '../lib/storage';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { ManagedUser, RolePermissions, UserRole } from '../types';
+import { getStoredSettings } from '../lib/storage';
 import { getSupabaseClient } from '../lib/supabase';
 
 interface AuthContextType {
   currentUser: ManagedUser;
   users: ManagedUser[];
   isAuthenticated: boolean;
-  login: (username: string, passwordOrPin: string) => { success: boolean; message?: string };
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   setCurrentUserId: (id: string) => void;
-  updateUserPermissions: (userId: string, permissions: RolePermissions) => void;
-  updateUserStatus: (userId: string, isActive: boolean) => void;
-  updateUserPin: (userId: string, newPin: string) => void;
-  updateUserPassword: (userId: string, newPassword: string) => void;
-  addNewUser: (user: Omit<ManagedUser, 'id' | 'created_at'>) => void;
-  deleteUser: (userId: string) => void;
-  syncUsersToCloud: (usersList?: ManagedUser[]) => Promise<void>;
-  // Dynamic computed permissions for currently logged-in user
+  verifyCurrentPassword: (password: string) => Promise<boolean>;
+  updateUserPermissions: (userId: string, permissions: RolePermissions) => Promise<void>;
+  updateUserStatus: (userId: string, isActive: boolean) => Promise<void>;
+  updateUserPassword: (userId: string, newPassword: string) => Promise<void>;
+  addNewUser: (user: Omit<ManagedUser, 'id' | 'created_at'> & { password: string }) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
   canViewFinancials: boolean;
   canViewSystemRevenue: boolean;
   canAddMovements: boolean;
@@ -34,239 +33,187 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const emptyPermissions: RolePermissions = {
+  can_view_financials: false, can_view_system_revenue: false,
+  can_add_movements: false, can_edit_movements: false, can_delete_movements: false,
+  can_upload_sheets: false, can_export_excel: false,
+  can_manage_customers: false, can_delete_customers: false,
+  can_manage_payments: false, can_manage_berths: false, can_edit_commissions: false,
+};
+const anonymousUser: ManagedUser = {
+  id: '', email: '', username: '', name: '', role: 'data_entry', is_active: false,
+  created_at: '', permissions: emptyPermissions,
+};
 
-const USERS_CLOUD_KEY = '__SYSTEM_USERS_CONFIG__';
+const fromProfile = (row: Record<string, unknown>): ManagedUser => ({
+  id: String(row.user_id || ''),
+  email: String(row.email || ''),
+  username: String(row.username || row.email || ''),
+  name: String(row.display_name || row.name || ''),
+  role: (row.role || 'data_entry') as UserRole,
+  is_active: row.is_active !== false,
+  created_at: String(row.created_at || ''),
+  permissions: { ...emptyPermissions, ...((row.permissions || {}) as Partial<RolePermissions>) },
+});
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<ManagedUser[]>(getStoredUsers);
+  const [currentUser, setCurrentUser] = useState<ManagedUser>(anonymousUser);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('pls_is_authenticated') === 'true';
-  });
-
-  const [currentUserId, setCurrentUserIdState] = useState<string>(() => {
-    const saved = localStorage.getItem('pls_active_user_id');
-    const existing = getStoredUsers().find((u) => u.id === saved && u.is_active);
-    return existing ? existing.id : 'u-admin';
-  });
-
-  // Cloud sync of users list
-  const syncUsersFromCloud = async () => {
+  const supabase = useMemo(() => {
     const settings = getStoredSettings();
-    const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
-    if (!supabase) return;
+    return getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  }, []);
 
-    try {
-      const { data } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('id', USERS_CLOUD_KEY)
-        .maybeSingle();
-
-      if (data && data.trucks && Array.isArray(data.trucks) && data.trucks.length > 0) {
-        const cloudUsers = data.trucks as ManagedUser[];
-        const localUsers = getStoredUsers();
-
-        // Merge: keep whichever has newer settings/passwords
-        const merged = cloudUsers.map((cu) => {
-          const local = localUsers.find((lu) => lu.id === cu.id);
-          return {
-            ...cu,
-            // Prefer custom password if set locally or in cloud
-            password: cu.password || local?.password || '123456',
-          };
-        });
-
-        setUsers(merged);
-        saveUsers(merged);
-      }
-    } catch (e) {
-      console.warn('Sync users from cloud failed:', e);
-    }
-  };
-
-  const syncUsersToCloud = async (usersList?: ManagedUser[]) => {
-    const listToSave = usersList || users;
-    const settings = getStoredSettings();
-    const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
-    if (!supabase) return;
-
-    try {
-      await supabase.from('customers').upsert({
-        id: USERS_CLOUD_KEY,
-        code: '__SYS_USERS__',
-        name: 'إعدادات مستخدمي المنظومة والصلاحيات',
-        trucks: listToSave as any,
-        notes: `سجل المستخدمين المشفر وقائمة الصلاحيات - آخر تحديث: ${new Date().toISOString()}`,
-        created_at: new Date().toISOString(),
-      });
-    } catch (e) {
-      console.warn('Sync users to cloud failed:', e);
-    }
+  const refreshUsers = async (adminClient = supabase) => {
+    if (!adminClient) return;
+    const { data, error } = await adminClient.from('app_user_profiles').select('*').order('created_at', { ascending: true });
+    if (error) throw new Error(`تعذر تحميل حسابات المستخدمين: ${error.message}`);
+    setUsers((data || []).map((row) => fromProfile(row as Record<string, unknown>)));
   };
 
   useEffect(() => {
-    syncUsersFromCloud();
+    // Remove the legacy client-side credentials after switching to Supabase Auth.
+    localStorage.removeItem('pls_users');
+    localStorage.removeItem('pls_is_authenticated');
+    localStorage.removeItem('pls_active_user_id');
+    try {
+      const customers = JSON.parse(localStorage.getItem('pls_customers') || '[]') as Array<{ id?: string }>;
+      localStorage.setItem('pls_customers', JSON.stringify(customers.filter((customer) => customer.id !== '__SYSTEM_USERS_CONFIG__')));
+      const backups = JSON.parse(localStorage.getItem('pls_safety_backups_v1') || '[]') as Array<{ customers?: Array<{ id?: string }> }>;
+      localStorage.setItem('pls_safety_backups_v1', JSON.stringify(backups.map((backup) => ({
+        ...backup,
+        customers: (backup.customers || []).filter((customer) => customer.id !== '__SYSTEM_USERS_CONFIG__'),
+      }))));
+    } catch { /* Keep normal startup available if an old local backup is malformed. */ }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('pls_active_user_id', currentUserId);
-  }, [currentUserId]);
+    if (!supabase) { setIsLoading(false); return; }
+    let active = true;
+    let revision = 0;
 
-  useEffect(() => {
-    localStorage.setItem('pls_is_authenticated', isAuthenticated ? 'true' : 'false');
-  }, [isAuthenticated]);
-
-  const currentUser = users.find((u) => u.id === currentUserId) || users[0];
-
-  const login = (username: string, passwordOrPin: string): { success: boolean; message?: string } => {
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPass = passwordOrPin.trim();
-
-    const matched = users.find((u) => {
-      const matchUser =
-        u.username.toLowerCase() === cleanUser ||
-        u.name.toLowerCase() === cleanUser ||
-        (cleanUser === 'admin' && u.role === 'admin') ||
-        (cleanUser === 'accountant' && u.role === 'accountant') ||
-        (cleanUser === 'dataentry' && u.role === 'data_entry');
-
-      if (!matchUser) return false;
-
-      const userPass = (u.password || '').trim();
-
-      // STRICTLY check against password ONLY (no PIN code allowed for login)
-      if (userPass) {
-        return cleanPass === userPass;
+    const acceptSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) => {
+      const currentRevision = ++revision;
+      if (!session?.user) {
+        if (!active || currentRevision !== revision) return;
+        setCurrentUser(anonymousUser);
+        setUsers([]);
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        return;
       }
+      const { data, error } = await supabase.from('app_user_profiles').select('*').eq('user_id', session.user.id).maybeSingle();
+      if (!active || currentRevision !== revision) return;
+      if (error || !data) {
+        console.error('Could not load the authenticated user profile:', error);
+        setCurrentUser(anonymousUser);
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        void supabase.auth.signOut();
+        return;
+      }
+      const profile = fromProfile(data as Record<string, unknown>);
+      if (!profile.is_active) {
+        setCurrentUser(anonymousUser);
+        setIsAuthenticated(false);
+        setIsLoading(false);
+        void supabase.auth.signOut();
+        return;
+      }
+      setCurrentUser(profile);
+      setIsAuthenticated(true);
+      setIsLoading(false);
+      if (profile.role === 'admin') {
+        setUsers([profile]);
+        try { await refreshUsers(supabase); }
+        catch (loadError) { console.error(loadError); }
+      } else {
+        setUsers([profile]);
+      }
+    };
 
-      // Initial default fallback only if password field is completely empty
-      const defaultPasses: Record<string, string> = {
-        admin: 'admin123',
-        accountant: 'acc123',
-        dataentry: 'entry123',
-      };
-      return defaultPasses[u.username.toLowerCase()] === cleanPass;
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Defer Supabase queries until after the auth callback releases its internal lock.
+      window.setTimeout(() => { void acceptSession(session); }, 0);
     });
+    void supabase.auth.getSession().then(({ data }) => acceptSession(data.session));
 
-    if (!matched) {
-      return { success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة!' };
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  const login = async (email: string, password: string) => {
+    if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل. تواصل مع مدير النظام.' };
+    const cleanEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+    if (error || !data.session) return { success: false, message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة، أو لم يتم تأكيد الحساب.' };
+    const { data: profile, error: profileError } = await supabase.from('app_user_profiles').select('is_active').eq('user_id', data.user.id).maybeSingle();
+    if (profileError || !profile) {
+      await supabase.auth.signOut();
+      return { success: false, message: 'حسابك غير مهيأ في النظام. تواصل مع المدير العام.' };
     }
-
-    if (!matched.is_active) {
-      return { success: false, message: 'هذا الحساب تم تعطيله من قِبل المدير العام!' };
+    if (!profile.is_active) {
+      await supabase.auth.signOut();
+      return { success: false, message: 'هذا الحساب معطل. تواصل مع المدير العام.' };
     }
-
-    setCurrentUserIdState(matched.id);
-    setIsAuthenticated(true);
     return { success: true };
   };
 
-  const logout = () => {
-    setIsAuthenticated(false);
+  const logout = () => { if (supabase) void supabase.auth.signOut(); };
+  const setCurrentUserId = (_id: string) => { /* User identity now comes from the verified Supabase session. */ };
+
+  const verifyCurrentPassword = async (password: string) => {
+    if (!supabase || !currentUser.email) return false;
+    const { error } = await supabase.auth.signInWithPassword({ email: currentUser.email, password });
+    if (!error) await supabase.auth.refreshSession();
+    return !error;
   };
 
-  const setCurrentUserId = (id: string) => {
-    setCurrentUserIdState(id);
+  const invokeUserAdmin = async (action: string, fields: Record<string, unknown>) => {
+    if (!supabase || currentUser.role !== 'admin') throw new Error('إدارة المستخدمين متاحة للمدير العام فقط.');
+    const { data, error } = await supabase.functions.invoke('manage-app-user', { body: { action, ...fields } });
+    if (error) throw new Error(error.message || 'تعذر تنفيذ إدارة المستخدم.');
+    if (data?.error) throw new Error(String(data.error));
+    await refreshUsers(supabase);
   };
 
-  const updateUserPermissions = (userId: string, permissions: RolePermissions) => {
-    const updated = users.map((u) => (u.id === userId ? { ...u, permissions } : u));
-    setUsers(updated);
-    saveUsers(updated);
-    syncUsersToCloud(updated);
-  };
+  const updateUserPermissions = (userId: string, permissions: RolePermissions) => invokeUserAdmin('update_permissions', { user_id: userId, permissions });
+  const updateUserStatus = (userId: string, isActive: boolean) => invokeUserAdmin('update_status', { user_id: userId, is_active: isActive });
+  const updateUserPassword = (userId: string, newPassword: string) => invokeUserAdmin('update_password', { user_id: userId, password: newPassword });
+  const addNewUser = (user: Omit<ManagedUser, 'id' | 'created_at'> & { password: string }) => invokeUserAdmin('create', {
+    email: user.email?.trim().toLowerCase(), username: user.username.trim(), display_name: user.name.trim(),
+    role: user.role, permissions: user.permissions, password: user.password,
+  });
+  const deleteUser = (userId: string) => invokeUserAdmin('delete', { user_id: userId });
 
-  const updateUserStatus = (userId: string, isActive: boolean) => {
-    const updated = users.map((u) => (u.id === userId ? { ...u, is_active: isActive } : u));
-    setUsers(updated);
-    saveUsers(updated);
-    syncUsersToCloud(updated);
-  };
-
-  const updateUserPin = (userId: string, newPin: string) => {
-    const updated = users.map((u) => (u.id === userId ? { ...u, pin_code: newPin } : u));
-    setUsers(updated);
-    saveUsers(updated);
-    syncUsersToCloud(updated);
-  };
-
-  const updateUserPassword = (userId: string, newPassword: string) => {
-    const updated = users.map((u) => (u.id === userId ? { ...u, password: newPassword } : u));
-    setUsers(updated);
-    saveUsers(updated);
-    syncUsersToCloud(updated);
-  };
-
-  const addNewUser = (userData: Omit<ManagedUser, 'id' | 'created_at'>) => {
-    const newUser: ManagedUser = {
-      ...userData,
-      id: `u-${Date.now()}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [...users, newUser];
-    setUsers(updated);
-    saveUsers(updated);
-    syncUsersToCloud(updated);
-  };
-
-  const deleteUser = (userId: string) => {
-    if (userId === 'u-admin') {
-      alert('لا يمكن حذف حساب الأدمن الرئيسي!');
-      return;
-    }
-    const updated = users.filter((u) => u.id !== userId);
-    setUsers(updated);
-    saveUsers(updated);
-    syncUsersToCloud(updated);
-    if (currentUserId === userId) {
-      setCurrentUserIdState('u-admin');
-    }
-  };
-
-  const perms = currentUser.permissions;
-  const isAdmin = currentUser.role === 'admin';
-
-  return (
-    <AuthContext.Provider
-      value={{
-        currentUser,
-        users,
-        isAuthenticated,
-        login,
-        logout,
-        setCurrentUserId,
-        updateUserPermissions,
-        updateUserStatus,
-        updateUserPin,
-        updateUserPassword,
-        addNewUser,
-        deleteUser,
-        syncUsersToCloud,
-        canViewFinancials: isAdmin || perms.can_view_financials,
-        canViewSystemRevenue: isAdmin || perms.can_view_system_revenue,
-        canAddMovements: isAdmin || perms.can_add_movements,
-        canEditMovements: isAdmin || perms.can_edit_movements,
-        canDeleteMovements: isAdmin || perms.can_delete_movements,
-        canUploadSheets: isAdmin || perms.can_upload_sheets,
-        canExportExcel: isAdmin || perms.can_export_excel,
-        canManageCustomers: isAdmin || perms.can_manage_customers,
-        canDeleteCustomers: isAdmin || perms.can_delete_customers,
-        canManagePayments: isAdmin || perms.can_manage_payments,
-        canManageBerths: isAdmin || perms.can_manage_berths,
-        canEditCommissions: isAdmin || perms.can_edit_commissions,
-        isAdmin,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  const isAdmin = isAuthenticated && currentUser.role === 'admin';
+  const perms = isAdmin ? { ...emptyPermissions, ...currentUser.permissions } : currentUser.permissions;
+  return <AuthContext.Provider value={{
+    currentUser, users, isAuthenticated, isLoading, login, logout, setCurrentUserId, verifyCurrentPassword,
+    updateUserPermissions, updateUserStatus, updateUserPassword, addNewUser, deleteUser,
+    canViewFinancials: isAdmin || perms.can_view_financials,
+    canViewSystemRevenue: isAdmin || perms.can_view_system_revenue,
+    canAddMovements: isAdmin || perms.can_add_movements,
+    canEditMovements: isAdmin || perms.can_edit_movements,
+    canDeleteMovements: isAdmin || perms.can_delete_movements,
+    canUploadSheets: isAdmin || perms.can_upload_sheets,
+    canExportExcel: isAdmin || perms.can_export_excel,
+    canManageCustomers: isAdmin || perms.can_manage_customers,
+    canDeleteCustomers: isAdmin || perms.can_delete_customers,
+    canManagePayments: isAdmin || perms.can_manage_payments,
+    canManageBerths: isAdmin || perms.can_manage_berths,
+    canEditCommissions: isAdmin || perms.can_edit_commissions,
+    isAdmin,
+  }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

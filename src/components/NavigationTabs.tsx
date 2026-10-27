@@ -6,6 +6,7 @@ export type TabType =
   | 'customers'
   | 'accounts'
   | 'reports'
+  | 'office_expenses'
   | 'berths'
   | 'settings'
   | 'admin_control';
@@ -49,6 +50,11 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
       id: 'reports',
       label: 'التقارير والإحصاءات',
       visible: canViewFinancials, // Hidden for data_entry
+    },
+    {
+      id: 'office_expenses',
+      label: 'مصاريف المكتب',
+      visible: true,
     },
     {
       id: 'berths',

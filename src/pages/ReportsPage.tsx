@@ -31,6 +31,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>(() => customers.map((customer) => customer.id));
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const selectedCustomers = useMemo(
     () => customers.filter((customer) => selectedCustomerIds.includes(customer.id)),
@@ -43,6 +44,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       if (!matchesCustomer) return false;
       if (dateFrom && movement.movement_date < dateFrom) return false;
       if (dateTo && movement.movement_date > dateTo) return false;
+      const term = searchTerm.trim().toLocaleLowerCase('ar-EG');
+      if (term) {
+        const searchableFields = [movement.customer_name, movement.driver_name, movement.truck_no, movement.trailer_no, movement.container_no, movement.container_desc, movement.container_path, movement.declaration_no, movement.cashier_receipt_no, movement.movement_date];
+        if (!searchableFields.some((value) => value?.toLocaleLowerCase('ar-EG').includes(term))) return false;
+      }
       return true;
     });
     const stats = clientMovements.reduce((totals, movement) => ({
@@ -55,7 +61,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       remaining: totals.remaining + (Number(movement.remaining_amount) || 0),
     }), { count: 0, cashier: 0, sysComm: 0, nafez: 0, total: 0, paid: 0, remaining: 0 });
     return { customer, movements: clientMovements, stats };
-  }), [selectedCustomers, movements, dateFrom, dateTo]);
+  }), [selectedCustomers, movements, dateFrom, dateTo, searchTerm]);
 
   // Statistical analytics for all clients
   const statistics = useMemo(() => {
@@ -104,6 +110,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         'رقم المقطورة': m.trailer_no || '',
         'اسم السائق': m.driver_name || '',
         'رقم الحاوية': m.container_no || '',
+        'وصف الحاوية': m.container_desc || '',
+        'مسار الحاوية': m.container_path || '',
         'رقم الاقرار': m.declaration_no || '',
         'الرصيف': m.berth_name || '',
         'فاتورة كاشير': m.cashier_invoice || 0,
@@ -173,7 +181,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         <div className="space-y-6">
           {/* Controls Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 no-print">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
               <div className="relative">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">العملاء المشمولون في التقرير</label>
                 <details className="group">
@@ -202,6 +210,17 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                     ))}
                   </div>
                 </details>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">بحث في الحركات</label>
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="اسم، حاوية، وصف أو تاريخ..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs"
+                />
               </div>
 
               <div>
@@ -337,6 +356,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                         <th className="p-2 border border-slate-700">المقطورة</th>
                         <th className="p-2 border border-slate-700">السائق</th>
                         <th className="p-2 border border-slate-700">الحاوية</th>
+                        <th className="p-2 border border-slate-700">وصف الحاوية</th>
+                        <th className="p-2 border border-slate-700">مسار الحاوية</th>
                         <th className="p-2 border border-slate-700">الإقرار</th>
                         <th className="p-2 border border-slate-700 text-center">الكاشير</th>
                         <th className="p-2 border border-slate-700 text-center">العمولة</th>
@@ -359,6 +380,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                             <td className="p-2 border border-slate-200">{m.trailer_no || '-'}</td>
                             <td className="p-2 border border-slate-200">{m.driver_name || '-'}</td>
                             <td className="p-2 border border-slate-200 font-mono text-blue-900">{m.container_no || '-'}</td>
+                            <td className="p-2 border border-slate-200 text-slate-700">{m.container_desc || '-'}</td>
+                            <td className="p-2 border border-slate-200 text-slate-700">{m.container_path || '-'}</td>
                             <td className="p-2 border border-slate-200 font-mono">{m.declaration_no || '-'}</td>
                             <td className="p-2 border border-slate-200 text-center font-mono">{(m.cashier_invoice || 0).toLocaleString()}</td>
                             <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700">{(m.system_commission || 0).toLocaleString()}</td>
@@ -375,7 +398,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={14} className="p-6 text-center text-slate-400 text-xs">
+                          <td colSpan={16} className="p-6 text-center text-slate-400 text-xs">
                             لا توجد حركات مسجلة لهذا العميل في النطاق الزمني المحدد.
                           </td>
                         </tr>

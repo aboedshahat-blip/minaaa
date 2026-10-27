@@ -17,11 +17,10 @@ export interface RolePermissions {
 
 export interface ManagedUser {
   id: string;
+  email?: string;
   username: string;
-  password: string; // كلمة المرور
   name: string;
   role: UserRole;
-  pin_code: string; // رمز دخول الحساب
   is_active: boolean;
   permissions: RolePermissions;
   created_at: string;
@@ -114,6 +113,21 @@ export interface PaymentReceipt {
   payment_type?: 'collection' | 'advance';
   unallocated_amount?: number;
   created_at: string;
+}
+
+export interface OfficeExpense {
+  id: string;
+  expense_date: string;
+  amount: number;
+  category: string;
+  payee?: string;
+  payment_method: PaymentReceipt['payment_method'];
+  description?: string;
+  receipt_path?: string;
+  receipt_name?: string;
+  created_at: string;
+  created_by: string;
+  created_by_name: string;
 }
 
 export interface SystemSettings {

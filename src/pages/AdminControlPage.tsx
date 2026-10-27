@@ -59,6 +59,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     updateUserPassword,
     addNewUser,
     deleteUser,
+    verifyCurrentPassword,
   } = useAuth();
 
   // Admin Password Unlock Gate (Secure password verification, NOT PIN)
@@ -69,6 +70,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   // New User Form State
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newUserRole, setNewUserRole] = useState<'accountant' | 'data_entry'>('accountant');
   const [newUserPassword, setNewUserPassword] = useState('');
@@ -117,11 +119,9 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   // Active selected user for permissions/password management
   const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    const adminUser = users.find((u) => u.role === 'admin') || currentUser;
-    const adminPassword = (adminUser?.password || 'admin123').trim();
-    if (passwordInput.trim() === adminPassword) {
+    if (await verifyCurrentPassword(passwordInput)) {
       setIsUnlocked(true);
       setPasswordError(false);
     } else {
@@ -145,15 +145,13 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
   const handleConfirmClearData = async (e: React.FormEvent) => {
     e.preventDefault();
-    const adminUser = users.find((u) => u.role === 'admin') || currentUser;
-    const adminPassword = (adminUser?.password || 'admin123').trim();
-    if (clearPassword.trim() !== adminPassword) {
+    if (!await verifyCurrentPassword(clearPassword)) {
       setClearError('كلمة المرور غير صحيحة. أدخل كلمة مرور الأدمن للمتابعة.');
       return;
     }
 
     const confirmed = await confirmAction(
-      'تحذير: سيتم حذف كل الحركات والعملاء وسندات القبض من قاعدة البيانات والأجهزة المرتبطة. ستظل حسابات المستخدمين وكلمات المرور والإعدادات والأرصفة محفوظة. هل تريد المتابعة؟',
+      'تحذير: سيتم حذف كل الحركات والعملاء وسندات القبض من قاعدة البيانات والأجهزة المرتبطة. ستظل حسابات المستخدمين والإعدادات والأرصفة محفوظة. هل تريد المتابعة؟',
       'نعم، امسح بيانات التشغيل'
     );
     if (!confirmed) return;
@@ -175,8 +173,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
   const handleConfirmRestore = async (e: React.FormEvent) => {
     e.preventDefault();
-    const adminUser = users.find((u) => u.role === 'admin') || currentUser;
-    if (restorePassword.trim() !== (adminUser?.password || 'admin123').trim()) {
+    if (!await verifyCurrentPassword(restorePassword)) {
       setRestoreError('كلمة مرور الأدمن غير صحيحة.');
       return;
     }
@@ -210,18 +207,19 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     };
 
     if (!await confirmAction('هل تريد تغيير صلاحية هذا المستخدم؟', 'نعم، غيّر الصلاحية')) return;
-    updateUserPermissions(userId, updatedPerms);
+    try { await updateUserPermissions(userId, updatedPerms); }
+    catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تحديث الصلاحية.'); }
   };
 
   const handleAddNewUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUsername.trim() || !newFullName.trim()) {
-      alert('يرجى ملء جميع الحقول المطلوبة');
+    if (!newUsername.trim() || !newFullName.trim() || !newUserEmail.trim()) {
+      alert('أدخل الاسم واسم المستخدم والبريد الإلكتروني.');
       return;
     }
 
-    if (!newUserPassword.trim()) {
-      alert('يرجى تحديد كلمة مرور للمستخدم الجديد');
+    if (newUserPassword.trim().length < 8) {
+      alert('كلمة المرور يجب ألا تقل عن 8 أحرف.');
       return;
     }
 
@@ -258,21 +256,27 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
           };
 
     if (!await confirmAction(`هل تريد إضافة المستخدم ${newFullName.trim()} بالصلاحيات المحددة؟`, 'نعم، أضف المستخدم')) return;
-    addNewUser({
-      username: newUsername.trim(),
-      password: newUserPassword.trim(),
-      name: newFullName.trim(),
-      role: newUserRole,
-      pin_code: '1234',
-      is_active: true,
-      permissions: defaultPerms,
-    });
+    try {
+      await addNewUser({
+        email: newUserEmail.trim().toLowerCase(),
+        username: newUsername.trim(),
+        password: newUserPassword.trim(),
+        name: newFullName.trim(),
+        role: newUserRole,
+        is_active: true,
+        permissions: defaultPerms,
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر إنشاء حساب المستخدم.');
+      return;
+    }
 
     setNewUsername('');
+    setNewUserEmail('');
     setNewFullName('');
     setNewUserPassword('');
     setIsAddUserOpen(false);
-    alert('تم إضافة المستخدم الجديد بنجاح!');
+    alert('تم إنشاء الحساب وإرسال دعوة تأكيد إلى البريد الإلكتروني. بعد تأكيد البريد يمكن للمستخدم تسجيل الدخول.');
   };
 
   const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[0];
@@ -532,7 +536,10 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   <button
                     onClick={async () => {
                       const nextActive = !selectedUser.is_active;
-                      if (await confirmAction(`هل تريد ${nextActive ? 'تفعيل' : 'تعطيل'} حساب ${selectedUser.name}؟`, 'نعم، نفّذ')) updateUserStatus(selectedUser.id, nextActive);
+                      if (await confirmAction(`هل تريد ${nextActive ? 'تفعيل' : 'تعطيل'} حساب ${selectedUser.name}؟`, 'نعم، نفّذ')) {
+                        try { await updateUserStatus(selectedUser.id, nextActive); }
+                        catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تحديث حالة الحساب.'); }
+                      }
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${
                       selectedUser.is_active
@@ -546,7 +553,10 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
                   <button
                     onClick={async () => {
-                      if (await confirmAction(`سيتم حذف حساب المستخدم ${selectedUser.name}. هل تريد المتابعة؟`, 'نعم، احذف المستخدم')) deleteUser(selectedUser.id);
+                    if (await confirmAction(`سيتم حذف حساب المستخدم ${selectedUser.name}. هل تريد المتابعة؟`, 'نعم، احذف المستخدم')) {
+                      try { await deleteUser(selectedUser.id); }
+                      catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر حذف الحساب.'); }
+                    }
                     }}
                     className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
                     title="حذف هذا المستخدم"
@@ -591,9 +601,12 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                       return;
                     }
                     if (!await confirmAction(`هل تريد تغيير كلمة مرور ${selectedUser.name}؟`, 'نعم، غيّر كلمة المرور')) return;
-                    updateUserPassword(selectedUser.id, editingPassword.trim());
-                    alert(`✅ تم بنجاح تغيير كلمة المرور للمستخدم (${selectedUser.name})!\n\nتم حفظها فورياً وسيقوم السيستم بطلبها حصرياً عند الدخول.`);
-                    setEditingPassword('');
+                    if (editingPassword.trim().length < 8) { alert('كلمة المرور يجب ألا تقل عن 8 أحرف.'); return; }
+                    try {
+                      await updateUserPassword(selectedUser.id, editingPassword.trim());
+                      alert(`تم تحديث كلمة المرور في خدمة الدخول الآمن للمستخدم (${selectedUser.name}).`);
+                      setEditingPassword('');
+                    } catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر تغيير كلمة المرور.'); }
                   }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center justify-center gap-1.5"
                 >
@@ -764,6 +777,19 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
               </div>
 
               <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">البريد الإلكتروني المستخدم للدخول *</label>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs"
+                  required
+                />
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   نوع الحساب والصلاحيات الافتراضية
                 </label>
@@ -779,11 +805,11 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  كلمة المرور (Password) *
+                  كلمة مرور أولية (8 أحرف أو أكثر) *
                 </label>
                 <input
                   type="password"
-                  placeholder="أدخل كلمة مرور تسجيل الدخول..."
+                  placeholder="لن تُحفظ في بيانات العملاء"
                   value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono"

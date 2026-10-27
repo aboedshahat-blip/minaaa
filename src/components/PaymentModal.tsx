@@ -318,6 +318,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         <span className="text-slate-500 font-mono">
                           {m.container_no || 'بدون حاوية'}
                         </span>
+                        {(m.container_desc || m.container_path) && <span className="text-slate-500">{m.container_desc || m.container_path}</span>}
                         <span className="text-slate-400">({m.movement_date})</span>
                       </div>
 

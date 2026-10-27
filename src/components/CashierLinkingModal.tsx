@@ -38,10 +38,14 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
     const term = searchTerm.toLowerCase();
     return (
       m.container_no?.toLowerCase().includes(term) ||
+      m.container_desc?.toLowerCase().includes(term) ||
+      m.container_path?.toLowerCase().includes(term) ||
       m.truck_no?.toLowerCase().includes(term) ||
       m.driver_name?.toLowerCase().includes(term) ||
+      m.customer_name?.toLowerCase().includes(term) ||
       m.declaration_no?.toLowerCase().includes(term) ||
-      m.cashier_receipt_no?.toLowerCase().includes(term)
+      m.cashier_receipt_no?.toLowerCase().includes(term) ||
+      m.movement_date?.toLowerCase().includes(term)
     );
   });
 
@@ -121,13 +125,13 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
           {!initialMovement && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                ابحث عن الشحنة (برقم الحاوية أو رقم الشاحنة أو اسم السائق)
+                ابحث بالعميل أو السائق أو رقم الحاوية أو وصفها أو التاريخ
               </label>
               <div className="relative mb-2">
                 <Search className="w-4 h-4 absolute right-3 top-3 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="ابحث بالحاوية، العربية، السائق، الإقرار..."
+                  placeholder="اسم، شاحنة، حاوية، وصفها، مسارها أو تاريخها..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs"
@@ -151,6 +155,8 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
                       </span>
                       <span className="text-slate-600 ml-2">🚚 {m.truck_no}</span>
                       <span className="text-slate-500">👤 {m.driver_name || m.customer_name}</span>
+                      {(m.container_desc || m.container_path) && <span className="block mt-1 text-[10px] text-slate-500">{m.container_desc || '-'} · {m.container_path || '-'}</span>}
+                      <span className="block text-[10px] text-slate-400">التاريخ: {m.movement_date || '-'}</span>
                     </div>
                     {m.cashier_receipt_no && (
                       <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded font-mono">
@@ -173,6 +179,10 @@ export const CashierLinkingModal: React.FC<CashierLinkingModalProps> = ({
                 <div>
                   <span className="text-slate-500 block text-[10px]">رقم الحاوية</span>
                   <span className="font-mono font-bold text-blue-900">{selectedMovement.container_no || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">وصف الحاوية / المسار</span>
+                  <span className="font-semibold text-slate-800">{selectedMovement.container_desc || '-'} / {selectedMovement.container_path || '-'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px]">رقم الشاحنة</span>

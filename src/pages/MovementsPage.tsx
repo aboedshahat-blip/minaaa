@@ -169,7 +169,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     }
     if (searchTerm) {
       const term = searchTerm.toLocaleLowerCase();
-      const fields = [m.truck_no, m.trailer_no, m.driver_name, m.container_no, m.declaration_no, m.customer_name, m.cashier_receipt_no];
+      const fields = [m.truck_no, m.trailer_no, m.driver_name, m.container_no, m.container_desc, m.container_path, m.declaration_no, m.customer_name, m.cashier_receipt_no, m.movement_date];
       if (!fields.some((value) => value?.toLocaleLowerCase().includes(term))) return false;
     }
     if (canViewFinancials && selectedPaymentStatus && m.payment_status !== selectedPaymentStatus) return false;
@@ -204,8 +204,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           m.trailer_no?.toLowerCase().includes(term) ||
           m.driver_name?.toLowerCase().includes(term) ||
           m.container_no?.toLowerCase().includes(term) ||
+          m.container_desc?.toLowerCase().includes(term) ||
+          m.container_path?.toLowerCase().includes(term) ||
           m.declaration_no?.toLowerCase().includes(term) ||
-          m.customer_name?.toLowerCase().includes(term);
+          m.customer_name?.toLowerCase().includes(term) ||
+          m.cashier_receipt_no?.toLowerCase().includes(term) ||
+          m.movement_date?.toLowerCase().includes(term);
         if (!matchSearch) return false;
       }
 
@@ -684,7 +688,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-                <input type="text" placeholder="بحث برقم الشاحنة أو الإيصال..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
+                <input type="text" placeholder="ابحث بالاسم أو رقم الحاوية أو وصفها أو التاريخ أو الإيصال..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
               </div>
               {canViewFinancials && (
                 <select value={selectedPaymentStatus} onChange={(e) => setSelectedPaymentStatus(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
@@ -721,7 +725,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               )}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px] text-xs text-right border-collapse">
+              <table className="w-full min-w-[980px] text-xs text-right border-collapse">
                 <thead className="bg-emerald-800 text-white font-bold">
                   <tr>
                     <th className="p-2.5 border border-emerald-700 text-center w-10">م</th>
@@ -729,6 +733,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                     <th className="p-2.5 border border-emerald-700 whitespace-nowrap">المقطورة</th>
                     <th className="p-2.5 border border-emerald-700">اسم السائق</th>
                     <th className="p-2.5 border border-emerald-700 whitespace-nowrap">رقم الحاوية</th>
+                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">وصف الحاوية</th>
+                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">مسار الحاوية</th>
                     {canViewFinancials && (
                       <>
                         <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">رقم إيصال الكاشير</th>
@@ -750,6 +756,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       <td className="p-2 border border-slate-100 text-slate-700 whitespace-nowrap">{m.trailer_no || '-'}</td>
                       <td className="p-2 border border-slate-100 text-slate-800">{m.driver_name || '-'}</td>
                       <td className="p-2 border border-slate-100 font-mono font-bold text-blue-800 whitespace-nowrap">{m.container_no || '-'}</td>
+                      <td className="p-2 border border-slate-100 text-slate-700">{m.container_desc || '-'}</td>
+                      <td className="p-2 border border-slate-100 text-slate-700">{m.container_path || '-'}</td>
                       {canViewFinancials && (
                         <>
                           <td className="p-2 border border-slate-100 text-center">
@@ -788,7 +796,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={canViewFinancials ? 12 : 7} className="p-8 text-center text-slate-400">لا توجد حركات مطابقة للبحث الحالي.</td></tr>
+                    <tr><td colSpan={canViewFinancials ? 14 : 8} className="p-8 text-center text-slate-400">لا توجد حركات مطابقة للبحث الحالي.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -805,7 +813,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="ابحث باسم العميل أو السائق"
+                placeholder="ابحث بالعميل أو السائق أو رقم الحاوية أو وصفها أو التاريخ..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pr-9 pl-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -879,6 +887,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                           <th className="p-2.5 border border-slate-200 text-center w-8">م</th>
                           <th className="p-2.5 border border-slate-200 whitespace-nowrap">الشاحنة / المقطورة</th>
                           <th className="p-2.5 border border-slate-200 whitespace-nowrap">رقم الحاوية</th>
+                          <th className="p-2.5 border border-slate-200 whitespace-nowrap">وصف الحاوية</th>
+                          <th className="p-2.5 border border-slate-200 whitespace-nowrap">مسار الحاوية</th>
                           <th className="p-2.5 border border-slate-200 whitespace-nowrap">رقم الكاشير</th>
                           <th className="p-2.5 border border-slate-200 text-center whitespace-nowrap">مبلغ الكاشير</th>
                           <th className="p-2.5 border border-slate-200 text-center whitespace-nowrap">عمولة</th>
@@ -897,6 +907,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                               {m.trailer_no && <span className="text-[10px] text-slate-500">{m.trailer_no}</span>}
                             </td>
                             <td className="p-2 border border-slate-100 font-mono font-bold text-blue-800 whitespace-nowrap">{m.container_no || '-'}</td>
+                            <td className="p-2 border border-slate-100 text-slate-700">{m.container_desc || '-'}</td>
+                            <td className="p-2 border border-slate-100 text-slate-700">{m.container_path || '-'}</td>
                             <td className="p-2 border border-slate-100 text-center">
                               {m.cashier_receipt_no ? (
                                 <span className="text-[10px] font-mono bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">#{m.cashier_receipt_no}</span>
@@ -930,7 +942,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       {/* Customer Totals Footer */}
                       <tfoot className="bg-amber-50 font-black text-amber-900 text-xs">
                         <tr>
-                          <td colSpan={4} className="p-2.5 border border-amber-200 text-right">
+                          <td colSpan={6} className="p-2.5 border border-amber-200 text-right">
                             إجمالي {group.name} ({group.truckCount} شحنة)
                           </td>
                           <td className="p-2.5 border border-amber-200 text-center font-mono">{group.cashierTotal.toLocaleString()} ج</td>
@@ -995,7 +1007,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2">
               <div className="md:col-span-2 relative">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-                <input type="text" placeholder="بحث باسم العميل أو السائق أو رقم الشاحنة والحاوية..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
+                <input type="text" placeholder="ابحث بالعميل أو السائق أو رقم الحاوية أو وصفها أو التاريخ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
               </div>
               <select value={selectedBerth} onChange={(e) => setSelectedBerth(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
                 <option value="">جميع الأرصفة</option>

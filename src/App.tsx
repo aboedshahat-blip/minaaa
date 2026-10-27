@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import {
   Berth,
   Customer,
   Movement,
+  OfficeExpense,
   PaymentReceipt,
   SystemSettings,
 } from './types';
@@ -12,6 +13,7 @@ import {
   getStoredCustomers,
   getStoredMovements,
   getStoredPayments,
+  getStoredOfficeExpenses,
   getStoredSettings,
   getSafetyBackups,
   saveSafetyBackup,
@@ -21,6 +23,7 @@ import {
   saveCustomers,
   saveMovements,
   savePayments,
+  saveOfficeExpenses,
   saveSettings,
   fetchAllFromSupabase,
   syncMovementToSupabase,
@@ -38,23 +41,27 @@ import {
   clearAllMovementsFromSupabase,
   deleteCustomerFromSupabase,
   deleteBerthFromSupabase,
+  syncOfficeExpenseToSupabase,
+  deleteOfficeExpenseFromSupabase,
+  uploadOfficeExpenseReceipt,
 } from './lib/storage';
 import { getSupabaseClient } from './lib/supabase';
 import { exportTemplateToExcel } from './lib/excelUtils';
 import { Navbar } from './components/Navbar';
 import { NavigationTabs, TabType } from './components/NavigationTabs';
-import { MovementsPage } from './pages/MovementsPage';
-import { CustomersPage } from './pages/CustomersPage';
-import { AccountsPage } from './pages/AccountsPage';
-import { ReportsPage } from './pages/ReportsPage';
-import { BerthsPage } from './pages/BerthsPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { AdminControlPage } from './pages/AdminControlPage';
+const MovementsPage = lazy(() => import('./pages/MovementsPage').then((module) => ({ default: module.MovementsPage })));
+const CustomersPage = lazy(() => import('./pages/CustomersPage').then((module) => ({ default: module.CustomersPage })));
+const AccountsPage = lazy(() => import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage })));
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })));
+const BerthsPage = lazy(() => import('./pages/BerthsPage').then((module) => ({ default: module.BerthsPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const AdminControlPage = lazy(() => import('./pages/AdminControlPage').then((module) => ({ default: module.AdminControlPage })));
+const OfficeExpensesPage = lazy(() => import('./pages/OfficeExpensesPage').then((module) => ({ default: module.OfficeExpensesPage })));
 import { LoginPage } from './components/LoginPage';
-import { MovementModal } from './components/MovementModal';
-import { CustomerModal } from './components/CustomerModal';
-import { BerthModal } from './components/BerthModal';
-import { PaymentModal } from './components/PaymentModal';
+const MovementModal = lazy(() => import('./components/MovementModal').then((module) => ({ default: module.MovementModal })));
+const CustomerModal = lazy(() => import('./components/CustomerModal').then((module) => ({ default: module.CustomerModal })));
+const BerthModal = lazy(() => import('./components/BerthModal').then((module) => ({ default: module.BerthModal })));
+const PaymentModal = lazy(() => import('./components/PaymentModal').then((module) => ({ default: module.PaymentModal })));
 import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
 import { ConfirmActionProvider, useConfirmAction } from './contexts/ConfirmActionContext';
 
@@ -63,7 +70,21 @@ const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: 
   return localRows.filter((row) => !cloudIds.has(row.id));
 };
 
-const APP_TABS: TabType[] = ['movements', 'customers', 'accounts', 'reports', 'berths', 'settings', 'admin_control'];
+const withoutFinancialDetails = (movement: Movement): Movement => ({
+  ...movement,
+  cashier_invoice: 0,
+  cashier_receipt_no: '',
+  system_commission: 0,
+  nafez_commission: 0,
+  discount: 0,
+  total_amount: 0,
+  payment_status: 'unpaid',
+  paid_amount: 0,
+  remaining_amount: 0,
+  customer_paid_amount: 0,
+});
+
+const APP_TABS: TabType[] = ['movements', 'customers', 'accounts', 'reports', 'office_expenses', 'berths', 'settings', 'admin_control'];
 const ACTIVE_TAB_KEY = 'pls_active_tab';
 
 const getStoredActiveTab = (): TabType => {
@@ -79,6 +100,7 @@ const AppContent: React.FC = () => {
   const confirmAction = useConfirmAction();
   const {
     isAuthenticated,
+    isLoading: isAuthLoading,
     canViewFinancials,
     canAddMovements,
     canEditMovements,
@@ -88,6 +110,7 @@ const AppContent: React.FC = () => {
     canManageBerths,
     canManagePayments,
     isAdmin,
+    currentUser,
   } = useAuth();
 
   // State
@@ -96,9 +119,23 @@ const AppContent: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>(getStoredCustomers);
   const [berths, setBerths] = useState<Berth[]>(getStoredBerths);
   const [payments, setPayments] = useState<PaymentReceipt[]>(getStoredPayments);
+  const [expenses, setExpenses] = useState<OfficeExpense[]>(getStoredOfficeExpenses);
+  const [expenseCloudReady, setExpenseCloudReady] = useState<boolean | null>(null);
   const [safetyBackups, setSafetyBackups] = useState<OperationalSafetyBackup[]>(getSafetyBackups);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
   const [cloudFeedback, setCloudFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated || canViewFinancials) return;
+    setMovements((current) => {
+      const operationalOnly = current.map(withoutFinancialDetails);
+      saveMovements(operationalOnly);
+      return operationalOnly;
+    });
+    setPayments([]);
+    savePayments([]);
+    setSafetyBackups((current) => current.map((backup) => ({ ...backup, movements: backup.movements.map(withoutFinancialDetails), payments: [] })));
+  }, [isAuthLoading, isAuthenticated, canViewFinancials]);
 
   const runCloudOperation = async (operation: Promise<unknown>) => {
     try {
@@ -111,7 +148,7 @@ const AppContent: React.FC = () => {
   };
 
   const captureSafetyBackup = (label: string) => {
-    const backup = saveSafetyBackup({ label, movements, customers, berths, payments });
+    const backup = saveSafetyBackup({ label, movements, customers, berths, payments, expenses });
     setSafetyBackups(getSafetyBackups());
     return backup;
   };
@@ -121,18 +158,22 @@ const AppContent: React.FC = () => {
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
+        setExpenseCloudReady(!cloudData.expensesTableMissing);
         const resetDetected = Boolean(cloudData.dataResetAt && cloudData.dataResetAt !== getLocalDataResetAt());
         if (resetDetected && cloudData.dataResetAt) {
           clearOperationalLocalData(cloudData.dataResetAt);
         }
-        const localMovements = resetDetected ? [] : getStoredMovements();
+        const localMovements = resetDetected ? [] : getStoredMovements().map((row) => canViewFinancials ? row : withoutFinancialDetails(row));
         const localCustomers = resetDetected ? [] : getStoredCustomers();
         const localBerths = getStoredBerths();
-        const localPayments = resetDetected ? [] : getStoredPayments();
-        const pendingMovements = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Movement>('movements');
+        const localPayments = resetDetected || !canViewFinancials ? [] : getStoredPayments();
+        const localExpenses = getStoredOfficeExpenses();
+        const pendingMovementsRaw = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Movement>('movements');
+        const pendingMovements = canViewFinancials ? pendingMovementsRaw : { ...pendingMovementsRaw, upserts: pendingMovementsRaw.upserts.map(withoutFinancialDetails) };
         const pendingCustomers = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Customer>('customers');
         const pendingBerths = getPendingSyncForTable<Berth>('berths');
-        const pendingPayments = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<PaymentReceipt>('payments');
+        const pendingPayments = resetDetected || !canViewFinancials ? { upserts: [], deletes: [] } : getPendingSyncForTable<PaymentReceipt>('payments');
+        const pendingExpenses = getPendingSyncForTable<OfficeExpense>('office_expenses');
         const mergePending = <T extends { id: string }>(cloud: T[], local: T[], pending: { upserts: T[]; deletes: string[] }) => {
           const merged = new Map(cloud.map((row) => [row.id, row]));
           if (restoreDeviceOnlyData) {
@@ -143,7 +184,8 @@ const AppContent: React.FC = () => {
           return Array.from(merged.values());
         };
         const reconciledCashierMovementIds = new Set<string>();
-        const mergedMovements = mergePending(cloudData.movements, localMovements, pendingMovements).map((movement) => {
+        const mergedMovements = mergePending(cloudData.movements, localMovements, pendingMovements).map((originalMovement) => {
+          const movement = canViewFinancials ? originalMovement : withoutFinancialDetails(originalMovement);
           if (!movement.cashier_receipt_no) return movement;
           const cashierInvoice = Number(movement.cashier_invoice) || 0;
           const customerPaid = movement.customer_paid_amount !== undefined
@@ -165,6 +207,7 @@ const AppContent: React.FC = () => {
         const customersToUse = mergePending(cloudData.customers, localCustomers, pendingCustomers);
         const berthsToUse = mergePending(cloudData.berths, localBerths, pendingBerths);
         const paymentsToUse = mergePending(cloudData.payments, localPayments, pendingPayments);
+        const expensesToUse = mergePending(cloudData.expenses || [], localExpenses, pendingExpenses);
         const allocation = applyUnallocatedCustomerAdvances(mergedMovements, paymentsToUse);
         const movementsToUse = allocation.movements;
         const paymentsFinal = allocation.payments;
@@ -178,6 +221,8 @@ const AppContent: React.FC = () => {
         saveBerths(berthsToUse);
         setPayments(paymentsFinal);
         savePayments(paymentsFinal);
+        setExpenses(expensesToUse);
+        saveOfficeExpenses(expensesToUse);
 
         // Retry queued edits/deletes before reporting sync complete.
         await flushPendingSync();
@@ -186,7 +231,8 @@ const AppContent: React.FC = () => {
         const customersToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.customers, localCustomers) : [];
         const berthsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.berths, localBerths) : [];
         const paymentsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.payments, localPayments) : [];
-        const restoredCount = movementsToRestore.length + customersToRestore.length + berthsToRestore.length + paymentsToRestore.length;
+        const expensesToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.expenses || [], localExpenses) : [];
+        const restoredCount = movementsToRestore.length + customersToRestore.length + berthsToRestore.length + paymentsToRestore.length + expensesToRestore.length;
         const shouldRestoreLocalData = restoredCount > 0;
         if (shouldRestoreLocalData) {
           await restoreLocalDataToSupabase({
@@ -194,6 +240,7 @@ const AppContent: React.FC = () => {
             customers: customersToRestore,
             berths: berthsToRestore,
             payments: paymentsToRestore,
+            expenses: expensesToRestore,
           });
         }
         const reconciledMovements = movementsToUse.filter((movement) => reconciledCashierMovementIds.has(movement.id));
@@ -239,7 +286,7 @@ const AppContent: React.FC = () => {
     };
     let channel = supabase?.channel(`pls-live-sync-${Math.random().toString(36).slice(2)}`);
     if (channel) {
-      for (const table of ['movements', 'customers', 'payments', 'berths']) {
+      for (const table of ['movements', 'customers', 'payments', 'berths', 'office_expenses']) {
         channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, requestRefresh);
       }
       channel.subscribe();
@@ -395,6 +442,7 @@ const AppContent: React.FC = () => {
     setCustomers(backup.customers);
     setBerths(backup.berths);
     setPayments(backup.payments);
+    setExpenses(backup.expenses ?? getStoredOfficeExpenses());
     setCloudFeedback(`تمت استعادة النسخة المحفوظة: ${backup.label}`);
   };
 
@@ -406,6 +454,7 @@ const AppContent: React.FC = () => {
     setCustomers(latestBackup.customers);
     setBerths(latestBackup.berths);
     setPayments(latestBackup.payments);
+    setExpenses(latestBackup.expenses ?? getStoredOfficeExpenses());
     setCloudFeedback(`تم التراجع واستعادة البيانات السابقة: ${latestBackup.label}`);
   };
 
@@ -581,6 +630,10 @@ const AppContent: React.FC = () => {
     saveSettings(newSettings);
   };
 
+  if (isAuthLoading) {
+    return <div className="min-h-screen bg-slate-50 p-8 text-center text-sm font-semibold text-slate-600" role="status">جارٍ التحقق من جلسة الدخول الآمنة…</div>;
+  }
+
   if (!isAuthenticated) {
     return <LoginPage />;
   }
@@ -610,6 +663,7 @@ const AppContent: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full min-w-0 mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500" role="status" aria-live="polite">جارٍ تحميل الصفحة…</div>}>
         {activeTab === 'movements' && (
           <MovementsPage
             movements={movements}
@@ -675,6 +729,40 @@ const AppContent: React.FC = () => {
           />
         )}
 
+        {activeTab === 'office_expenses' && (
+          <OfficeExpensesPage
+            expenses={expenses}
+            cloudReady={expenseCloudReady}
+            onSave={async (data, attachment, existing) => {
+              const id = existing?.id || `expense-${crypto.randomUUID()}`;
+              let receiptPath = existing?.receipt_path;
+              if (attachment) receiptPath = await uploadOfficeExpenseReceipt(attachment, id);
+              const expense: OfficeExpense = {
+                ...existing,
+                ...data,
+                id,
+                receipt_path: receiptPath,
+                receipt_name: attachment?.name || existing?.receipt_name,
+                created_at: existing?.created_at || new Date().toISOString(),
+                created_by: existing?.created_by || currentUser.id,
+                created_by_name: existing?.created_by_name || currentUser.name,
+              };
+              const updated = existing
+                ? expenses.map((row) => row.id === id ? expense : row)
+                : [expense, ...expenses];
+              setExpenses(updated);
+              saveOfficeExpenses(updated);
+              void runCloudOperation(syncOfficeExpenseToSupabase(expense));
+            }}
+            onDelete={async (expense) => {
+              const updated = expenses.filter((row) => row.id !== expense.id);
+              setExpenses(updated);
+              saveOfficeExpenses(updated);
+              void runCloudOperation(deleteOfficeExpenseFromSupabase(expense));
+            }}
+          />
+        )}
+
         {activeTab === 'berths' && (
           <BerthsPage
             berths={berths}
@@ -712,9 +800,11 @@ const AppContent: React.FC = () => {
             onRestoreSafetyBackup={handleRestoreSafetyBackup}
           />
         )}
+        </Suspense>
       </main>
 
       {/* Modals */}
+      <Suspense fallback={null}>
       <MovementModal
         isOpen={isMovementModalOpen}
         onClose={() => {
@@ -764,6 +854,7 @@ const AppContent: React.FC = () => {
         movements={movements}
         initialCustomerId={paymentCustomerId}
       />
+      </Suspense>
     </div>
   );
 };

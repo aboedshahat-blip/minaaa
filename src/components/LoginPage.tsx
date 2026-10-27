@@ -8,34 +8,32 @@ import {
   ArrowRight,
   AlertCircle,
 } from 'lucide-react';
-import vibLogoUrl from '../assets/vib-logo.png';
+import { vibLogoUrl } from '../lib/branding';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
 
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
-      setErrorMessage('يرجى إدخال اسم المستخدم وكلمة المرور');
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage('أدخل البريد الإلكتروني وكلمة المرور');
       return;
     }
 
     setIsLoading(true);
     setErrorMessage('');
-
-    setTimeout(() => {
-      const res = login(username, password);
-      if (!res.success) {
-        setErrorMessage(res.message || 'بيانات الدخول غير صحيحة');
-      }
-      setIsLoading(false);
-    }, 200);
+    try {
+      const result = await login(email, password);
+      if (!result.success) setErrorMessage(result.message || 'تعذر تسجيل الدخول. تحقق من البيانات وحالة الحساب.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'تعذر الاتصال بخدمة تسجيل الدخول الآمن.');
+    } finally { setIsLoading(false); }
   };
 
   return (
@@ -47,7 +45,7 @@ export const LoginPage: React.FC = () => {
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="mx-auto mb-3 h-24 w-36 overflow-hidden rounded-2xl bg-black shadow-xl shadow-blue-950/30 ring-1 ring-amber-300/25 sm:h-28 sm:w-40">
-            <img src={vibLogoUrl} alt="شعار VIB للنقل وتجارة الحاويات" className="h-full w-full object-cover object-center" />
+            <img src={vibLogoUrl} alt="شعار VIB للنقل وتجارة الحاويات" className="h-full w-full object-contain object-center" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
             VIB للنقل وتجارة الحاويات
@@ -64,7 +62,7 @@ export const LoginPage: React.FC = () => {
               <Lock className="w-4 h-4 text-blue-400" />
               <span>تسجيل الدخول للنظام</span>
             </h2>
-            <span className="text-xs text-slate-400">حدد حسابك للدخول</span>
+            <span className="text-xs text-slate-400">دخول آمن بالبريد الإلكتروني</span>
           </div>
 
           {errorMessage && (
@@ -77,13 +75,14 @@ export const LoginPage: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                اسم المستخدم (Username)
+                البريد الإلكتروني
               </label>
               <input
-                type="text"
-                placeholder="أدخل اسم المستخدم..."
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                autoComplete="username"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 autoFocus
               />
@@ -96,6 +95,7 @@ export const LoginPage: React.FC = () => {
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   placeholder="أدخل كلمة المرور..."
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -121,7 +121,7 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Security Policy Information (Strict credentials required) */}
+          {/* Security Policy Information */}
           <div className="pt-4 border-t border-slate-800/80 space-y-3">
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span className="font-semibold text-slate-300 flex items-center gap-1.5">
@@ -132,23 +132,8 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
-              <strong>أدخل بيانات الحساب المخصصة لك.</strong> تُحدد صلاحيات الوصول وفق دور المستخدم.
+              <strong>استخدم البريد وكلمة المرور المخصصين لحسابك.</strong> تُحفظ كلمات المرور وتُتحقق عبر خدمة المصادقة، ولا تُخزن ضمن بيانات العملاء.
             </p>
-
-            <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-              <div className="bg-slate-800/60 border border-slate-700/60 p-2 rounded-xl">
-                <span className="block text-emerald-400 font-bold">المدير العام</span>
-                <span className="font-mono text-slate-400">admin</span>
-              </div>
-              <div className="bg-slate-800/60 border border-slate-700/60 p-2 rounded-xl">
-                <span className="block text-amber-400 font-bold">المحاسب المالي</span>
-                <span className="font-mono text-slate-400">accountant</span>
-              </div>
-              <div className="bg-slate-800/60 border border-slate-700/60 p-2 rounded-xl">
-                <span className="block text-rose-400 font-bold">مدخل البيانات</span>
-                <span className="font-mono text-slate-400">dataentry</span>
-              </div>
-            </div>
           </div>
         </div>
 

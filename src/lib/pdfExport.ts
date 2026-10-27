@@ -1,7 +1,6 @@
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { Movement, PaymentReceipt } from '../types';
-import vibLogoUrl from '../assets/vib-logo.png';
+import { vibLogoUrl } from './branding';
+import type jsPDF from 'jspdf';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
@@ -56,6 +55,10 @@ export async function exportMovementsToOfficialPdf(
     alert('لا توجد حركات لتصديرها كملف PDF');
     return;
   }
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
 
   // Create an off-screen container styled for high-resolution A4 landscape printing
   const container = document.createElement('div');
@@ -204,6 +207,10 @@ export async function exportCustomerStatementPdf(
     alert('لا توجد شحنات لتصدير فاتورة هذا العميل');
     return;
   }
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ]);
 
   const container = document.createElement('div');
   container.style.position = 'fixed';
@@ -238,7 +245,7 @@ export async function exportCustomerStatementPdf(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}<br><span style="font-family:Arial,sans-serif;font-size:9px;font-weight:normal;color:#475569;">${escapeHtml(m.container_desc || '-')} · ${escapeHtml(m.container_path || '-')}</span></td>
       <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${escapeHtml(m.declaration_no || '-')}</td>
       <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center; direction:ltr; unicode-bidi:plaintext;">${escapeHtml(m.truck_no || '-')}</td>
       <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${escapeHtml(m.movement_date || '-')}</td>
@@ -255,7 +262,7 @@ export async function exportCustomerStatementPdf(
 
   container.innerHTML = `
     <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 155px minmax(0,1fr) 175px; align-items: center; gap: 16px;">
-      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:92px;object-fit:cover;object-position:center;border-radius:8px;justify-self:center;" />
+      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:92px;object-fit:contain;object-position:center;border-radius:8px;justify-self:center;" />
       <div style="text-align: center; min-width:0; overflow-wrap:anywhere;">
         <span style="display: inline-block; max-width:100%; white-space:normal; overflow-wrap:anywhere; background-color: #1e3a8a; color: #ffffff; padding: 7px 16px; border-radius: 8px; font-size: 16px; line-height:1.5; font-weight: bold;">
           فاتورة ومطالبة حساب عميل / سائق
@@ -291,7 +298,7 @@ export async function exportCustomerStatementPdf(
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 7px 4px; border: 1px solid #334155; width: 30px;">م</th>
-          <th style="padding: 8px 5px; border: 1px solid #334155; width: 16%;">رقم الحاوية</th>
+          <th style="padding: 8px 5px; border: 1px solid #334155; width: 18%;">تفاصيل الحاوية</th>
           <th style="padding: 8px 5px; border: 1px solid #334155; width: 8%;">رقم الإقرار</th>
           <th style="padding: 8px 5px; border: 1px solid #334155; width: 11%;">رقم الشاحنة</th>
           <th style="padding: 7px 6px; border: 1px solid #334155;">التاريخ</th>

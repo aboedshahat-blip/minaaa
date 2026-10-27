@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
 import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
-import vibLogoUrl from '../assets/vib-logo.png';
+import { vibLogoUrl } from '../lib/branding';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface DriverInvoiceModalProps {
@@ -107,7 +107,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           }
           .title { font-size: 20px; font-weight: 900; margin: 0 0 4px 0; color: #1e3a8a; }
           .office-name { max-width: 620px; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
-          .brand-logo { width: 108px; height: 76px; object-fit: cover; object-position: center; border-radius: 8px; }
+          .brand-logo { width: 108px; height: 76px; object-fit: contain; object-position: center; border-radius: 8px; }
           .subtitle { font-size: 13px; font-weight: bold; color: #475569; margin: 0; }
           .meta-box {
             background-color: #f1f5f9;
@@ -280,11 +280,13 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
 
             {/* Detailed Movements Table */}
             <div className="overflow-x-auto mb-5">
-              <table className="w-full text-xs text-right border-collapse border border-slate-300">
+              <table className="w-full min-w-[1100px] text-xs text-right border-collapse border border-slate-300">
                 <thead className="bg-slate-900 text-white font-bold text-[11px]">
                   <tr>
                     <th className="p-2 border border-slate-700 text-center w-8">م</th>
                     <th className="p-2 border border-slate-700">رقم الحاوية</th>
+                    <th className="p-2 border border-slate-700">وصف الحاوية</th>
+                    <th className="p-2 border border-slate-700">مسار الحاوية</th>
                     <th className="p-2 border border-slate-700">رقم الإقرار</th>
                     <th className="p-2 border border-slate-700 text-center">التاريخ</th>
                     <th className="p-2 border border-slate-700 text-center">فاتورة كاشير</th>
@@ -299,6 +301,8 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
                     <tr key={m.id || idx} className="hover:bg-slate-50">
                       <td className="p-2 border border-slate-200 text-center font-bold text-slate-500 bg-slate-50">{idx + 1}</td>
                       <td className="p-2 border border-slate-200 font-mono font-bold text-blue-900">{m.container_no || '-'}</td>
+                      <td className="p-2 border border-slate-200 text-slate-700">{m.container_desc || '-'}</td>
+                      <td className="p-2 border border-slate-200 text-slate-700">{m.container_path || '-'}</td>
                       <td className="p-2 border border-slate-200 font-mono text-slate-700">{m.declaration_no || '-'}</td>
                       <td className="p-2 border border-slate-200 text-center text-slate-600">{m.movement_date || '-'}</td>
                       <td className="p-2 border border-slate-200 text-center font-mono">{(Number(m.cashier_invoice) || 0).toLocaleString()}</td>

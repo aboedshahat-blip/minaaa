@@ -358,7 +358,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      ابحث برقم الشاحنة أو اسم السائق أو رقم الحاوية:
+                      ابحث بالعميل أو السائق أو رقم الحاوية أو وصفها أو تاريخ الحركة:
                     </label>
                     <input
                       type="text"
@@ -395,12 +395,16 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                             m.truck_no?.toLowerCase().includes(t) ||
                             m.trailer_no?.toLowerCase().includes(t) ||
                             m.driver_name?.toLowerCase().includes(t) ||
-                            m.container_no?.toLowerCase().includes(t)
+                            m.container_no?.toLowerCase().includes(t) ||
+                            m.container_desc?.toLowerCase().includes(t) ||
+                            m.container_path?.toLowerCase().includes(t) ||
+                            m.customer_name?.toLowerCase().includes(t) ||
+                            m.movement_date?.toLowerCase().includes(t)
                           );
                         })
                         .map((m) => (
                           <option key={m.id} value={m.id}>
-                            [{m.seq}] شاحنة: {m.truck_no} | سائق: {m.driver_name || m.customer_name} | حاوية: {m.container_no || '-'}
+                            [{m.seq}] {m.movement_date || 'بدون تاريخ'} | عميل: {m.customer_name || '-'} | سائق: {m.driver_name || '-'} | شاحنة: {m.truck_no} | حاوية: {m.container_no || '-'} | وصف: {m.container_desc || '-'} | مسار: {m.container_path || '-'}
                           </option>
                         ))}
                     </select>
@@ -591,6 +595,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                         <th className="p-2">رقم الشاحنة</th>
                         <th className="p-2">اسم السائق (العميل)</th>
                         <th className="p-2">رقم الحاوية</th>
+                        <th className="p-2">وصف الحاوية</th>
+                        <th className="p-2">مسار الحاوية</th>
                         <th className="p-2 text-center">مسلسل فاتورة الكاشير</th>
                         <th className="p-2 text-center">تصنيف الحجز</th>
                         <th className="p-2 text-center font-bold text-indigo-900">مبلغ الكاشير</th>
@@ -615,6 +621,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                           <td className="p-2 font-mono text-blue-800 font-bold">
                             {item.containerNo || '-'}
                           </td>
+                          <td className="p-2 text-slate-700">{item.containerDesc || '-'}</td>
+                          <td className="p-2 text-slate-700">{item.containerPath || '-'}</td>
                           <td className="p-2 text-center font-mono font-bold text-indigo-700">
                             <span className="bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded text-[11px]">
                               {item.cashierReceiptNo}

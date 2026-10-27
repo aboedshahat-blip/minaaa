@@ -150,10 +150,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   const driverLedger = useMemo(() => {
     if (!driverSearch.trim()) return [];
     const term = driverSearch.trim().toLowerCase();
-    const filtered = movements.filter(
-      (m) =>
-        m.driver_name && (!term || m.driver_name.toLowerCase().includes(term))
-    );
+    const filtered = movements.filter((m) => {
+      if (!m.driver_name) return false;
+      const searchableFields = [m.driver_name, m.customer_name, m.truck_no, m.trailer_no, m.container_no, m.container_desc, m.container_path, m.declaration_no, m.cashier_receipt_no, m.movement_date];
+      return searchableFields.some((value) => value?.toLocaleLowerCase('ar-EG').includes(term));
+    });
 
     // Group by exact driver name
     const driverMap = new Map<string, Movement[]>();
@@ -213,8 +214,10 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
         paidRatio,
       };
     }).filter((item) =>
-      item.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.customer.code.toLowerCase().includes(searchTerm.toLowerCase())
+      item.customer.name.toLocaleLowerCase('ar-EG').includes(searchTerm.toLocaleLowerCase('ar-EG')) ||
+      item.customer.code.toLocaleLowerCase('ar-EG').includes(searchTerm.toLocaleLowerCase('ar-EG')) ||
+      item.custMovements.some((movement) => [movement.driver_name, movement.truck_no, movement.trailer_no, movement.container_no, movement.container_desc, movement.container_path, movement.movement_date]
+        .some((value) => value?.toLocaleLowerCase('ar-EG').includes(searchTerm.toLocaleLowerCase('ar-EG'))))
     );
   }, [customers, movements, searchTerm]);
 
@@ -434,7 +437,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             <div className="w-full sm:w-72">
               <input
                 type="text"
-                placeholder="بحث باسم أو كود العميل..."
+                placeholder="ابحث بالعميل أو السائق أو الحاوية أو وصفها أو التاريخ..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs"
@@ -698,7 +701,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="ابحث باسم السائق..."
+              placeholder="ابحث بالاسم أو رقم الحاوية أو وصفها أو التاريخ..."
               value={driverSearch}
               onChange={(e) => setDriverSearch(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -766,6 +769,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
               const rows = driver.moves.map((m, i) => ({
                 'م': i + 1,
                 'رقم الحاوية': m.container_no || '',
+                'وصف الحاوية': m.container_desc || '',
+                'مسار الحاوية': m.container_path || '',
                 'رقم الإقرار': m.declaration_no || '',
                 'رقم الشاحنة': m.truck_no || '',
                 'رقم المقطورة': m.trailer_no || '',
@@ -837,11 +842,13 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
 
                 {/* Movements Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-xs text-right border-collapse">
+                  <table className="w-full min-w-[1120px] text-xs text-right border-collapse">
                     <thead className="bg-slate-800 text-white font-bold">
                       <tr>
                         <th className="p-2 border border-slate-700 text-center w-8">م</th>
                         <th className="p-2 border border-slate-700">رقم الحاوية</th>
+                        <th className="p-2 border border-slate-700">وصف الحاوية</th>
+                        <th className="p-2 border border-slate-700">مسار الحاوية</th>
                         <th className="p-2 border border-slate-700">رقم الإقرار</th>
                         <th className="p-2 border border-slate-700">رقم الشاحنة</th>
                         <th className="p-2 border border-slate-700">رقم المقطورة</th>
@@ -861,6 +868,8 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                         <tr key={m.id} className="hover:bg-orange-50/30">
                           <td className="p-2 border border-slate-200 text-center text-slate-500 bg-slate-50">{i + 1}</td>
                           <td className="p-2 border border-slate-200 font-mono font-bold text-blue-800">{m.container_no || '-'}</td>
+                          <td className="p-2 border border-slate-200 text-slate-700">{m.container_desc || '-'}</td>
+                          <td className="p-2 border border-slate-200 text-slate-700">{m.container_path || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{m.declaration_no || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{m.truck_no || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{m.trailer_no || '-'}</td>
@@ -907,7 +916,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                     {/* Totals Footer Row */}
                     <tfoot>
                       <tr className="bg-slate-900 text-white font-black text-xs">
-                        <td colSpan={7} className="p-2.5 border border-slate-700 text-right pr-4">
+                        <td colSpan={9} className="p-2.5 border border-slate-700 text-right pr-4">
                           إجمالي {driver.name} ({driver.moves.length} شحنة)
                         </td>
                         <td className="p-2.5 border border-slate-700 text-center font-mono">{driver.cashierTotal.toLocaleString()}</td>

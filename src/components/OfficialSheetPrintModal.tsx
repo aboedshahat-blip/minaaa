@@ -2,7 +2,7 @@ import React from 'react';
 import { Movement } from '../types';
 import { X, Printer, Download, FileSpreadsheet, Check } from 'lucide-react';
 import { exportTemplateToExcel } from '../lib/excelUtils';
-import vibLogoUrl from '../assets/vib-logo.png';
+import { vibLogoUrl } from '../lib/branding';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface OfficialSheetPrintModalProps {
@@ -136,7 +136,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
             <header className="border-b-2 border-slate-900 pb-4 mb-4 text-center">
               <div className="flex items-center justify-between gap-4 text-xs text-slate-600 mb-2">
                 <div className="text-right">
-                  <img src={vibLogoUrl} alt="شعار مكتب النقل" className="w-28 h-20 rounded-lg object-cover object-center" />
+                  <img src={vibLogoUrl} alt="شعار مكتب النقل" className="w-28 h-20 rounded-lg object-contain object-center" />
                 </div>
                 <div className="text-center flex-1 min-w-0">
                   <span className="manifest-title inline-block bg-slate-900 text-white font-bold text-base px-5 py-2 rounded-lg shadow-sm">

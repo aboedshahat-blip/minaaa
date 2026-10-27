@@ -1,6 +1,4 @@
-import * as XLSX from 'xlsx';
-import * as mammoth from 'mammoth';
-import { pdfjsLib } from './pdfjs';
+import type * as PDFJsTypes from 'pdfjs-dist';
 import { Movement } from '../types';
 import type { Worker as OcrWorker } from 'tesseract.js';
 
@@ -13,7 +11,7 @@ export interface ParsedDocumentResult {
 }
 
 const readArabicNamesFromPdf = async (
-  page: pdfjsLib.PDFPageProxy,
+  page: PDFJsTypes.PDFPageProxy,
   rowYs: number[],
   columnCenter: number,
   columnWidth: number,
@@ -92,6 +90,7 @@ const extractContainerNumbers = (text: string): string[] => {
  * Extracts structured movements from PDF documents (Page-by-Page with anchor awareness)
  */
 export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult> => {
+  const { pdfjsLib } = await import('./pdfjs');
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(arrayBuffer),
@@ -649,6 +648,7 @@ export const matrixToMovements = (matrix: unknown[][]): {
  * Extracts data from Word document (.docx) using mammoth
  */
 export const parseWordDocument = async (file: File): Promise<ParsedDocumentResult> => {
+  const mammoth = await import('mammoth');
   const arrayBuffer = await file.arrayBuffer();
   const conversionResult = await mammoth.convertToHtml({ arrayBuffer });
   const html = conversionResult.value;
@@ -690,6 +690,7 @@ export const parseWordDocument = async (file: File): Promise<ParsedDocumentResul
  * Parses Excel files (.xlsx, .xls, .csv)
  */
 export const parseExcelDocument = async (file: File): Promise<ParsedDocumentResult> => {
+  const XLSX = await import('xlsx');
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
