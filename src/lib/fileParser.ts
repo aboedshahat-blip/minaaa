@@ -115,6 +115,11 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   let ocrWorker: OcrWorker | undefined;
   let ocrUnavailable = false;
   let needsDriverReview = false;
+  // Many booking PDFs print the table header only on the first page. Keep the
+  // container columns so later pages can still read route/description cells.
+  let knownContainerPathCenter: number | null = null;
+  let knownContainerDescCenter: number | null = null;
+  let knownContainerNoCenter: number | null = null;
 
   // Iterate strictly page by page so Y coordinates never conflict across pages
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -160,16 +165,22 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       const item = containerHeader?.items.find((candidate) => pdfTextContainsArabicLabel(candidate.str, keyword));
       return item ? item.x + (item.width || item.str.length * 5) / 2 : null;
     };
-    const containerPathCenter = findContainerColumnCenter('مسار');
-    const containerDescCenter = findContainerColumnCenter('وصف');
+    const detectedContainerPathCenter = findContainerColumnCenter('مسار');
+    const detectedContainerDescCenter = findContainerColumnCenter('وصف');
     const containerHeaderCells = (containerHeader?.items || []).filter((item) => pdfTextContainsArabicLabel(item.str, 'الحاوية'));
     const containerNoHeaderCell = containerHeaderCells.find((item) =>
-      containerDescCenter != null && item.x > containerDescCenter &&
+      detectedContainerDescCenter != null && item.x > detectedContainerDescCenter &&
       !pdfTextContainsArabicLabel(item.str, 'وصف') && !pdfTextContainsArabicLabel(item.str, 'مسار')
     );
-    const containerNoCenter = containerNoHeaderCell
+    const detectedContainerNoCenter = containerNoHeaderCell
       ? containerNoHeaderCell.x + (containerNoHeaderCell.width || containerNoHeaderCell.str.length * 5) / 2
       : null;
+    if (detectedContainerPathCenter != null) knownContainerPathCenter = detectedContainerPathCenter;
+    if (detectedContainerDescCenter != null) knownContainerDescCenter = detectedContainerDescCenter;
+    if (detectedContainerNoCenter != null) knownContainerNoCenter = detectedContainerNoCenter;
+    const containerPathCenter = detectedContainerPathCenter ?? knownContainerPathCenter;
+    const containerDescCenter = detectedContainerDescCenter ?? knownContainerDescCenter;
+    const containerNoCenter = detectedContainerNoCenter ?? knownContainerNoCenter;
     const containerFieldCenters = [containerPathCenter, containerDescCenter, containerNoCenter]
       .filter((center): center is number => center != null)
       .sort((a, b) => a - b);
