@@ -13,7 +13,7 @@ import { vibLogoUrl } from '../lib/branding';
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -21,15 +21,15 @@ export const LoginPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      setErrorMessage('أدخل البريد الإلكتروني وكلمة المرور');
+    if (!username.trim() || !password.trim()) {
+      setErrorMessage('أدخل اسم المستخدم وكلمة المرور');
       return;
     }
 
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const result = await login(email, password);
+      const result = await login(username, password);
       if (!result.success) setErrorMessage(result.message || 'تعذر تسجيل الدخول. تحقق من البيانات وحالة الحساب.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'تعذر الاتصال بخدمة تسجيل الدخول الآمن.');
@@ -62,7 +62,7 @@ export const LoginPage: React.FC = () => {
               <Lock className="w-4 h-4 text-blue-400" />
               <span>تسجيل الدخول للنظام</span>
             </h2>
-            <span className="text-xs text-slate-400">دخول آمن بالبريد الإلكتروني</span>
+            <span className="text-xs text-slate-400">دخول آمن باسم المستخدم</span>
           </div>
 
           {errorMessage && (
@@ -75,14 +75,14 @@ export const LoginPage: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                البريد الإلكتروني
+                اسم المستخدم أو البريد الإلكتروني
               </label>
               <input
-                type="email"
+                type="text"
                 autoComplete="username"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="اكتب اسم المستخدم أو البريد الإلكتروني"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 autoFocus
               />
@@ -132,7 +132,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
-              <strong>استخدم البريد وكلمة المرور المخصصين لحسابك.</strong> تُحفظ كلمات المرور وتُتحقق عبر خدمة المصادقة، ولا تُخزن ضمن بيانات العملاء.
+              <strong>استخدم اسم المستخدم وكلمة المرور المخصصين لحسابك.</strong> يمكنك استخدام بريدك الإلكتروني أيضًا أثناء تجهيز خدمة اسم المستخدم؛ وتبقى صلاحيات البيانات محمية في قاعدة البيانات.
             </p>
           </div>
         </div>

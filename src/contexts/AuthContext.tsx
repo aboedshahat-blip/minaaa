@@ -8,7 +8,7 @@ interface AuthContextType {
   users: ManagedUser[];
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   setCurrentUserId: (id: string) => void;
   verifyCurrentPassword: (password: string) => Promise<boolean>;
@@ -147,12 +147,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [supabase]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (username: string, password: string) => {
     if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل. تواصل مع مدير النظام.' };
-    const cleanEmail = email.trim().toLowerCase();
-    const { data, error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
-    if (error || !data.session) return { success: false, message: 'البريد الإلكتروني أو كلمة المرور غير صحيحة، أو لم يتم تأكيد الحساب.' };
-    const { data: profile, error: profileError } = await supabase.from('app_user_profiles').select('is_active').eq('user_id', data.user.id).maybeSingle();
+    const cleanUsername = username.trim().normalize('NFKC').toLowerCase();
+    let session: { access_token: string; refresh_token: string } | null = null;
+    if (cleanUsername.includes('@')) {
+      // Keep existing email sign-in available until the username edge endpoint is confirmed live.
+      const { data, error } = await supabase.auth.signInWithPassword({ email: cleanUsername, password });
+      if (!error && data.session) session = data.session;
+    } else {
+      const { data, error } = await supabase.functions.invoke('username-login', {
+        body: { username: cleanUsername, password },
+      });
+      if (!error && data?.session?.access_token && data?.session?.refresh_token) session = data.session;
+      else console.error('Secure username login failed:', error);
+    }
+    if (!session) return { success: false, message: 'اسم المستخدم أو البريد الإلكتروني أو كلمة المرور غير صحيحة، أو الحساب غير مفعّل.' };
+    const { data: sessionData, error: sessionError } = await supabase.auth.setSession(session);
+    if (sessionError || !sessionData.session) return { success: false, message: 'تعذر إنشاء جلسة آمنة. حاول مرة أخرى.' };
+    const { data: profile, error: profileError } = await supabase.from('app_user_profiles').select('is_active').eq('user_id', sessionData.session.user.id).maybeSingle();
     if (profileError || !profile) {
       await supabase.auth.signOut();
       return { success: false, message: 'حسابك غير مهيأ في النظام. تواصل مع المدير العام.' };
