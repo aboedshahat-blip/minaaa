@@ -1,0 +1,3 @@
+[functions.username-login]
+# The endpoint performs its own username/IP throttling and returns only a Supabase Auth session.
+verify_jwt = false

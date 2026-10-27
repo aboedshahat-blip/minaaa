@@ -46,7 +46,7 @@ Deno.serve(async (request) => {
 
   if (action === 'create') {
     const email = String(body.email || '').trim().toLowerCase();
-    const username = String(body.username || '').trim();
+    const username = String(body.username || '').trim().normalize('NFKC');
     const displayName = String(body.display_name || '').trim();
     const password = String(body.password || '');
     const role = String(body.role || 'data_entry');
@@ -54,6 +54,11 @@ Deno.serve(async (request) => {
     if (!email.includes('@') || !username || !displayName || password.length < 8 || !['admin', 'accountant', 'data_entry'].includes(role)) {
       return respond({ error: 'راجع البريد والاسم والدور، واجعل كلمة المرور 8 أحرف على الأقل.' }, 400);
     }
+    const normalizedUsername = username.toLowerCase();
+    const { data: usernameMatch, error: usernameLookupError } = await admin.from('app_user_profiles')
+      .select('user_id').eq('username_normalized', normalizedUsername).limit(1).maybeSingle();
+    if (usernameLookupError) return respond({ error: 'تعذر التحقق من اسم المستخدم.' }, 400);
+    if (usernameMatch) return respond({ error: 'اسم المستخدم مستخدم بالفعل. اختر اسمًا آخر.' }, 409);
     const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { username, display_name: displayName },
     });
