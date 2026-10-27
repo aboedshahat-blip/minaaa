@@ -522,16 +522,22 @@ const AppContent: React.FC = () => {
 
   const handleBatchUpdateMovements = async (updatedMovements: Movement[]): Promise<boolean> => {
     const allocation = applyUnallocatedCustomerAdvances(updatedMovements, payments);
+    const existingMovementById = new Map(movements.map((movement) => [movement.id, movement]));
+    // Batch editors keep untouched rows by reference. Persist only rows that
+    // actually changed instead of firing one Supabase write per loaded movement.
+    const changedMovements = allocation.movements.filter(
+      (movement) => existingMovementById.get(movement.id) !== movement,
+    );
     setMovements(allocation.movements);
     saveMovements(allocation.movements);
     setPayments(allocation.payments);
     savePayments(allocation.payments);
     try {
       await Promise.all([
-        ...allocation.movements.map((m) => syncMovementToSupabase(m)),
+        ...changedMovements.map((movement) => syncMovementToSupabase(movement)),
         ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
       ]);
-      setCloudFeedback('تم حفظ ربط الفواتير وتحديث الحركات في قاعدة البيانات السحابية.');
+      setCloudFeedback(`تم حفظ ربط الفواتير ومزامنة ${changedMovements.length} حركة في قاعدة البيانات السحابية.`);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تأكيد مزامنة ربط الفواتير.';

@@ -39,6 +39,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const fileInputRef = useRef<HTMLInputElement>(null);
   const applyCashierMatchesRef = useRef<typeof import('../lib/cashierParser').applyCashierMatches | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isSavingMatches, setIsSavingMatches] = useState(false);
+  const [saveErrorMessage, setSaveErrorMessage] = useState('');
   const [fileName, setFileName] = useState('');
   const [parsedEntries, setParsedEntries] = useState<CashierInvoiceEntry[]>([]);
   const [matchResults, setMatchResults] = useState<CashierMatchResult[]>([]);
@@ -74,6 +76,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
     setParsedEntries([]);
     setMatchResults([]);
+    setSaveErrorMessage('');
     setUpdatedMovementsList([]);
     setUnmatchedCount(0);
     setUnmatchedEntries([]);
@@ -213,6 +216,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   };
 
   const handleApplyUpdates = async () => {
+    if (isSavingMatches) return;
     if (matchResults.length === 0) {
       alert('اختر حركة واحدة على الأقل لربط الفاتورة بها');
       return;
@@ -243,11 +247,21 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     )) return;
 
     if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين، بعد مطابقة اللوحات وتصنيف الفاتورة مع مسار الحاوية ووصفها. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
-    const synced = await onBatchUpdateMovements(updatedMovementsList);
-    alert(synced
-      ? `تم حفظ الربط الذي اخترته ومزامنة ${matchResults.length} حركة. يمكنك إعادة رفع التقرير وتغيير الحركة إذا احتجت تصحيح الربط.`
-      : `تم حفظ الربط على هذا الجهاز، لكن المزامنة السحابية لم تكتمل بعد. لا تعِد رفع الإيصالات؛ ستُعاد المحاولة تلقائيًا.`);
-    onClose();
+    setIsSavingMatches(true);
+    setSaveErrorMessage('');
+    try {
+      const synced = await onBatchUpdateMovements(updatedMovementsList);
+      if (!synced) {
+        setSaveErrorMessage('حُفظ الربط على هذا الجهاز، لكن لم يكتمل حفظه في قاعدة البيانات. لا تعِد رفع الفاتورة؛ أعد المحاولة بعد عودة الاتصال.');
+        return;
+      }
+      alert(`تم حفظ الربط الذي اخترته ومزامنة ${matchResults.length} حركة. يمكنك إعادة رفع التقرير وتغيير الحركة إذا احتجت تصحيح الربط.`);
+      onClose();
+    } catch (error) {
+      setSaveErrorMessage(error instanceof Error ? error.message : 'تعذر حفظ الفاتورة. بياناتك المحلية محفوظة.');
+    } finally {
+      setIsSavingMatches(false);
+    }
   };
 
   return (
@@ -692,6 +706,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
         {/* Footer */}
         <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex items-center justify-between">
           <div className="text-xs text-slate-500">
+            {saveErrorMessage && <p role="alert" className="max-w-md font-semibold text-rose-700">{saveErrorMessage}</p>}
             {matchResults.length > 0 && (
               <span>
                 سيتم حفظ التحديثات في قاعدة البيانات ومزامنتها على الفور مع أرصدة العملاء والديون.
@@ -709,13 +724,13 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
             </button>
             <button
               type="button"
-              disabled={matchResults.length === 0}
+              disabled={matchResults.length === 0 || isSavingMatches}
               onClick={handleApplyUpdates}
               className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:shadow-lg transition flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
               <span>
-                اعتماد وتحديث ({matchResults.length}) حركة تلقائياً في السيستم
+                {isSavingMatches ? 'جارٍ حفظ الفواتير…' : `اعتماد وتحديث (${matchResults.length}) حركة تلقائياً في السيستم`}
               </span>
             </button>
           </div>
