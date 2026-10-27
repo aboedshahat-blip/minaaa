@@ -72,9 +72,13 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
           #official-clean-manifest-print-zone header .manifest-title { font-size: 15pt !important; line-height: 1.5 !important; padding: 3mm 5mm !important; white-space: normal !important; }
           #official-clean-manifest-print-zone .manifest-meta { font-size: 10pt !important; line-height: 1.7 !important; }
           #official-clean-manifest-print-zone table { table-layout: fixed; width: 100%; direction: rtl; }
+          #official-clean-manifest-print-zone thead { display: table-header-group !important; }
+          #official-clean-manifest-print-zone tfoot { display: table-footer-group !important; }
           #official-clean-manifest-print-zone th, #official-clean-manifest-print-zone td { overflow-wrap: anywhere; word-break: normal; line-height: 1.5; padding: 6px 4px !important; font-size: 10pt !important; }
           #official-clean-manifest-print-zone th { font-size: 9pt !important; }
-          #official-clean-manifest-print-zone .manifest-stamp { break-inside: avoid; margin-top: 8mm !important; }
+          #official-clean-manifest-print-zone tfoot tr, #official-clean-manifest-print-zone tfoot td { break-inside: avoid !important; page-break-inside: avoid !important; }
+          #official-clean-manifest-print-zone .manifest-stamp { break-inside: avoid; margin: 0 !important; padding-top: 2mm !important; }
+          #official-clean-manifest-print-zone .manifest-stamp-box { width: 32mm !important; height: 14mm !important; margin-top: 1mm !important; }
           #official-clean-manifest-print-zone tr { break-inside: avoid; }
         }
       `}</style>
@@ -225,15 +229,19 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={12} className="p-0 border-0">
+                      <div className="manifest-stamp flex justify-center border-t border-dashed border-slate-300 pt-2 text-center text-xs text-slate-700">
+                        <div>
+                          <p className="font-bold text-sm">ختم مكتب النقل</p>
+                          <div aria-label="مساحة ختم مكتب النقل" className="manifest-stamp-box mx-auto mt-1 h-14 w-32 rounded border border-dashed border-slate-400" />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
-            </div>
-
-            {/* Official Signatures & Stamp Footer */}
-            <div className="manifest-stamp mt-8 pt-6 border-t border-dashed border-slate-300 flex justify-center text-center text-xs text-slate-700">
-              <div>
-                <p className="font-bold text-sm">ختم مكتب النقل</p>
-                <div aria-label="مساحة ختم مكتب النقل" className="mx-auto mt-2 h-20 w-36 rounded border border-dashed border-slate-400" />
-              </div>
             </div>
           </div>
         </div>

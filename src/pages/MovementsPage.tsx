@@ -70,9 +70,23 @@ const getMovementBatch = (movement: Movement) => {
   return { id: 'legacy-unassigned', name: 'حركات سابقة بدون شيت محدد', at: movement.created_at };
 };
 
-const getMovementCustomerKey = (movement: Movement) => movement.customer_id?.trim()
-  ? `customer:${movement.customer_id.trim()}`
-  : `name:${normalizeCustomerName(movement.customer_name || movement.driver_name || 'عميل عام')}`;
+const getMovementCustomerKey = (
+  movement: Movement,
+  customerById: Map<string, Customer>,
+  customerByNormalizedName: Map<string, Customer>,
+) => {
+  const customerId = movement.customer_id?.trim();
+  if (customerId && customerById.has(customerId)) return `customer:${customerId}`;
+
+  // Older imports may retain a deleted/stale customer ID while keeping the
+  // customer's name. Reuse the registered customer's identity when that name
+  // maps to exactly one directory entry; otherwise preserve the old group.
+  const fallbackName = movement.customer_name || movement.driver_name || 'عميل عام';
+  const registeredByName = customerByNormalizedName.get(normalizeCustomerName(fallbackName));
+  if (registeredByName) return `customer:${registeredByName.id}`;
+  if (customerId) return `customer:${customerId}`;
+  return `name:${normalizeCustomerName(fallbackName)}`;
+};
 
 export const MovementsPage: React.FC<MovementsPageProps> = ({
   movements,
@@ -255,19 +269,30 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   ]);
 
   const customerById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
+  const customerByNormalizedName = useMemo(() => {
+    const grouped = new Map<string, Customer[]>();
+    customers.forEach((customer) => {
+      const key = normalizeCustomerName(customer.name);
+      grouped.set(key, [...(grouped.get(key) || []), customer]);
+    });
+    return new Map(Array.from(grouped.entries())
+      .filter(([, matches]) => matches.length === 1)
+      .map(([key, [customer]]) => [key, customer]));
+  }, [customers]);
 
   const manifestCustomerOptions = useMemo(() => {
     const options = new Map<string, string>();
     movements.forEach((movement) => {
-      const key = getMovementCustomerKey(movement);
+      const key = getMovementCustomerKey(movement, customerById, customerByNormalizedName);
       const customerName = customerById.get(movement.customer_id || '')?.name
+        || customerByNormalizedName.get(normalizeCustomerName(movement.customer_name || movement.driver_name || ''))?.name
         || movement.customer_name?.trim() || movement.driver_name?.trim() || 'عميل عام';
       options.set(key, customerName);
     });
     return Array.from(options.entries())
       .map(([key, name]) => ({ key, name }))
       .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-  }, [movements, customerById]);
+  }, [movements, customerById, customerByNormalizedName]);
 
   const manifestFilteredMovements = useMemo(() => movements.filter((movement) => {
     if (manifestSearch.trim()) {
@@ -277,7 +302,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         customerById.get(movement.customer_id || '')?.name, movement.movement_date, String(movement.seq)];
       if (!values.some((value) => value?.toLocaleLowerCase().includes(term))) return false;
     }
-    if (manifestCustomerFilter && getMovementCustomerKey(movement) !== manifestCustomerFilter) return false;
+    if (manifestCustomerFilter && getMovementCustomerKey(movement, customerById, customerByNormalizedName) !== manifestCustomerFilter) return false;
     if (manifestBerthFilter && movement.berth_id !== manifestBerthFilter && movement.berth_name !== manifestBerthFilter) return false;
     const service = getMovementService(movement.booking_category, movement.container_path)
       || getMovementService(undefined, movement.container_desc);
@@ -285,7 +310,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     if (manifestDateFrom && movement.movement_date < manifestDateFrom) return false;
     if (manifestDateTo && movement.movement_date > manifestDateTo) return false;
     return true;
-  }), [movements, customerById, manifestSearch, manifestCustomerFilter, manifestBerthFilter, manifestServiceFilter, manifestDateFrom, manifestDateTo]);
+  }), [movements, customerById, customerByNormalizedName, manifestSearch, manifestCustomerFilter, manifestBerthFilter, manifestServiceFilter, manifestDateFrom, manifestDateTo]);
 
   const pickedBatchMovements = useMemo(() => {
     const selectedIds = new Set(selectedManifestBatchIds);
@@ -332,14 +357,18 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const customerGroups = useMemo(() => {
     const map = new Map<string, { name: string; moves: Movement[] }>();
     filteredMovements.forEach((m) => {
-      const key = getMovementCustomerKey(m);
-      const registeredCustomer = customerById.get(m.customer_id || '');
+      const key = getMovementCustomerKey(m, customerById, customerByNormalizedName);
+      const registeredCustomer = customerById.get(m.customer_id || '')
+        || customerByNormalizedName.get(normalizeCustomerName(m.customer_name || m.driver_name || ''));
       const name = registeredCustomer?.name || m.customer_name?.trim() || m.driver_name?.trim() || 'عميل عام';
       if (!map.has(key)) map.set(key, { name, moves: [] });
       map.get(key)!.moves.push(m);
     });
 
     return Array.from(map.entries()).map(([key, { name, moves }]) => {
+      const firstMovement = moves[0];
+      const registeredCustomer = customerById.get(firstMovement?.customer_id || '')
+        || customerByNormalizedName.get(normalizeCustomerName(firstMovement?.customer_name || firstMovement?.driver_name || ''));
       const cashierTotal = moves.reduce((s, m) => s + (Number(m.cashier_invoice) || 0), 0);
       const systemCommTotal = moves.reduce((s, m) => s + (Number(m.system_commission) || 0), 0);
       const nafezCommTotal = moves.reduce((s, m) => s + (Number(m.nafez_commission) || 0), 0);
@@ -351,7 +380,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
       return {
         key,
-        customerId: moves[0]?.customer_id || '',
+        customerId: registeredCustomer?.id || moves[0]?.customer_id || '',
+        isRegisteredCustomer: Boolean(registeredCustomer),
         name,
         moves,
         truckCount: moves.length,
@@ -365,10 +395,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         remainingTotal,
       };
     });
-  }, [filteredMovements, customerById]);
+  }, [filteredMovements, customerById, customerByNormalizedName]);
 
   const getConfiguredMovementFees = (movement: Movement) => {
-    const customer = customerById.get(movement.customer_id || '');
+    const customer = customerById.get(movement.customer_id || '')
+      || customerByNormalizedName.get(normalizeCustomerName(movement.customer_name || movement.driver_name || ''));
     const service = getMovementService(movement.booking_category, movement.container_path)
       || getMovementService(undefined, movement.container_desc);
     return {
@@ -467,7 +498,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   const handleApplyOverallDiscount = async (group: { key: string; name: string }) => {
     if (!onBatchUpdateMovements) return;
-    const custMoves = movements.filter((movement) => getMovementCustomerKey(movement) === group.key);
+    const custMoves = movements.filter((movement) => getMovementCustomerKey(movement, customerById, customerByNormalizedName) === group.key);
     if (custMoves.length === 0) return;
 
     const inputVal = prompt(`أدخل إجمالي مبلغ الخصم المراد تطبيقه على العميل [${group.name}] (بالجنيه):`);
@@ -481,7 +512,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
     const perMoveDiscount = Math.round((overallDiscount / custMoves.length) * 100) / 100;
     const updated = movements.map((m) => {
-      if (getMovementCustomerKey(m) === group.key) {
+      if (getMovementCustomerKey(m, customerById, customerByNormalizedName) === group.key) {
         const cashier = Number(m.cashier_invoice) || 0;
         const sysComm = Number(m.system_commission) || 0;
         const nafez = Number(m.nafez_commission) || 0;
@@ -967,7 +998,11 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[11px] font-semibold text-slate-500 block">حسابات العملاء</span>
               <span className="text-xl font-black text-slate-800">{customerGroups.length} عميل</span>
-              <span className="mt-0.5 block text-[10px] text-slate-500">مجمعة من {filteredMovements.length} حركة حسب كود العميل</span>
+              <span className="mt-0.5 block text-[10px] text-slate-500">
+                {customerGroups.filter((group) => group.isRegisteredCustomer).length} مسجل بالدليل
+                {customerGroups.some((group) => !group.isRegisteredCustomer) && ` • ${customerGroups.filter((group) => !group.isRegisteredCustomer).length} غير مكود`}
+                {' '}من {filteredMovements.length} حركة
+              </span>
             </div>
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[11px] font-semibold text-slate-500 block">إجمالي الكاشير</span>
@@ -1018,7 +1053,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                         <User className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-sm font-black text-white">{group.name}</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-black text-white">{group.name}</h3>
+                          {!group.isRegisteredCustomer && <span className="rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] font-bold text-amber-200">غير مكود في دليل العملاء</span>}
+                        </div>
                         <p className="text-xs text-slate-400 mt-0.5">
                           {group.truckCount} شحنة — {group.truckPlates}
                         </p>

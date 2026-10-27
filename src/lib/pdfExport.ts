@@ -80,8 +80,7 @@ export async function exportMovementsToOfficialPdf(
     day: 'numeric',
   });
 
-  const tableRows = movements
-    .map(
+  const tableRows = movements.map(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #cbd5e1; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
@@ -98,10 +97,9 @@ export async function exportMovementsToOfficialPdf(
       <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${escapeHtml(m.container_path || '-')}</td>
     </tr>
   `
-    )
-    .join('');
+    );
 
-  container.innerHTML = `
+  const pageHeader = (pageIndex: number, pageCount: number) => `
     <div style="border-bottom: 2px solid #0f172a; padding: 0 0 18px; margin-bottom: 22px;">
       <div style="display: grid; grid-template-columns: 170px minmax(0,1fr) 220px; align-items: center; gap: 18px; min-height: 125px;">
         <img src="${vibLogoUrl}" alt="شعار مكتب النقل" style="width:150px;height:118px;object-fit:contain;justify-self:start;" />
@@ -114,11 +112,12 @@ export async function exportMovementsToOfficialPdf(
         <div style="text-align: left; font-size: 14px; line-height:1.8; color: #475569;">
           <p style="margin: 0;"><strong>تاريخ الاستخراج:</strong><br>${dateStr}</p>
           <p style="margin: 3px 0 0;"><strong>إجمالي الحركات:</strong> ${movements.length} حركة</p>
+          <p style="margin: 3px 0 0;"><strong>الصفحة:</strong> ${pageIndex + 1} من ${pageCount}</p>
         </div>
       </div>
-    </div>
+    </div>`;
 
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; line-height:1.5; border: 1.5px solid #0f172a; text-align: right; direction:rtl;">
+  const tableHead = `
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 8px 4px; border: 1px solid #334155; width: 35px;">م</th>
@@ -135,15 +134,13 @@ export async function exportMovementsToOfficialPdf(
           <th style="padding: 8px 6px; border: 1px solid #334155; white-space: nowrap;">مسار الحاوية</th>
         </tr>
       </thead>
-      <tbody>
-        ${tableRows}
-      </tbody>
-    </table>
+  `;
 
-    <div style="margin-top: 25px; display: flex; justify-content: center; align-items: center; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 14px; color: #475569;">
+  const stampFooter = `
+    <div style="margin-top: 12px; display: flex; justify-content: center; align-items: center; padding-top: 8px; border-top: 1px dashed #cbd5e1; font-size: 13px; color: #475569;">
       <div style="text-align: center;">
         <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
-        <div aria-label="مساحة ختم مكتب النقل" style="margin:8px auto 0;width:140px;height:78px;border:1px dashed #94a3b8;border-radius:6px;"></div>
+        <div aria-label="مساحة ختم مكتب النقل" style="margin:5px auto 0;width:140px;height:55px;border:1px dashed #94a3b8;border-radius:6px;"></div>
       </div>
     </div>
   `;
@@ -152,26 +149,56 @@ export async function exportMovementsToOfficialPdf(
 
   try {
     await document.fonts?.ready;
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      // Tailwind v4 emits OKLCH colors, which html2canvas cannot parse.
-      // The export markup is fully styled inline, so strip app stylesheets
-      // from the cloned document before html2canvas reads its CSS rules.
-      onclone: (clonedDocument) => {
-        clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
-      },
-    });
-
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
       format: 'a4',
     });
+    // Render complete pages individually so each printed sheet repeats its
+    // own header and stamp, instead of slicing one long image mid-table.
+    const rowsPerPage = 15;
+    const pageCount = Math.ceil(tableRows.length / rowsPerPage);
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 6;
+    const contentWidth = pageWidth - margin * 2;
+    const contentHeight = pageHeight - margin * 2;
 
-    addCanvasAsPdfPages(pdf, canvas);
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      const pageRows = tableRows.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage).join('');
+      container.innerHTML = `${pageHeader(pageIndex, pageCount)}
+        <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; line-height:1.5; border: 1.5px solid #0f172a; text-align: right; direction:rtl;">
+          ${tableHead}
+          <tbody>${pageRows}</tbody>
+        </table>
+        ${stampFooter}`;
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        // Tailwind v4 emits OKLCH colors, which html2canvas cannot parse.
+        // The export markup is fully styled inline, so strip app stylesheets
+        // from the cloned document before html2canvas reads its CSS rules.
+        onclone: (clonedDocument) => {
+          clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
+        },
+      });
+      if (pageIndex > 0) pdf.addPage();
+      const fitScale = Math.min(contentWidth / canvas.width, contentHeight / canvas.height);
+      const imageWidth = canvas.width * fitScale;
+      const imageHeight = canvas.height * fitScale;
+      pdf.addImage(
+        canvas.toDataURL('image/jpeg', 0.94),
+        'JPEG',
+        (pageWidth - imageWidth) / 2,
+        pageHeight - margin - imageHeight,
+        imageWidth,
+        imageHeight,
+        undefined,
+        'FAST',
+      );
+    }
 
     const cleanFileName = `كشف_حركات_${new Date().toISOString().split('T')[0]}_${movements.length}_حركة.pdf`;
     pdf.save(cleanFileName);
