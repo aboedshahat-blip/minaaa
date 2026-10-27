@@ -13,6 +13,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_POOLER_URL: 'postgresql://postgres.jfhmarmaebrzdnsvkqzv:[YOUR-PASSWORD]@aws-1-eu-central-1.pooler.supabase.com:5432/postgres'
       PROJECT_REF: jfhmarmaebrzdnsvkqzv
     steps:
       - uses: actions/checkout@v4
@@ -23,54 +24,6 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - name: Get IPv4 session pooler connection details
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os
-          import json
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          project_ref = os.environ['PROJECT_REF']
-          request = urllib.request.Request(
-              f'https://api.supabase.com/v1/projects/{project_ref}/config/database/pooler',
-              headers={'Authorization': f"Bearer {os.environ['SUPABASE_ACCESS_TOKEN']}"},
-          )
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  poolers = json.load(response)
-          except urllib.error.HTTPError as error:
-              if error.code == 403:
-                  raise SystemExit(
-                      'The Supabase access token needs the database_pooling_config_read permission '
-                      'for this project. No database values were printed.'
-                  )
-              raise SystemExit(f'Supabase could not return pooler settings (HTTP {error.code}).')
-          except Exception as error:
-              raise SystemExit(f'Could not retrieve Supabase pooler settings ({type(error).__name__}).')
-
-          if isinstance(poolers, dict):
-              poolers = [poolers]
-          session = next((item for item in poolers if str(item.get('db_port')) == '5432'), None)
-          if not session:
-              raise SystemExit('Supabase did not return a session pooler on port 5432.')
-
-          host = str(session.get('db_host') or '').strip()
-          user = str(session.get('db_user') or '').strip()
-          database = str(session.get('db_name') or '').strip()
-          if not host.endswith('.pooler.supabase.com') or not user or not database:
-              raise SystemExit('Supabase returned incomplete session pooler details.')
-
-          template = (
-              f"postgresql://{urllib.parse.quote(user, safe='')}:[YOUR-PASSWORD]@"
-              f"{host}:5432/{urllib.parse.quote(database, safe='')}?sslmode=require"
-          )
-          print(f'::add-mask::{template}')
-          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
-              env_file.write(f'SUPABASE_POOLER_URL={template}\n')
-          PY
       - name: Prepare database URL without exposing credentials
         shell: bash
         run: |
