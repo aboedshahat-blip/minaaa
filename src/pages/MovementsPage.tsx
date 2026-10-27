@@ -31,6 +31,7 @@ import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
 import { SheetProcessingPage } from './SheetProcessingPage';
 import { getMovementService, type MovementService } from '../lib/serviceFees';
+import { normalizeCustomerName } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 interface MovementsPageProps {
@@ -67,6 +68,10 @@ const getMovementBatch = (movement: Movement) => {
   }
   return { id: 'legacy-unassigned', name: 'حركات سابقة بدون شيت محدد', at: movement.created_at };
 };
+
+const getMovementCustomerKey = (movement: Movement) => movement.customer_id?.trim()
+  ? `customer:${movement.customer_id.trim()}`
+  : `name:${normalizeCustomerName(movement.customer_name || movement.driver_name || 'عميل عام')}`;
 
 export const MovementsPage: React.FC<MovementsPageProps> = ({
   movements,
@@ -240,6 +245,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     selectedServiceType,
   ]);
 
+  const customerById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
+
   const pickedBatchMovements = useMemo(() => {
     const selectedIds = new Set(selectedManifestBatchIds);
     return filteredMovements
@@ -282,14 +289,16 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   // Group movements by Customer / Driver for Stage 3 (Multi-truck consolidation)
   const customerGroups = useMemo(() => {
-    const map = new Map<string, Movement[]>();
+    const map = new Map<string, { name: string; moves: Movement[] }>();
     filteredMovements.forEach((m) => {
-      const key = (m.driver_name || m.customer_name || 'عميل عام').trim();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(m);
+      const key = getMovementCustomerKey(m);
+      const registeredCustomer = customerById.get(m.customer_id || '');
+      const name = registeredCustomer?.name || m.customer_name?.trim() || m.driver_name?.trim() || 'عميل عام';
+      if (!map.has(key)) map.set(key, { name, moves: [] });
+      map.get(key)!.moves.push(m);
     });
 
-    return Array.from(map.entries()).map(([name, moves]) => {
+    return Array.from(map.entries()).map(([key, { name, moves }]) => {
       const cashierTotal = moves.reduce((s, m) => s + (Number(m.cashier_invoice) || 0), 0);
       const systemCommTotal = moves.reduce((s, m) => s + (Number(m.system_commission) || 0), 0);
       const nafezCommTotal = moves.reduce((s, m) => s + (Number(m.nafez_commission) || 0), 0);
@@ -300,6 +309,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       const truckPlates = Array.from(new Set(moves.map((m) => m.truck_no).filter(Boolean))).join(' ، ');
 
       return {
+        key,
+        customerId: moves[0]?.customer_id || '',
         name,
         moves,
         truckCount: moves.length,
@@ -313,7 +324,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         remainingTotal,
       };
     });
-  }, [filteredMovements]);
+  }, [filteredMovements, customerById]);
 
   // Discount Handlers
   const handleDiscountChange = async (movementId: string, discountVal: number) => {
@@ -347,23 +358,23 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     setDiscountDrafts((drafts) => { const next = { ...drafts }; delete next[movementId]; return next; });
   };
 
-  const handleApplyOverallDiscount = async (customerName: string) => {
+  const handleApplyOverallDiscount = async (group: { key: string; name: string }) => {
     if (!onBatchUpdateMovements) return;
-    const custMoves = movements.filter((m) => (m.driver_name || m.customer_name) === customerName);
+    const custMoves = movements.filter((movement) => getMovementCustomerKey(movement) === group.key);
     if (custMoves.length === 0) return;
 
-    const inputVal = prompt(`أدخل إجمالي مبلغ الخصم المراد تطبيقه على العميل [${customerName}] (بالجنيه):`);
+    const inputVal = prompt(`أدخل إجمالي مبلغ الخصم المراد تطبيقه على العميل [${group.name}] (بالجنيه):`);
     if (inputVal === null) return;
     const overallDiscount = Number(inputVal);
     if (isNaN(overallDiscount) || overallDiscount < 0) {
       alert('يرجى إدخال مبلغ خصم صحيح');
       return;
     }
-    if (!await confirmAction(`سيتم توزيع خصم ${overallDiscount.toLocaleString()} ج.م على ${custMoves.length} حركة للعميل ${customerName}. هل تريد المتابعة؟`, 'نعم، طبّق الخصم')) return;
+    if (!await confirmAction(`سيتم توزيع خصم ${overallDiscount.toLocaleString()} ج.م على ${custMoves.length} حركة للعميل ${group.name}. هل تريد المتابعة؟`, 'نعم، طبّق الخصم')) return;
 
     const perMoveDiscount = Math.round((overallDiscount / custMoves.length) * 100) / 100;
     const updated = movements.map((m) => {
-      if ((m.driver_name || m.customer_name) === customerName) {
+      if (getMovementCustomerKey(m) === group.key) {
         const cashier = Number(m.cashier_invoice) || 0;
         const sysComm = Number(m.system_commission) || 0;
         const nafez = Number(m.nafez_commission) || 0;
@@ -381,7 +392,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       return m;
     });
     onBatchUpdateMovements(updated);
-    alert(`✓ تم بنجاح تطبيق خصم إجمالي ${overallDiscount} ج.م على ${custMoves.length} شحنة للعميل!`);
+    alert(`✓ تم بنجاح تطبيق خصم إجمالي ${overallDiscount} ج.م على ${custMoves.length} شحنة للعميل ${group.name}!`);
   };
 
   const handleDownloadCustomerPdf = async (group: any) => {
@@ -824,8 +835,9 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           {/* Financial Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 no-print">
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
-              <span className="text-[11px] font-semibold text-slate-500 block">عدد العملاء</span>
+              <span className="text-[11px] font-semibold text-slate-500 block">حسابات العملاء</span>
               <span className="text-xl font-black text-slate-800">{customerGroups.length} عميل</span>
+              <span className="mt-0.5 block text-[10px] text-slate-500">مجمعة من {filteredMovements.length} حركة حسب كود العميل</span>
             </div>
             <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
               <span className="text-[11px] font-semibold text-slate-500 block">إجمالي الكاشير</span>
@@ -845,7 +857,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           {customerGroups.length > 0 ? (
             <div className="space-y-4">
               {customerGroups.map((group) => (
-                <div key={group.name} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div key={group.key} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                   {/* Customer Card Header */}
                   <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
@@ -861,7 +873,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleApplyOverallDiscount(group.name)}
+                        onClick={() => handleApplyOverallDiscount(group)}
                         className="bg-amber-500 hover:bg-amber-400 text-white text-[11px] font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition"
                         title="تطبيق خصم إجمالي موزع على كل الشحنات"
                       >
