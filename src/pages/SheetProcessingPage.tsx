@@ -30,6 +30,7 @@ interface SheetProcessingPageProps {
   berths: Berth[];
   settings: SystemSettings;
   currentMaxSeq: number;
+  isCloudDataReady?: boolean;
   onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => Promise<boolean>;
 }
 
@@ -38,6 +39,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   berths,
   settings,
   currentMaxSeq,
+  isCloudDataReady = true,
   onImportMovements,
 }) => {
   const confirmAction = useConfirmAction();
@@ -107,6 +109,10 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   };
 
   const handleSaveToSystem = async () => {
+    if (!isCloudDataReady) {
+      alert('انتظر اكتمال تحميل أحدث البيانات من السحابة قبل اعتماد الشيت، ثم أعد المحاولة.');
+      return;
+    }
     if (rows.length === 0) {
       alert('لا توجد بيانات للاستيراد');
       return;
@@ -406,10 +412,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
 
               <button
                 onClick={handleSaveToSystem}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
+                disabled={!isCloudDataReady}
+                title={!isCloudDataReady ? 'انتظر اكتمال مزامنة البيانات قبل اعتماد الشيت' : undefined}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
-                <span>حفظ في السيستم واعتماد الحركات</span>
+                <span>{isCloudDataReady ? 'حفظ في السيستم واعتماد الحركات' : 'جارٍ مزامنة البيانات…'}</span>
               </button>
             </div>
           </div>

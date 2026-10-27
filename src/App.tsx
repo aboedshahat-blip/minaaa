@@ -133,6 +133,8 @@ const AppContent: React.FC = () => {
   const [safetyBackups, setSafetyBackups] = useState<OperationalSafetyBackup[]>(getSafetyBackups);
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
   const [cloudFeedback, setCloudFeedback] = useState<string | null>(null);
+  const [cloudSyncState, setCloudSyncState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const hasLoadedCloudSnapshotRef = useRef(false);
   const movementImportRevisionRef = useRef(0);
   const cloudRefreshRequestRef = useRef(0);
 
@@ -168,6 +170,7 @@ const AppContent: React.FC = () => {
   const refreshDataFromCloud = async (restoreDeviceOnlyData = false, quiet = false) => {
     const refreshRequestId = ++cloudRefreshRequestRef.current;
     const importRevisionAtStart = movementImportRevisionRef.current;
+    if (!hasLoadedCloudSnapshotRef.current) setCloudSyncState('loading');
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
@@ -368,10 +371,13 @@ const AppContent: React.FC = () => {
             ? 'استعدنا البيانات المحفوظة على هذا الجهاز وأعدنا مزامنتها مع السحابة.'
             : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.'));
         }
+        hasLoadedCloudSnapshotRef.current = true;
+        setCloudSyncState('ready');
       }
     } catch (e) {
       if (refreshRequestId !== cloudRefreshRequestRef.current ||
           importRevisionAtStart !== movementImportRevisionRef.current) return;
+      if (!hasLoadedCloudSnapshotRef.current) setCloudSyncState('error');
       console.warn('Cloud sync error:', e);
       const message = e instanceof Error ? e.message : 'تعذر الاتصال بقاعدة البيانات السحابية.';
       setCloudFeedback(`${message} احتفظنا بالبيانات المحلية كما هي.`);
@@ -820,6 +826,12 @@ const AppContent: React.FC = () => {
           {cloudFeedback}
         </div>
       )}
+      {cloudSyncState !== 'ready' && (
+        <div className={`flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-xs font-semibold ${cloudSyncState === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800'}`} role="status" aria-live="polite">
+          <span>{cloudSyncState === 'error' ? 'تعذر تحديث البيانات من السحابة. لن نبدأ مطابقة الفواتير على بيانات قديمة.' : 'جارٍ تحميل أحدث الحركات من قاعدة البيانات؛ انتظر قليلًا قبل مطابقة الفواتير.'}</span>
+          {cloudSyncState === 'error' && <button type="button" onClick={() => void refreshDataFromCloud(false)} className="rounded-md border border-rose-300 bg-white px-2.5 py-1 font-bold hover:bg-rose-100">إعادة المحاولة</button>}
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full min-w-0 mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -846,6 +858,7 @@ const AppContent: React.FC = () => {
             }}
             onBatchUpdateMovements={handleBatchUpdateMovements}
             onRepairZeroFinancialMovements={handleRepairZeroFinancialMovements}
+            isCloudDataReady={cloudSyncState === 'ready'}
           />
         )}
 

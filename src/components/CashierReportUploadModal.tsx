@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { Movement, SystemSettings } from '../types';
 import type {
@@ -38,6 +38,11 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const confirmAction = useConfirmAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const applyCashierMatchesRef = useRef<typeof import('../lib/cashierParser').applyCashierMatches | null>(null);
+  const getCandidatesRef = useRef<typeof import('../lib/cashierParser').getCashierEntryCandidates | null>(null);
+  const movementsRef = useRef(movements);
+  const parsedEntriesRef = useRef<CashierInvoiceEntry[]>([]);
+  const selectionsRef = useRef<Record<string, string>>({});
+  const explicitlyUnmatchedRef = useRef(new Set<string>());
   const [loading, setLoading] = useState(false);
   const [isSavingMatches, setIsSavingMatches] = useState(false);
   const [saveErrorMessage, setSaveErrorMessage] = useState('');
@@ -57,6 +62,41 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const [manualCategory, setManualCategory] = useState('وارد حاويات');
   const [imageSearchTerm, setImageSearchTerm] = useState('');
 
+  movementsRef.current = movements;
+
+  // Keep a cashier preview aligned with cloud updates that arrive while the
+  // modal is open. Preserve a valid explicit choice; otherwise only apply a
+  // new suggestion when the matching rules still find one unambiguous row.
+  useEffect(() => {
+    const entries = parsedEntriesRef.current;
+    const findCandidates = getCandidatesRef.current;
+    const applyMatches = applyCashierMatchesRef.current;
+    if (!entries.length || !findCandidates || !applyMatches) return;
+
+    const nextCandidates = findCandidates(entries, movements);
+    const previousSelections = selectionsRef.current;
+    const nextSelections: Record<string, string> = {};
+    nextCandidates.forEach(({ entry, candidates, suggestedMovementId }) => {
+      const previousId = previousSelections[entry.receipt_no];
+      if (previousId) {
+        if (candidates.some((candidate) => candidate.movementId === previousId)) nextSelections[entry.receipt_no] = previousId;
+        return;
+      }
+      if (!explicitlyUnmatchedRef.current.has(entry.receipt_no) && suggestedMovementId) {
+        nextSelections[entry.receipt_no] = suggestedMovementId;
+      }
+    });
+
+    const preview = applyMatches(entries, movements, nextSelections, settings.default_system_commission ?? 200);
+    selectionsRef.current = nextSelections;
+    setMatchCandidates(nextCandidates);
+    setSelectedMovementByReceipt(nextSelections);
+    setMatchResults(preview.matchResults);
+    setUpdatedMovementsList(preview.matchedMovements);
+    setUnmatchedCount(preview.unmatchedEntries.length);
+    setUnmatchedEntries(preview.unmatchedEntries);
+  }, [movements, settings.default_system_commission]);
+
   if (!isOpen) return null;
 
   const candidateReceiptCountByMovement = new Map<string, number>();
@@ -75,6 +115,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     if (!file) return;
 
     setParsedEntries([]);
+    parsedEntriesRef.current = [];
     setMatchResults([]);
     setSaveErrorMessage('');
     setUpdatedMovementsList([]);
@@ -82,6 +123,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     setUnmatchedEntries([]);
     setMatchCandidates([]);
     setSelectedMovementByReceipt({});
+    selectionsRef.current = {};
+    explicitlyUnmatchedRef.current.clear();
     setLoading(true);
     setFileName(file.name);
 
@@ -102,7 +145,9 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       // 1. Parse Cashier report
       const { parseUploadedCashierReport, getCashierEntryCandidates, applyCashierMatches } = await import('../lib/cashierParser');
       applyCashierMatchesRef.current = applyCashierMatches;
+      getCandidatesRef.current = getCashierEntryCandidates;
       const entries = await parseUploadedCashierReport(file);
+      parsedEntriesRef.current = entries;
       setParsedEntries(entries);
 
       if (entries.length === 0) {
@@ -114,7 +159,8 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
       // Suggest only when a receipt has one plausible movement. Repeated vehicle
       // pairs require the user to pick the correct customer before any update.
-      const candidates = getCashierEntryCandidates(entries, movements);
+      const movementsSnapshot = movementsRef.current;
+      const candidates = getCashierEntryCandidates(entries, movementsSnapshot);
       const initialSelections = Object.fromEntries(
         candidates
           .filter((candidateSet) => candidateSet.suggestedMovementId)
@@ -122,11 +168,12 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       );
       const preview = applyCashierMatches(
         entries,
-        movements,
+        movementsSnapshot,
         initialSelections,
         settings.default_system_commission ?? 200,
       );
       setMatchCandidates(candidates);
+      selectionsRef.current = initialSelections;
       setSelectedMovementByReceipt(initialSelections);
       setMatchResults(preview.matchResults);
       setUpdatedMovementsList(preview.matchedMovements);
@@ -145,13 +192,16 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     if (!apply) return;
     const nextSelections = { ...selectedMovementByReceipt, [receiptNo]: movementId };
     if (!movementId) delete nextSelections[receiptNo];
+    if (!movementId) explicitlyUnmatchedRef.current.add(receiptNo);
+    else explicitlyUnmatchedRef.current.delete(receiptNo);
     const preview = apply(
       parsedEntries,
-      movements,
+      movementsRef.current,
       nextSelections,
       settings.default_system_commission ?? 200,
     );
     setSelectedMovementByReceipt(nextSelections);
+    selectionsRef.current = nextSelections;
     setMatchResults(preview.matchResults);
     setUpdatedMovementsList(preview.matchedMovements);
     setUnmatchedCount(preview.unmatchedEntries.length);

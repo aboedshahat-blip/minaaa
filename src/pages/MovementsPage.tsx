@@ -50,6 +50,7 @@ interface MovementsPageProps {
   canUndoLatestDeletion?: boolean;
   onBatchUpdateMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
   onRepairZeroFinancialMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
+  isCloudDataReady?: boolean;
 }
 
 const getMovementBatch = (movement: Movement) => {
@@ -104,6 +105,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   canUndoLatestDeletion = false,
   onBatchUpdateMovements,
   onRepairZeroFinancialMovements,
+  isCloudDataReady = true,
 }) => {
   const confirmAction = useConfirmAction();
   const { canViewFinancials, canAddMovements, canUploadSheets, isAdmin, canManagePayments, canEditCommissions } = useAuth();
@@ -614,6 +616,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           berths={berths}
           settings={settings}
           currentMaxSeq={currentMaxSeq}
+          isCloudDataReady={isCloudDataReady}
           onImportMovements={async (importedMovements, newCustomers) => {
             const synced = await onImportMovements(importedMovements, newCustomers);
             setActiveStage('stage1_manifest');
@@ -848,8 +851,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <div className="space-y-4">
           {canViewFinancials && onBatchUpdateMovements && (
             <div className="flex flex-wrap justify-end gap-2 no-print">
-              <button onClick={() => setIsCashierReportModalOpen(true)} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-800">
-                رفع تقرير الكاشير
+              <button onClick={() => setIsCashierReportModalOpen(true)} disabled={!isCloudDataReady} title={!isCloudDataReady ? 'انتظر اكتمال مزامنة البيانات قبل المطابقة' : undefined} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
+                {isCloudDataReady ? 'رفع تقرير الكاشير' : 'جارٍ مزامنة البيانات…'}
               </button>
               <button onClick={() => { setLinkingMovement(null); setIsCashierModalOpen(true); }} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
                 ربط إيصال يدويًا
@@ -1185,7 +1188,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <button onClick={() => setIsOfficialSheetModalOpen(true)} className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Printer className="w-4 h-4" /><span>طباعة كشف الميناء</span></button>
                 <button onClick={handleExportExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Download className="w-4 h-4" /><span>Excel</span></button>
                 {canViewFinancials && onBatchUpdateMovements && (
-                  <button onClick={() => setIsCashierReportModalOpen(true)} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Receipt className="w-4 h-4" /><span>رفع تقرير كاشير</span></button>
+                  <button onClick={() => setIsCashierReportModalOpen(true)} disabled={!isCloudDataReady} title={!isCloudDataReady ? 'انتظر اكتمال مزامنة البيانات قبل المطابقة' : undefined} className="bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Receipt className="w-4 h-4" /><span>{isCloudDataReady ? 'رفع تقرير كاشير' : 'جارٍ المزامنة'}</span></button>
                 )}
                 {canViewFinancials && (
                   <button onClick={() => { setLinkingMovement(null); setIsCashierModalOpen(true); }} className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Link2 className="w-4 h-4" /><span>ربط يدوي</span></button>
