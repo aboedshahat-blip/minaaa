@@ -119,6 +119,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [expandedMovementIds, setExpandedMovementIds] = useState<Set<string>>(new Set());
   const [selectedManifestBatch, setSelectedManifestBatch] = useState('latest');
   const [selectedManifestBatchIds, setSelectedManifestBatchIds] = useState<string[]>([]);
+  const [manifestSearch, setManifestSearch] = useState('');
+  const [manifestCustomerFilter, setManifestCustomerFilter] = useState('');
+  const [manifestBerthFilter, setManifestBerthFilter] = useState('');
+  const [manifestServiceFilter, setManifestServiceFilter] = useState<MovementService | ''>('');
+  const [manifestDateFrom, setManifestDateFrom] = useState('');
+  const [manifestDateTo, setManifestDateTo] = useState('');
   const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all' | 'picked'>('selected');
   const [isExportingPickedPdf, setIsExportingPickedPdf] = useState(false);
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
@@ -250,26 +256,58 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   const customerById = useMemo(() => new Map(customers.map((customer) => [customer.id, customer])), [customers]);
 
+  const manifestCustomerOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    movements.forEach((movement) => {
+      const key = getMovementCustomerKey(movement);
+      const customerName = customerById.get(movement.customer_id || '')?.name
+        || movement.customer_name?.trim() || movement.driver_name?.trim() || 'عميل عام';
+      options.set(key, customerName);
+    });
+    return Array.from(options.entries())
+      .map(([key, name]) => ({ key, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }, [movements, customerById]);
+
+  const manifestFilteredMovements = useMemo(() => movements.filter((movement) => {
+    if (manifestSearch.trim()) {
+      const term = manifestSearch.trim().toLocaleLowerCase();
+      const values = [movement.truck_no, movement.trailer_no, movement.driver_name, movement.container_no,
+        movement.container_desc, movement.container_path, movement.declaration_no, movement.customer_name,
+        customerById.get(movement.customer_id || '')?.name, movement.movement_date, String(movement.seq)];
+      if (!values.some((value) => value?.toLocaleLowerCase().includes(term))) return false;
+    }
+    if (manifestCustomerFilter && getMovementCustomerKey(movement) !== manifestCustomerFilter) return false;
+    if (manifestBerthFilter && movement.berth_id !== manifestBerthFilter && movement.berth_name !== manifestBerthFilter) return false;
+    const service = getMovementService(movement.booking_category, movement.container_path)
+      || getMovementService(undefined, movement.container_desc);
+    if (manifestServiceFilter && service !== manifestServiceFilter) return false;
+    if (manifestDateFrom && movement.movement_date < manifestDateFrom) return false;
+    if (manifestDateTo && movement.movement_date > manifestDateTo) return false;
+    return true;
+  }), [movements, customerById, manifestSearch, manifestCustomerFilter, manifestBerthFilter, manifestServiceFilter, manifestDateFrom, manifestDateTo]);
+
   const pickedBatchMovements = useMemo(() => {
     const selectedIds = new Set(selectedManifestBatchIds);
-    return filteredMovements
+    return manifestFilteredMovements
       .filter((movement) => selectedIds.has(getMovementBatch(movement).id))
       .sort((a, b) => (a.seq || 0) - (b.seq || 0));
-  }, [filteredMovements, selectedManifestBatchIds]);
+  }, [manifestFilteredMovements, selectedManifestBatchIds]);
 
   const manifestMovements = useMemo(() => {
-    if (selectedManifestBatch === 'all') return filteredMovements.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
+    if (selectedManifestBatch === 'all') return manifestFilteredMovements.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0));
     if (selectedManifestBatch === 'picked') return pickedBatchMovements;
     const targetId = selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch;
-    return filteredMovements
+    return manifestFilteredMovements
       .filter((movement) => getMovementBatch(movement).id === targetId)
       .sort((a, b) => (a.seq || 0) - (b.seq || 0));
-  }, [filteredMovements, selectedManifestBatch, latestBatchId, pickedBatchMovements]);
+  }, [manifestFilteredMovements, selectedManifestBatch, latestBatchId, pickedBatchMovements]);
 
   const toggleManifestBatchSelection = (batchId: string) => {
     setSelectedManifestBatchIds((current) => current.includes(batchId)
       ? current.filter((id) => id !== batchId)
       : [...current, batchId]);
+    setSelectedManifestBatch('picked');
   };
 
   const downloadPickedBatchesPdf = async () => {
@@ -622,34 +660,60 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <div className="space-y-4">
           {/* Filter Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <div className="relative sm:col-span-2 xl:col-span-3">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="بحث برقم الشاحنة، المقطورة، الحاوية، السائق..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs"
+                  placeholder="ابحث بالعميل أو السائق أو الشاحنة أو المقطورة أو الحاوية..."
+                  value={manifestSearch}
+                  onChange={(e) => setManifestSearch(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pr-9 pl-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
               </div>
               <select
-                value={selectedBerth}
-                onChange={(e) => setSelectedBerth(e.target.value)}
-                className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700"
+                value={manifestCustomerFilter}
+                onChange={(e) => setManifestCustomerFilter(e.target.value)}
+                className="min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700"
+                aria-label="اختيار العميل"
               >
-                <option value="">جميع الأرصفة</option>
-                {berths.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                <option value="">كل العملاء</option>
+                {manifestCustomerOptions.map((customer) => <option key={customer.key} value={customer.key}>{customer.name}</option>)}
               </select>
+              <select value={manifestBerthFilter} onChange={(e) => setManifestBerthFilter(e.target.value)} className="min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700" aria-label="اختيار الرصيف">
+                <option value="">كل الأرصفة</option>
+                {berths.map((berth) => <option key={berth.id} value={berth.id}>{berth.name}</option>)}
+              </select>
+              <select value={manifestServiceFilter} onChange={(e) => setManifestServiceFilter(e.target.value as MovementService | '')} className="min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700" aria-label="اختيار نوع الحركة">
+                <option value="">كل الخدمات</option>
+                <option value="inbound">وارد</option>
+                <option value="outbound">صادر</option>
+                <option value="empty">فارغ</option>
+              </select>
+              <label className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                <span className="shrink-0">من تاريخ</span>
+                <input type="date" value={manifestDateFrom} onChange={(e) => setManifestDateFrom(e.target.value)} className="min-w-0 w-full bg-transparent text-sm text-slate-800" />
+              </label>
+              <label className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                <span className="shrink-0">إلى تاريخ</span>
+                <input type="date" value={manifestDateTo} onChange={(e) => setManifestDateTo(e.target.value)} className="min-w-0 w-full bg-transparent text-sm text-slate-800" />
+              </label>
               <button
-                onClick={handleResetFilters}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold py-2 px-3 rounded-lg flex items-center gap-1 transition"
+                onClick={() => {
+                  setManifestSearch('');
+                  setManifestCustomerFilter('');
+                  setManifestBerthFilter('');
+                  setManifestServiceFilter('');
+                  setManifestDateFrom('');
+                  setManifestDateTo('');
+                }}
+                disabled={!manifestSearch && !manifestCustomerFilter && !manifestBerthFilter && !manifestServiceFilter && !manifestDateFrom && !manifestDateTo}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>إلغاء الفلاتر</span>
+                <RotateCcw className="h-4 w-4" /> مسح البحث
               </button>
-              <span className="text-xs text-slate-500 font-semibold mr-auto">
-                {manifestMovements.length} حركة في الدفعة المحددة
+              <span className="flex items-center justify-center rounded-lg bg-blue-50 px-3 py-2 text-sm font-bold text-blue-800 sm:justify-start">
+                {manifestMovements.length} حركة ظاهرة
               </span>
             </div>
           </div>
@@ -657,38 +721,35 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print space-y-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div><h3 className="text-sm font-black text-slate-900">دفعات الشيتات</h3><p className="mt-1 text-xs text-slate-500">كل ملف مرفوع محفوظ كمجموعة مستقلة. الافتراضي هو آخر شيت تم رفعه.</p></div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                 <select value={selectedManifestBatch} onChange={(e)=>setSelectedManifestBatch(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
                   <option value="latest">آخر شيت مرفوع</option><option value="picked">الشيتات المحددة ({selectedManifestBatchIds.length})</option><option value="all">كل الشيتات</option>
-                  {importBatches.map((batch)=><option key={batch.id} value={batch.id}>{batch.name} ({batch.count} حركة)</option>)}
                 </select>
                 <button onClick={()=>openManifestPrint('selected')} disabled={!manifestMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة المعروض ({manifestMovements.length})</button>
-                <button onClick={()=>openManifestPrint('all')} disabled={!filteredMovements.length} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة الكل ({filteredMovements.length})</button>
+                <button onClick={()=>openManifestPrint('all')} disabled={!manifestFilteredMovements.length} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة نتائج البحث ({manifestFilteredMovements.length})</button>
               </div>
             </div>
             {importBatches.length > 0 && <>
+              <p className="text-xs text-slate-500">اضغط على اسم الشيت لعرضه بالأسفل. استخدم مربع «ضم» لاختيار شيتات متعددة وتجميعها تلقائيًا.</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
                 {importBatches.map((batch)=>{
-                  const isSelectedForView = (selectedManifestBatch==='latest' && batch.id===latestBatchId) || selectedManifestBatch===batch.id;
                   const isCheckedForCombine = selectedManifestBatchIds.includes(batch.id);
-                  return <div key={batch.id} className={`flex items-stretch gap-2 rounded-xl border p-3 transition ${isSelectedForView?'border-blue-400 bg-blue-50 ring-1 ring-blue-200':'border-slate-200 bg-slate-50'}`}>
-                    <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-[11px] font-bold text-slate-700 hover:bg-white" title="اختيار هذا الشيت للتجميع والطباعة">
-                      <input type="checkbox" checked={isCheckedForCombine} onChange={()=>toggleManifestBatchSelection(batch.id)} className="h-4 w-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500" />
-                      ضم
-                    </label>
-                    <button onClick={()=>setSelectedManifestBatch(batch.id)} className="min-w-0 flex-1 text-right">
+                  const visibleBatchCount = manifestFilteredMovements.filter((movement) => getMovementBatch(movement).id === batch.id).length;
+                  return <button key={batch.id} type="button" aria-pressed={isCheckedForCombine} onClick={()=>toggleManifestBatchSelection(batch.id)} className={`flex min-w-0 items-center gap-3 rounded-xl border p-3 text-right transition ${isCheckedForCombine?'border-blue-400 bg-blue-50 ring-1 ring-blue-200':'border-slate-200 bg-slate-50 hover:border-blue-200 hover:bg-blue-50/50'}`} title="اضغط لاختيار الشيت أو إلغاء اختياره من التجميع">
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[11px] font-black ${isCheckedForCombine?'border-blue-700 bg-blue-700 text-white':'border-slate-300 bg-white text-transparent'}`}>✓</span>
+                    <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-black text-slate-800">{batch.name}</span>
-                      <span className="mt-1 flex justify-between gap-2 text-[11px] text-slate-500"><span>{batch.count} حركة</span><span>{Number.isNaN(new Date(batch.at).getTime())?'وقت غير مسجل':new Date(batch.at).toLocaleString('ar-EG')}</span></span>
-                    </button>
-                  </div>;
+                      <span className="mt-1 flex flex-wrap justify-between gap-2 text-[11px] text-slate-500"><span>{visibleBatchCount} من {batch.count} حركة</span><span>{Number.isNaN(new Date(batch.at).getTime())?'وقت غير مسجل':new Date(batch.at).toLocaleString('ar-EG')}</span></span>
+                    </span>
+                    <span className={`shrink-0 text-[10px] font-bold ${isCheckedForCombine?'text-blue-700':'text-slate-400'}`}>{isCheckedForCombine?'محدد':'اختيار'}</span>
+                  </button>;
                 })}
               </div>
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3">
-                <span className="me-auto text-xs font-bold text-slate-700">تم اختيار {selectedManifestBatchIds.length} شيت ({pickedBatchMovements.length} حركة)</span>
-                <button onClick={()=>setSelectedManifestBatch('picked')} disabled={!selectedManifestBatchIds.length} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800 disabled:opacity-50">عرض التجميع المحدد</button>
-                <button onClick={()=>openManifestPrint('picked')} disabled={!pickedBatchMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة الشيتات المحددة ({pickedBatchMovements.length})</button>
-                <button onClick={downloadPickedBatchesPdf} disabled={!pickedBatchMovements.length || isExportingPickedPdf} className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Download className="inline h-3.5 w-3.5 ml-1"/>{isExportingPickedPdf?'جاري تجهيز PDF...':'تنزيل PDF للمحدد'}</button>
-                <button onClick={()=>setSelectedManifestBatchIds([])} disabled={!selectedManifestBatchIds.length} className="rounded-lg px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white disabled:opacity-50">إلغاء التحديد</button>
+              <div className="grid grid-cols-1 gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3 sm:grid-cols-2 xl:grid-cols-4 sm:items-center">
+                <span className="text-xs font-bold text-slate-700 sm:col-span-2 xl:col-span-1">المحدد: {selectedManifestBatchIds.length} شيت — {pickedBatchMovements.length} حركة</span>
+                <button onClick={()=>openManifestPrint('picked')} disabled={!pickedBatchMovements.length} className="rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة المحدد ({pickedBatchMovements.length})</button>
+                <button onClick={downloadPickedBatchesPdf} disabled={!pickedBatchMovements.length || isExportingPickedPdf} className="rounded-lg bg-indigo-700 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Download className="inline h-3.5 w-3.5 ml-1"/>{isExportingPickedPdf?'جاري تجهيز PDF...':'تنزيل PDF للمحدد'}</button>
+                <button onClick={()=>{setSelectedManifestBatchIds([]);setSelectedManifestBatch('latest');}} disabled={!selectedManifestBatchIds.length} className="rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50">إلغاء التحديد</button>
               </div>
             </>}
           </div>
@@ -1267,15 +1328,15 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <OfficialSheetPrintModal
           isOpen={isOfficialSheetModalOpen}
           onClose={() => setIsOfficialSheetModalOpen(false)}
-          movements={manifestPrintScope === 'all' ? filteredMovements : manifestPrintScope === 'picked' ? pickedBatchMovements : manifestMovements}
+          movements={manifestPrintScope === 'all' ? manifestFilteredMovements : manifestPrintScope === 'picked' ? pickedBatchMovements : manifestMovements}
           title={manifestPrintScope === 'all'
             ? 'شيت تسجيل حجز الشاحنات'
             : manifestPrintScope === 'picked'
             ? `شيت تسجيل حجز الشاحنات — ${selectedManifestBatchIds.length} شيت محدد`
             : `شيت تسجيل حجز الشاحنات — ${importBatches.find((batch) => batch.id === (selectedManifestBatch === 'latest' ? latestBatchId : selectedManifestBatch))?.name || 'الشيت المحدد'}`}
           berthName={
-            selectedBerth
-              ? berths.find((b) => b.id === selectedBerth || b.name === selectedBerth)?.name
+            manifestBerthFilter
+              ? berths.find((b) => b.id === manifestBerthFilter || b.name === manifestBerthFilter)?.name
               : undefined
           }
         />
