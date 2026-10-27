@@ -494,24 +494,33 @@ export const fetchAllFromSupabase = async () => {
 
   try {
     const canViewFinancials = await canViewCloudFinancials(supabase);
-    const [movementsRes, customersRes, berthsRes, paymentsRes, expensesRes, financialsRes] = await Promise.all([
+    const [movementsRes, customersRes, berthsRes, paymentsRes, expensesRes, financialsRes, commissionSettingsRes] = await Promise.all([
       supabase.from('movements').select('*').order('seq', { ascending: false }),
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('berths').select('*').order('code', { ascending: true }),
       supabase.from('payments').select('*').order('date', { ascending: false }),
       supabase.from('office_expenses').select('*').order('expense_date', { ascending: false }),
       canViewFinancials ? supabase.from('movement_financials').select('*') : Promise.resolve({ data: [], error: null }),
+      canViewFinancials ? supabase.from('system_settings').select('value').eq('key', 'commissions').maybeSingle() : Promise.resolve({ data: null, error: null }),
     ]);
 
     const expensesTableMissing = Boolean(expensesRes.error && ['42P01', 'PGRST205'].includes(expensesRes.error.code || ''));
-    const failedQuery = [movementsRes, customersRes, berthsRes, ...(canViewFinancials ? [paymentsRes, financialsRes] : []), ...(expensesTableMissing ? [] : [expensesRes])].find((result) => result.error);
+    const failedQuery = [movementsRes, customersRes, berthsRes, ...(canViewFinancials ? [paymentsRes, financialsRes, commissionSettingsRes] : []), ...(expensesTableMissing ? [] : [expensesRes])].find((result) => result.error);
     if (failedQuery?.error) {
       throw new Error(`تعذرت قراءة البيانات من Supabase: ${failedQuery.error.message}`);
     }
 
     const financialByMovement = new Map(((financialsRes.data || []) as Record<string, unknown>[]).map((row) => [String(row.movement_id), row]));
+    const cloudMovements = (movementsRes.data || []) as Movement[];
+    const missingFinancialMovementIds = canViewFinancials
+      ? cloudMovements.filter((row) => !financialByMovement.has(row.id)).map((row) => row.id)
+      : [];
     return {
-      movements: ((movementsRes.data || []) as Movement[]).map((row) => movementWithFinancials(row, financialByMovement.get(row.id))),
+      movements: cloudMovements.map((row) => movementWithFinancials(row, financialByMovement.get(row.id))),
+      missingFinancialMovementIds,
+      commissionSettings: canViewFinancials && commissionSettingsRes.data?.value
+        ? commissionSettingsRes.data.value as Partial<SystemSettings> & { vib_configured_at?: string }
+        : null,
       customers: (customersRes.data || [])
         .filter((customer) => !['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__'].includes(customer.id))
         .map((customer) => customerForApp(customer as Customer)),
@@ -524,6 +533,37 @@ export const fetchAllFromSupabase = async () => {
   } catch (err) {
     console.warn('Supabase fetch failed:', err);
     throw err;
+  }
+};
+
+export const syncCommissionSettingsToSupabase = async (settingsToSave: SystemSettings) => {
+  const currentSettings = getStoredSettings();
+  const supabase = getSupabaseClient(currentSettings.supabase_url, currentSettings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+  const value = {
+    default_system_commission: settingsToSave.default_system_commission,
+    default_inbound_commission: settingsToSave.default_inbound_commission,
+    default_outbound_commission: settingsToSave.default_outbound_commission,
+    default_empty_commission: settingsToSave.default_empty_commission,
+    default_nafez_commission: settingsToSave.default_nafez_commission,
+    default_truck_axles: settingsToSave.default_truck_axles,
+    default_truck_weight: settingsToSave.default_truck_weight,
+    default_trailer_axles: settingsToSave.default_trailer_axles,
+    default_trailer_weight: settingsToSave.default_trailer_weight,
+    vib_configured_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from('system_settings').upsert({ key: 'commissions', value });
+  if (error) throw new Error(`تعذر مزامنة إعدادات الحسابات: ${error.message}`);
+};
+
+/** Repair missing ledger rows in one bounded write instead of N concurrent requests. */
+export const syncMovementFinancialsToSupabase = async (movements: Movement[]) => {
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+  const batchSize = 250;
+  for (let index = 0; index < movements.length; index += batchSize) {
+    await upsertMovementFinancials(supabase, movements.slice(index, index + batchSize));
   }
 };
 

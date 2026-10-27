@@ -26,11 +26,13 @@ import {
   saveOfficeExpenses,
   saveSettings,
   fetchAllFromSupabase,
+  syncCommissionSettingsToSupabase,
   syncMovementToSupabase,
   syncCustomerToSupabase,
   syncImportedBatchToSupabase,
   syncBerthToSupabase,
   syncPaymentToSupabase,
+  syncMovementFinancialsToSupabase,
   restoreLocalDataToSupabase,
   getPendingSyncForTable,
   flushPendingSync,
@@ -64,6 +66,7 @@ const CustomerModal = lazy(() => import('./components/CustomerModal').then((modu
 const BerthModal = lazy(() => import('./components/BerthModal').then((module) => ({ default: module.BerthModal })));
 const PaymentModal = lazy(() => import('./components/PaymentModal').then((module) => ({ default: module.PaymentModal })));
 import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
+import { getMovementService, getServiceCommission } from './lib/serviceFees';
 import { ConfirmActionProvider, useConfirmAction } from './contexts/ConfirmActionContext';
 
 const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
@@ -113,6 +116,7 @@ const AppContent: React.FC = () => {
     canDeleteCustomers,
     canManageBerths,
     canManagePayments,
+    canEditCommissions,
     isAdmin,
     currentUser,
   } = useAuth();
@@ -162,6 +166,30 @@ const AppContent: React.FC = () => {
     try {
       const cloudData = await fetchAllFromSupabase();
       if (cloudData) {
+        let financeSyncNotice: string | null = null;
+        let effectiveSettings = settings;
+        const cloudCommissionSettings = cloudData.commissionSettings;
+        if (cloudCommissionSettings?.vib_configured_at) {
+          const cloudNumericSettings = Object.fromEntries([
+            'default_system_commission', 'default_inbound_commission', 'default_outbound_commission',
+            'default_empty_commission', 'default_nafez_commission', 'default_truck_axles',
+            'default_truck_weight', 'default_trailer_axles', 'default_trailer_weight',
+          ].filter((key) => cloudCommissionSettings[key as keyof typeof cloudCommissionSettings] !== undefined)
+            .map((key) => [key, Number(cloudCommissionSettings[key as keyof typeof cloudCommissionSettings])])) as unknown as Partial<SystemSettings>;
+          effectiveSettings = {
+            ...settings,
+            ...cloudNumericSettings,
+          };
+          setSettings(effectiveSettings);
+          saveSettings(effectiveSettings);
+        } else if (canEditCommissions) {
+          try {
+            await syncCommissionSettingsToSupabase(settings);
+          } catch (settingsError) {
+            const message = settingsError instanceof Error ? settingsError.message : 'تعذر حفظ إعدادات العمولات المشتركة.';
+            financeSyncNotice = message;
+          }
+        }
         setExpenseCloudReady(!cloudData.expensesTableMissing);
         const resetDetected = Boolean(cloudData.dataResetAt && cloudData.dataResetAt !== getLocalDataResetAt());
         if (resetDetected && cloudData.dataResetAt) {
@@ -188,7 +216,61 @@ const AppContent: React.FC = () => {
           return Array.from(merged.values());
         };
         const reconciledCashierMovementIds = new Set<string>();
-        const mergedMovements = mergePending(cloudData.movements, localMovements, pendingMovements).map((originalMovement) => {
+        const missingFinancialIds = new Set(cloudData.missingFinancialMovementIds || []);
+        const localMovementById = new Map(localMovements.map((movement) => [movement.id, movement]));
+        const customerById = new Map([...cloudData.customers, ...localCustomers].map((customer) => [customer.id, customer]));
+        const cloudMovementsWithRecoveredFinance = cloudData.movements.map((movement) => {
+          if (!canViewFinancials || !missingFinancialIds.has(movement.id)) return movement;
+          const local = localMovementById.get(movement.id);
+          if (local) {
+            const cashierInvoice = Number(local.cashier_invoice) || 0;
+            const systemCommission = Number(local.system_commission) || 0;
+            const nafezCommission = Number(local.nafez_commission) || 0;
+            const discount = Number(local.discount) || 0;
+            const total = Number(local.total_amount) || Math.max(0, cashierInvoice + systemCommission + nafezCommission - discount);
+            const paid = local.customer_paid_amount !== undefined
+              ? Number(local.customer_paid_amount) || 0
+              : Number(local.paid_amount) || 0;
+            const remaining = Math.max(0, total - paid);
+            return {
+              ...movement,
+              cashier_invoice: cashierInvoice,
+              cashier_receipt_no: local.cashier_receipt_no ?? '',
+              system_commission: systemCommission,
+              nafez_commission: nafezCommission,
+              discount,
+              total_amount: total,
+              payment_status: (remaining === 0 && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid') as Movement['payment_status'],
+              paid_amount: paid,
+              remaining_amount: remaining,
+              customer_paid_amount: paid,
+            };
+          }
+
+          // A movement without a ledger row still owes its configured service
+          // fee, even if its cashier invoice has not arrived yet.
+          const customer = customerById.get(movement.customer_id || '');
+          const service = getMovementService(movement.booking_category, movement.container_path || movement.container_desc);
+          const systemCommission = service
+            ? getServiceCommission(effectiveSettings, service)
+            : customer?.system_commission ?? effectiveSettings.default_system_commission ?? 200;
+          const nafezCommission = customer?.nafez_commission ?? effectiveSettings.default_nafez_commission ?? 0;
+          const total = (Number(movement.cashier_invoice) || 0) + systemCommission + nafezCommission;
+          return {
+            ...movement,
+            cashier_invoice: 0,
+            cashier_receipt_no: '',
+            system_commission: systemCommission,
+            nafez_commission: nafezCommission,
+            discount: 0,
+            total_amount: total,
+            payment_status: 'unpaid' as const,
+            paid_amount: 0,
+            remaining_amount: total,
+            customer_paid_amount: 0,
+          };
+        });
+        const mergedMovements = mergePending(cloudMovementsWithRecoveredFinance, localMovements, pendingMovements).map((originalMovement) => {
           const movement = canViewFinancials ? originalMovement : withoutFinancialDetails(originalMovement);
           if (!movement.cashier_receipt_no) return movement;
           const cashierInvoice = Number(movement.cashier_invoice) || 0;
@@ -231,6 +313,19 @@ const AppContent: React.FC = () => {
         // Retry queued edits/deletes before reporting sync complete.
         await flushPendingSync();
 
+        const missingLedgerRowsToRepair = movementsToUse.filter((movement) => missingFinancialIds.has(movement.id));
+        if (canManagePayments && missingLedgerRowsToRepair.length > 0) {
+          try {
+            await syncMovementFinancialsToSupabase(missingLedgerRowsToRepair);
+            financeSyncNotice = [financeSyncNotice, `تم استكمال حسابات ${missingLedgerRowsToRepair.length} حركة وإعادة حفظها في قاعدة البيانات.`].filter(Boolean).join(' ');
+          } catch (repairError) {
+            console.warn('Could not repair missing movement account rows:', repairError);
+            financeSyncNotice = 'تم حساب الأرصدة محليًا، لكن تعذر حفظ بعض سجلات الحسابات في السحابة. أعد المزامنة أو تواصل مع المدير.';
+          }
+        } else if (missingLedgerRowsToRepair.length > 0) {
+          financeSyncNotice = `تم احتساب أرصدة ${missingLedgerRowsToRepair.length} حركة على هذا الجهاز. يلزم المدير لحفظ السجلات الناقصة في قاعدة البيانات.`;
+        }
+
         const movementsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.movements, localMovements) : [];
         const customersToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.customers, localCustomers) : [];
         const berthsToRestore = restoreDeviceOnlyData ? getLocalOnlyRows(cloudData.berths, localBerths) : [];
@@ -256,11 +351,11 @@ const AppContent: React.FC = () => {
           await Promise.all(allocatedPayments.map((payment) => syncPaymentToSupabase(payment)));
         }
         if (!quiet || resetDetected || restoredCount > 0) {
-          setCloudFeedback(resetDetected
+          setCloudFeedback(financeSyncNotice || (resetDetected
             ? 'تم مسح البيانات المحلية القديمة بعد تجهيز النظام للتسليم.'
             : restoredCount > 0
             ? 'استعدنا البيانات المحفوظة على هذا الجهاز وأعدنا مزامنتها مع السحابة.'
-            : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.');
+            : 'تم تحميل البيانات من قاعدة البيانات السحابية بنجاح.'));
         }
       }
     } catch (e) {
@@ -279,6 +374,7 @@ const AppContent: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
+    if (isAuthLoading || !isAuthenticated) return;
     void refreshDataFromCloud(true);
 
     const storedSettings = getStoredSettings();
@@ -290,7 +386,7 @@ const AppContent: React.FC = () => {
     };
     let channel = supabase?.channel(`pls-live-sync-${Math.random().toString(36).slice(2)}`);
     if (channel) {
-      for (const table of ['movements', 'customers', 'payments', 'berths', 'office_expenses']) {
+      for (const table of ['movements', 'movement_financials', 'customers', 'payments', 'berths', 'office_expenses']) {
         channel = channel.on('postgres_changes', { event: '*', schema: 'public', table }, requestRefresh);
       }
       channel.subscribe();
@@ -312,7 +408,7 @@ const AppContent: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       if (channel) void supabase?.removeChannel(channel);
     };
-  }, []);
+  }, [isAuthLoading, isAuthenticated, canViewFinancials, canManagePayments, canEditCommissions]);
 
   useEffect(() => {
     if (!cloudFeedback) return;
@@ -636,8 +732,13 @@ const AppContent: React.FC = () => {
 
   // Settings Handlers
   const handleSaveSettings = (newSettings: SystemSettings) => {
+    if (!canEditCommissions) {
+      setCloudFeedback('ليس لديك صلاحية تعديل إعدادات العمولات المشتركة.');
+      return;
+    }
     setSettings(newSettings);
     saveSettings(newSettings);
+    void runCloudOperation(syncCommissionSettingsToSupabase(newSettings));
   };
 
   if (isPasswordRecovery) {

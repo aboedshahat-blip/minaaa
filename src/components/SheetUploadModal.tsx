@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
 import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import {
   Upload,
   FileSpreadsheet,
@@ -186,8 +187,11 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
         rowCustomer = undefined;
       }
 
+      const movementService = getMovementService(row.booking_category, row.container_path || row.container_desc);
       const systemCommission = applyDefaultCommissions
-        ? (rowCustomer?.system_commission ?? defaultSysComm)
+        ? (movementService
+          ? getServiceCommission(settings, movementService)
+          : rowCustomer?.system_commission ?? defaultSysComm)
         : 0;
       const nafezCommission = applyDefaultCommissions
         ? (rowCustomer?.nafez_commission ?? defaultNafezComm)
@@ -203,6 +207,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
         customer_id: rowCustomer?.id || '',
         customer_code: rowCustomer?.code || '',
         customer_name: rowCustomer?.name || cleanDriver || 'عميل عام',
+        booking_category: row.booking_category || getMovementServiceLabel(movementService),
         truck_no: row.truck_no || 'غير محدد',
         truck_weight: row.truck_weight ?? 7.5,
         truck_axles: row.truck_axles ?? 20,
