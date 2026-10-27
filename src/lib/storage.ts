@@ -386,7 +386,7 @@ export const flushPendingSync = async () => {
   }
 };
 
-/** Queue an imported batch atomically before syncing its customer foreign keys. */
+/** Queue and sync an imported batch in bulk, without waiting on unrelated backlog. */
 export const syncImportedBatchToSupabase = async (customers: Customer[], movements: Movement[]) => {
   customers.forEach((customer) => {
     const cloudCustomer = customerForCloud(customer);
@@ -394,9 +394,35 @@ export const syncImportedBatchToSupabase = async (customers: Customer[], movemen
   });
   movements.forEach((movement) => setPendingUpsert('movements', movement));
 
-  // flushPendingSync writes customers before movements and retains every failed
-  // row in the local retry queue, so a transient error cannot strand the batch.
-  await flushPendingSync();
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+
+  // This call receives the local customer records referenced by the batch.
+  // Persist them first to satisfy movements.customer_id foreign keys.
+  if (customers.length) {
+    const { error } = await supabase.from('customers').upsert(customers.map(customerForCloud) as never);
+    if (error) throw new Error(`تعذرت مزامنة العملاء: ${error.message}`);
+  }
+
+  const importedCustomerIds = new Set(customers.map((customer) => customer.id));
+  const resolvedMovements: Movement[] = [];
+  for (const movement of movements) {
+    const resolved = movement.customer_id && !importedCustomerIds.has(movement.customer_id)
+      ? await ensureMovementCustomer(movement, supabase)
+      : movement;
+    if (resolved !== movement) setPendingUpsert('movements', resolved);
+    resolvedMovements.push(resolved);
+  }
+
+  if (resolvedMovements.length) {
+    const { error } = await supabase.from('movements').upsert(resolvedMovements.map(movementForCloud) as never);
+    if (error) throw new Error(`تعذرت مزامنة الحركات: ${error.message}`);
+    await upsertMovementFinancials(supabase, resolvedMovements);
+  }
+
+  customers.forEach((customer) => clearPendingUpsert('customers', customer.id));
+  resolvedMovements.forEach((movement) => clearPendingUpsert('movements', movement.id));
 };
 
 // ---------------- LOCAL STORAGE FALLBACK ----------------

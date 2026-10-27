@@ -17,6 +17,7 @@ import {
   Filter,
   FileDown,
   Printer,
+  LoaderCircle,
 } from 'lucide-react';
 
 interface SheetUploadModalProps {
@@ -41,8 +42,10 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const confirmAction = useConfirmAction();
   const { canViewFinancials } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const savingLockRef = useRef(false);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [fileName, setFileName] = useState('');
   const [parsedRows, setParsedRows] = useState<Partial<Movement>[]>([]);
   const [originalHeaders, setOriginalHeaders] = useState<string[]>([]);
@@ -137,7 +140,12 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     }
     if (!await confirmAction(`هل راجعت الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${parsedRows.length}.`, 'نعم، راجعت الشيت')) return;
     if (!await confirmAction(`هل تريد رفع ${parsedRows.length} حركة إلى السيستم ومزامنتها؟`, 'نعم، ارفع الشيت')) return;
+    if (savingLockRef.current) return;
 
+    savingLockRef.current = true;
+    setIsSaving(true);
+    try {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
     const now = new Date().toISOString().split('T')[0];
@@ -238,6 +246,13 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       ? `تم حفظ ${finalizedMovements.length} حركة ومزامنتها مع قاعدة البيانات${custMsg}.`
       : `تم حفظ ${finalizedMovements.length} حركة على هذا الجهاز${custMsg}، لكن المزامنة السحابية لم تكتمل بعد. لا تعِد رفع الشيت؛ ستُعاد المحاولة تلقائيًا.`);
     onClose();
+    } catch (error) {
+      console.error('Failed to import uploaded sheet:', error);
+      alert(error instanceof Error ? `تعذر إكمال رفع الشيت: ${error.message}` : 'تعذر إكمال رفع الشيت. البيانات غير مؤكدة؛ راجع حالة المزامنة قبل إعادة الرفع.');
+    } finally {
+      savingLockRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   const handleExportPdfDirectly = async () => {
@@ -548,18 +563,20 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
             <button
               type="button"
               onClick={handleCancelUpload}
+              disabled={isSaving}
               className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 transition"
             >
               إلغاء
             </button>
             <button
               type="button"
-              disabled={parsedRows.length === 0}
+              disabled={parsedRows.length === 0 || isSaving}
               onClick={handleProcessAndSave}
-              className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-md hover:shadow-lg transition flex items-center gap-1.5"
+              aria-busy={isSaving}
+              className="px-6 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-70 text-white text-xs font-bold shadow-md hover:shadow-lg transition flex items-center gap-1.5"
             >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>اعتماد وتنزيل الحركات في المنظومة ({parsedRows.length})</span>
+              {isSaving ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              <span>{isSaving ? `جارٍ حفظ ومزامنة ${parsedRows.length} حركة...` : `اعتماد وتنزيل الحركات في المنظومة (${parsedRows.length})`}</span>
             </button>
           </div>
         </div>
