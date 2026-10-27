@@ -11,13 +11,15 @@ import {
 import { vibLogoUrl } from '../lib/branding';
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth();
+  const { login, requestPasswordRecovery } = useAuth();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState('');
+  const [isSendingRecovery, setIsSendingRecovery] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,12 +30,37 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     setErrorMessage('');
+    setRecoveryMessage('');
     try {
       const result = await login(username, password);
       if (!result.success) setErrorMessage(result.message || 'تعذر تسجيل الدخول. تحقق من البيانات وحالة الحساب.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'تعذر الاتصال بخدمة تسجيل الدخول الآمن.');
     } finally { setIsLoading(false); }
+  };
+
+  const handlePasswordRecovery = async () => {
+    setErrorMessage('');
+    setRecoveryMessage('');
+    if (!username.trim().includes('@')) {
+      setErrorMessage('اكتب البريد الإلكتروني للحساب في خانة اسم المستخدم أولاً.');
+      return;
+    }
+    setIsSendingRecovery(true);
+    try {
+      const result = await requestPasswordRecovery(username);
+      if (result.success) {
+        setRecoveryMessage('إذا كان البريد مسجلاً، سيصلك رابط استعادة. افتحه لتعيين كلمة مرور جديدة دون إدخال القديمة.');
+      } else if (result.message?.toLowerCase().includes('rate limit')) {
+        setErrorMessage('تم إرسال عدد كبير من الرسائل مؤخرًا. انتظر قليلًا ثم حاول مرة واحدة.');
+      } else {
+        setErrorMessage(result.message || 'تعذر إرسال رابط الاستعادة.');
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'تعذر إرسال رابط الاستعادة.');
+    } finally {
+      setIsSendingRecovery(false);
+    }
   };
 
   return (
@@ -69,6 +96,11 @@ export const LoginPage: React.FC = () => {
             <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+          {recoveryMessage && (
+            <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs leading-6 text-emerald-300">
+              {recoveryMessage}
             </div>
           )}
 
@@ -118,6 +150,14 @@ export const LoginPage: React.FC = () => {
             >
               <span>تسجيل الدخول</span>
               <ArrowRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void handlePasswordRecovery()}
+              disabled={isSendingRecovery || isLoading}
+              className="w-full rounded-xl border border-slate-700 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:border-blue-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSendingRecovery ? 'جارٍ إرسال رابط الاستعادة…' : 'نسيت كلمة المرور؟ أرسل رابط تعيين جديدة'}
             </button>
           </form>
 

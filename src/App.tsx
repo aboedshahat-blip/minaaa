@@ -58,6 +58,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => 
 const AdminControlPage = lazy(() => import('./pages/AdminControlPage').then((module) => ({ default: module.AdminControlPage })));
 const OfficeExpensesPage = lazy(() => import('./pages/OfficeExpensesPage').then((module) => ({ default: module.OfficeExpensesPage })));
 import { LoginPage } from './components/LoginPage';
+import { PasswordRecoveryPage } from './components/PasswordRecoveryPage';
 const MovementModal = lazy(() => import('./components/MovementModal').then((module) => ({ default: module.MovementModal })));
 const CustomerModal = lazy(() => import('./components/CustomerModal').then((module) => ({ default: module.CustomerModal })));
 const BerthModal = lazy(() => import('./components/BerthModal').then((module) => ({ default: module.BerthModal })));
@@ -101,6 +102,9 @@ const AppContent: React.FC = () => {
   const {
     isAuthenticated,
     isLoading: isAuthLoading,
+    isPasswordRecovery,
+    completePasswordRecovery,
+    finishPasswordRecovery,
     canViewFinancials,
     canAddMovements,
     canEditMovements,
@@ -629,6 +633,10 @@ const AppContent: React.FC = () => {
     setSettings(newSettings);
     saveSettings(newSettings);
   };
+
+  if (isPasswordRecovery) {
+    return <PasswordRecoveryPage onSave={completePasswordRecovery} onContinue={finishPasswordRecovery} />;
+  }
 
   if (isAuthLoading) {
     return <div className="min-h-screen bg-slate-50 p-8 text-center text-sm font-semibold text-slate-600" role="status">جارٍ التحقق من جلسة الدخول الآمنة…</div>;

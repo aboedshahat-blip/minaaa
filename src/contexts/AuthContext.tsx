@@ -8,7 +8,11 @@ interface AuthContextType {
   users: ManagedUser[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  isPasswordRecovery: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  requestPasswordRecovery: (email: string) => Promise<{ success: boolean; message?: string }>;
+  completePasswordRecovery: (password: string) => Promise<{ success: boolean; message?: string }>;
+  finishPasswordRecovery: () => void;
   logout: () => void;
   setCurrentUserId: (id: string) => void;
   verifyCurrentPassword: (password: string) => Promise<boolean>;
@@ -61,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const supabase = useMemo(() => {
     const settings = getStoredSettings();
@@ -135,7 +140,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+      if (event === 'SIGNED_OUT') setIsPasswordRecovery(false);
       // Defer Supabase queries until after the auth callback releases its internal lock.
       window.setTimeout(() => { void acceptSession(session); }, 0);
     });
@@ -177,6 +184,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: true };
   };
 
+  const requestPasswordRecovery = async (email: string) => {
+    if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل.' };
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes('@')) return { success: false, message: 'اكتب البريد الإلكتروني للحساب أولاً.' };
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+    if (error) return { success: false, message: error.message || 'تعذر إرسال رابط استعادة كلمة المرور.' };
+    return { success: true };
+  };
+
+  const completePasswordRecovery = async (password: string) => {
+    if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل.' };
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !sessionData.session) {
+      return { success: false, message: 'رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطًا جديدًا.' };
+    }
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { success: false, message: error.message || 'تعذر حفظ كلمة المرور الجديدة.' };
+    return { success: true };
+  };
+
+  const finishPasswordRecovery = () => setIsPasswordRecovery(false);
+
   const logout = () => { if (supabase) void supabase.auth.signOut(); };
   const setCurrentUserId = (_id: string) => { /* User identity now comes from the verified Supabase session. */ };
 
@@ -207,7 +236,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = isAuthenticated && currentUser.role === 'admin';
   const perms = isAdmin ? { ...emptyPermissions, ...currentUser.permissions } : currentUser.permissions;
   return <AuthContext.Provider value={{
-    currentUser, users, isAuthenticated, isLoading, login, logout, setCurrentUserId, verifyCurrentPassword,
+    currentUser, users, isAuthenticated, isLoading, isPasswordRecovery, login,
+    requestPasswordRecovery, completePasswordRecovery, finishPasswordRecovery,
+    logout, setCurrentUserId, verifyCurrentPassword,
     updateUserPermissions, updateUserStatus, updateUserPassword, addNewUser, deleteUser,
     canViewFinancials: isAdmin || perms.can_view_financials,
     canViewSystemRevenue: isAdmin || perms.can_view_system_revenue,
