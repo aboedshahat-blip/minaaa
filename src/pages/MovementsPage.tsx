@@ -30,7 +30,7 @@ import { CashierReportUploadModal } from '../components/CashierReportUploadModal
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
 import { SheetProcessingPage } from './SheetProcessingPage';
-import { getMovementService, type MovementService } from '../lib/serviceFees';
+import { getMovementService, getServiceCommission, type MovementService } from '../lib/serviceFees';
 import { normalizeCustomerName } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
@@ -48,6 +48,7 @@ interface MovementsPageProps {
   onUndoLatestDeletion?: () => Promise<void>;
   canUndoLatestDeletion?: boolean;
   onBatchUpdateMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
+  onRepairZeroFinancialMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
 }
 
 const getMovementBatch = (movement: Movement) => {
@@ -87,9 +88,10 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onUndoLatestDeletion,
   canUndoLatestDeletion = false,
   onBatchUpdateMovements,
+  onRepairZeroFinancialMovements,
 }) => {
   const confirmAction = useConfirmAction();
-  const { canViewFinancials, isAdmin, canManagePayments } = useAuth();
+  const { canViewFinancials, isAdmin, canManagePayments, canEditCommissions } = useAuth();
 
   // Modals state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -120,6 +122,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [manifestPrintScope, setManifestPrintScope] = useState<'selected' | 'all' | 'picked'>('selected');
   const [isExportingPickedPdf, setIsExportingPickedPdf] = useState(false);
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
+  const [isRepairingZeroFinancials, setIsRepairingZeroFinancials] = useState(false);
 
   const importBatches = useMemo(() => {
     const batches = new Map<string, { id: string; name: string; at: string; count: number }>();
@@ -325,6 +328,72 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       };
     });
   }, [filteredMovements, customerById]);
+
+  const getConfiguredMovementFees = (movement: Movement) => {
+    const customer = customerById.get(movement.customer_id || '');
+    const service = getMovementService(movement.booking_category, movement.container_path)
+      || getMovementService(undefined, movement.container_desc);
+    return {
+      commission: service
+        ? getServiceCommission(settings, service)
+        : customer?.system_commission ?? settings.default_system_commission ?? 200,
+      nafez: customer?.nafez_commission ?? settings.default_nafez_commission ?? 0,
+    };
+  };
+
+  const zeroFinancialMovements = useMemo(() => filteredMovements.filter((movement) => {
+    const allFinancialValuesAreZero = Number(movement.cashier_invoice || 0) === 0
+      && Number(movement.system_commission || 0) === 0
+      && Number(movement.nafez_commission || 0) === 0
+      && Number(movement.discount || 0) === 0
+      && Number(movement.total_amount || 0) === 0
+      && Number(movement.paid_amount || 0) === 0
+      && Number(movement.customer_paid_amount || 0) === 0
+      && Number(movement.remaining_amount || 0) === 0
+      && !movement.cashier_receipt_no;
+    if (!allFinancialValuesAreZero) return false;
+    const fees = getConfiguredMovementFees(movement);
+    return fees.commission + fees.nafez > 0;
+  }), [filteredMovements, customerById, settings]);
+
+  const unlinkedCashierMovementCount = useMemo(() => filteredMovements.filter((movement) => !movement.cashier_receipt_no).length, [filteredMovements]);
+
+  const handleRepairZeroFinancials = async () => {
+    if (!onRepairZeroFinancialMovements || zeroFinancialMovements.length === 0 || isRepairingZeroFinancials) return;
+    const previewTotal = zeroFinancialMovements.reduce((sum, movement) => {
+      const { commission, nafez } = getConfiguredMovementFees(movement);
+      return sum + commission + nafez;
+    }, 0);
+    if (!await confirmAction(
+      `سيُعاد احتساب العمولة والرصيد لـ ${zeroFinancialMovements.length} حركة قيمتها المالية كلها صفر، حسب إعدادات العميل ونوع الخدمة الحالية. الإجمالي التقديري: ${previewTotal.toLocaleString()} ج.م. لن تُربط أي فاتورة كاشير تلقائيًا، ولن تتغير الحركات التي بها مدفوعات أو خصومات. هل تريد المتابعة؟`,
+      'نعم، أعد الاحتساب',
+    )) return;
+
+    const repaired = zeroFinancialMovements.map((movement) => {
+      const { commission, nafez } = getConfiguredMovementFees(movement);
+      const total = Math.max(0, (Number(movement.cashier_invoice) || 0) + commission + nafez - (Number(movement.discount) || 0));
+      const paid = Number(movement.customer_paid_amount ?? movement.paid_amount) || 0;
+      const remaining = Math.max(0, total - paid);
+      return {
+        ...movement,
+        system_commission: commission,
+        nafez_commission: nafez,
+        total_amount: total,
+        paid_amount: paid,
+        remaining_amount: remaining,
+        payment_status: (remaining === 0 && total > 0 ? 'paid' : paid > 0 ? 'partial' : 'unpaid') as Movement['payment_status'],
+      };
+    });
+
+    setIsRepairingZeroFinancials(true);
+    try {
+      const saved = await onRepairZeroFinancialMovements(repaired);
+      if (saved) alert(`تمت إعادة احتساب وحفظ حسابات ${repaired.length} حركة. فواتير الكاشير غير المربوطة ما زالت تحتاج المطابقة في مرحلة الكاشير.`);
+      else alert('تعذر حفظ إعادة الاحتساب. راجع تنبيه المزامنة أعلى الصفحة ثم أعد المحاولة.');
+    } finally {
+      setIsRepairingZeroFinancials(false);
+    }
+  };
 
   // Discount Handlers
   const handleDiscountChange = async (movementId: string, discountVal: number) => {
@@ -852,6 +921,29 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <span className="text-lg font-black text-rose-900">{subtotals.remainingTotal.toLocaleString()} ج.م</span>
             </div>
           </div>
+
+          {canViewFinancials && unlinkedCashierMovementCount > 0 && (
+            <div className="no-print flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-amber-900">{unlinkedCashierMovementCount} حركة بلا إيصال كاشير مرتبط</p>
+                <p className="mt-1 text-xs leading-5 text-amber-800">ارفع تقرير الكاشير أو راجع المطابقة في المرحلة الثانية. عدم ربط الإيصال لا يلغي عمولة الحركة.</p>
+              </div>
+              <button onClick={() => setActiveStage('stage2_cashier')} className="shrink-0 rounded-lg bg-amber-700 px-4 py-2 text-xs font-bold text-white hover:bg-amber-800">فتح مرحلة فواتير الكاشير</button>
+            </div>
+          )}
+
+          {canViewFinancials && (canManagePayments || canEditCommissions) && zeroFinancialMovements.length > 0 && (
+            <div className="no-print flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-bold text-rose-900">توجد {zeroFinancialMovements.length} حركة حسابها المالي صفر بالكامل</p>
+                <p className="mt-1 text-xs leading-5 text-rose-800">يمكن إعادة احتساب العمولة والرصيد وفق إعدادات كل خدمة والعميل. لن يتم ربط فواتير الكاشير تلقائيًا.</p>
+              </div>
+              <button disabled={isRepairingZeroFinancials} onClick={() => void handleRepairZeroFinancials()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-rose-700 px-4 py-2 text-xs font-bold text-white hover:bg-rose-800 disabled:cursor-wait disabled:opacity-60">
+                <RotateCcw className={`h-3.5 w-3.5 ${isRepairingZeroFinancials ? 'animate-spin' : ''}`} />
+                {isRepairingZeroFinancials ? 'جارٍ إعادة الاحتساب...' : 'إعادة احتساب الحركات الصفرية'}
+              </button>
+            </div>
+          )}
 
           {/* Customer Cards */}
           {customerGroups.length > 0 ? (

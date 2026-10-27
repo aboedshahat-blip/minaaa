@@ -644,6 +644,30 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleRepairZeroFinancialMovements = async (repairedMovements: Movement[]): Promise<boolean> => {
+    if (!canManagePayments && !canEditCommissions) {
+      setCloudFeedback('ليس لديك صلاحية إعادة احتساب حسابات الحركات.');
+      return false;
+    }
+    const repairedIds = new Set(repairedMovements.map((movement) => movement.id));
+    const updated = movements.map((movement) => repairedIds.has(movement.id)
+      ? repairedMovements.find((repaired) => repaired.id === movement.id) || movement
+      : movement);
+    const changedMovements = updated.filter((movement) => repairedIds.has(movement.id));
+    try {
+      // Save the recalculated ledger in one bounded upsert, not one request per movement.
+      await syncMovementFinancialsToSupabase(changedMovements);
+      setMovements(updated);
+      saveMovements(updated);
+      setCloudFeedback(`تمت إعادة احتساب وحفظ حسابات ${repairedMovements.length} حركة في قاعدة البيانات.`);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر حفظ الحسابات بعد إعادة احتسابها.';
+      setCloudFeedback(`${message} لم نغيّر البيانات المعروضة؛ أعد المحاولة بعد إصلاح الاتصال أو الصلاحية.`);
+      return false;
+    }
+  };
+
   // Customer Handlers
   const handleSaveCustomer = (customerData: Customer) => {
     if (!canManageCustomers) {
@@ -802,6 +826,7 @@ const AppContent: React.FC = () => {
               setIsPaymentModalOpen(true);
             }}
             onBatchUpdateMovements={handleBatchUpdateMovements}
+            onRepairZeroFinancialMovements={handleRepairZeroFinancialMovements}
           />
         )}
 
