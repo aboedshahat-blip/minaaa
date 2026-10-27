@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useEffect } from 'react';
 import { Berth, Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel } from '../lib/excelUtils';
@@ -25,14 +25,15 @@ import {
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 import { CashierLinkingModal } from '../components/CashierLinkingModal';
-import { CashierReportUploadModal } from '../components/CashierReportUploadModal';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
-import { SheetProcessingPage } from './SheetProcessingPage';
 import { getMovementService, getServiceCommission, type MovementService } from '../lib/serviceFees';
 import { normalizeCustomerName } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
+
+const SheetProcessingPage = lazy(() => import('./SheetProcessingPage').then((module) => ({ default: module.SheetProcessingPage })));
+const CashierReportUploadModal = lazy(() => import('../components/CashierReportUploadModal').then((module) => ({ default: module.CashierReportUploadModal })));
 
 interface MovementsPageProps {
   movements: Movement[];
@@ -607,6 +608,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       </nav>
 
       {activeStage === 'stage0_import' && (
+        <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500" role="status" aria-live="polite">جارٍ تحميل أدوات رفع الشيت…</div>}>
         <SheetProcessingPage
           customers={customers}
           berths={berths}
@@ -618,6 +620,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             return synced;
           }}
         />
+        </Suspense>
       )}
 
       {activeStage === 'daily' && (
@@ -1384,6 +1387,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
       {/* Cashier Automated Report Matching Modal */}
       {isCashierReportModalOpen && onBatchUpdateMovements && (
+        <Suspense fallback={<div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/30" role="status" aria-live="polite"><div className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-600">جارٍ تحميل أدوات تقرير الكاشير…</div></div>}>
         <CashierReportUploadModal
           isOpen={isCashierReportModalOpen}
           onClose={() => setIsCashierReportModalOpen(false)}
@@ -1403,6 +1407,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             }
           }
         />
+        </Suspense>
       )}
     </div>
   );
