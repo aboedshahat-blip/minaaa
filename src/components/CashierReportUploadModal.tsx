@@ -6,6 +6,7 @@ import type {
   CashierInvoiceEntry,
   CashierMatchResult,
 } from '../lib/cashierParser';
+import { getMovementService } from '../lib/serviceFees';
 import {
   Upload,
   FileText,
@@ -59,7 +60,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const candidateReceiptCountByMovement = new Map<string, number>();
   matchCandidates.forEach(({ candidates, currentMovementId }) => {
     if (currentMovementId) return;
-    candidates.forEach(({ movementId }) => {
+    candidates.filter((candidate) => candidate.routeMatch && candidate.descriptionMatch).forEach(({ movementId }) => {
       candidateReceiptCountByMovement.set(
         movementId,
         (candidateReceiptCountByMovement.get(movementId) || 0) + 1,
@@ -165,6 +166,9 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
     }
 
     const selectedMovement = movements.find((movement) => movement.id === selectedMovementId);
+    const invoiceService = getMovementService(manualCategory);
+    const routeMatches = Boolean(invoiceService && getMovementService(undefined, selectedMovement?.container_path) === invoiceService);
+    const descriptionMatches = Boolean(invoiceService && getMovementService(undefined, selectedMovement?.container_desc) === invoiceService);
     const sysComm = selectedMovement?.system_commission ?? settings.default_system_commission ?? 200;
     const nafezComm = selectedMovement?.nafez_commission ?? settings.default_nafez_commission ?? 0;
     const cashierVal = Number(manualAmount);
@@ -195,7 +199,10 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       return m;
     });
 
-    if (!await confirmAction(`هل تريد ربط الفاتورة وتحديث الحركة المحددة؟ المبلغ: ${cashierVal.toLocaleString()} ج.م`, 'نعم، اربطها')) return;
+    const classificationWarning = routeMatches && descriptionMatches
+      ? ''
+      : 'تنبيه: تصنيف الفاتورة لا يطابق مسار الحاوية أو وصفها في الحركة، أو أن إحدى الخانتين غير محددة. ';
+    if (!await confirmAction(`${classificationWarning}هل تريد ربط الفاتورة بالحركة التي اخترتها يدويًا؟ المبلغ: ${cashierVal.toLocaleString()} ج.م`, 'نعم، اربطها')) return;
     const synced = await onBatchUpdateMovements(updated);
     alert(synced
       ? 'تم ربط فاتورة الكاشير وحفظ التحديث في قاعدة البيانات.'
@@ -224,7 +231,18 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       if (!await confirmAction(`تم اختيار أكثر من إيصال للحركة نفسها، وسيتم جمع مبالغها عليها:\n${descriptions}\nهل راجعت أرقام الإيصالات وتريد ربطها كلها؟`, 'نعم، اربط الإيصالات كلها')) return;
     }
 
-    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
+    const manualClassificationOverrides = Object.entries(selectedMovementByReceipt).filter(([receiptNo, movementId]) => {
+      if (!movementId) return false;
+      const candidateSet = matchCandidates.find((item) => item.entry.receipt_no === receiptNo);
+      const candidate = candidateSet?.candidates.find((item) => item.movementId === movementId);
+      return Boolean(candidate && (!candidate.routeMatch || !candidate.descriptionMatch));
+    }).length;
+    if (manualClassificationOverrides > 0 && !await confirmAction(
+      `تم اختيار ${manualClassificationOverrides} إيصال يدويًا رغم اختلاف أو نقص مسار الحاوية أو وصفها عن تصنيف الفاتورة. راجع الحركات المختارة جيدًا لتجنب ربط فاتورة بالحركة الخطأ. هل تريد المتابعة؟`,
+      'نعم، راجعت وأريد المتابعة',
+    )) return;
+
+    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين، بعد مطابقة اللوحات وتصنيف الفاتورة مع مسار الحاوية ووصفها. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
     const synced = await onBatchUpdateMovements(updatedMovementsList);
     alert(synced
       ? `تم حفظ الربط الذي اخترته ومزامنة ${matchResults.length} حركة. يمكنك إعادة رفع التقرير وتغيير الحركة إذا احتجت تصحيح الربط.`
@@ -486,7 +504,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                   <div className="bg-indigo-50 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-sm font-black text-indigo-950">تأكيد العميل والحركة لكل إيصال</h3>
-                      <p className="mt-1 text-[11px] text-indigo-800">راجع اسم العميل واختر الحركة الصحيحة عند تكرار أرقام المركبات. يمكنك تغيير الاختيار قبل الحفظ.</p>
+                      <p className="mt-1 text-[11px] text-indigo-800">الاقتراح التلقائي يشترط تطابق اللوحات وتصنيف الفاتورة مع مسار الحاوية ووصفها. أي اختلاف أو نقص يظهر للمراجعة اليدوية قبل الحفظ.</p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-indigo-800 border border-indigo-200">
                       {Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال محدد
@@ -498,6 +516,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                         <tr>
                           <th className="p-2">إيصال الكاشير</th>
                           <th className="p-2 text-center">أرقام المركبات</th>
+                          <th className="p-2 text-center">تصنيف الفاتورة</th>
                           <th className="p-2 text-center">المبلغ</th>
                           <th className="p-2 min-w-80">اختر العميل والحركة</th>
                         </tr>
@@ -516,6 +535,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                                   [entry.trailer_letters, entry.trailer_digits].filter(Boolean).join(' '),
                                 ].filter(Boolean).join(' / ') || 'غير مقروء'}
                               </td>
+                              <td className="p-2 text-center font-semibold text-slate-700 whitespace-nowrap">{entry.booking_category || 'غير مقروء'}</td>
                               <td className="p-2 text-center font-mono font-black whitespace-nowrap">{entry.amount.toLocaleString()} ج.م</td>
                               <td className="p-2">
                                 <select
@@ -527,15 +547,17 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                                   <option value="">اترك الإيصال بدون ربط</option>
                                   {candidates.map((candidate) => (
                                     <option key={candidate.movementId} value={candidate.movementId}>
-                                      {candidate.customerName} — حركة {candidate.movementSeq} — {candidate.movementDate || 'بدون تاريخ'} — شاحنة {candidate.truckNo || '—'} / مقطورة {candidate.trailerNo || '—'} — حاوية {candidate.containerNo || '—'}{candidate.isCurrentOwner ? ' — الربط الحالي' : ''}
+                                      {candidate.customerName} — حركة {candidate.movementSeq} — {candidate.movementDate || 'بدون تاريخ'} — شاحنة {candidate.truckNo || '—'} / مقطورة {candidate.trailerNo || '—'} — حاوية {candidate.containerNo || '—'} — مسار {candidate.containerPath || 'غير محدد'} — وصف {candidate.containerDesc || 'غير محدد'} — {candidate.routeMatch && candidate.descriptionMatch ? 'مطابق للتصنيف' : 'مراجعة المسار/الوصف'}{candidate.isCurrentOwner ? ' — الربط الحالي' : ''}
                                     </option>
                                   ))}
                                 </select>
                                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
                                   {candidates.length > 1 && <span className="font-bold text-amber-700">أكثر من حركة بنفس المركبة؛ راجع العميل قبل الحفظ.</span>}
                                   {isReassigning && <span className="font-bold text-rose-700">سيُنقل الإيصال من العميل المرتبط حاليًا إلى الاختيار الجديد.</span>}
-                                  {candidates.length === 1 && !currentMovementId && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) > 1 && <span className="font-bold text-amber-700">عدة إيصالات مرشحة لنفس الحركة؛ لم يتم اختيارها تلقائيًا. راجع رقم الإيصال واختر المناسب.</span>}
-                                  {candidates.length === 1 && !currentMovementId && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) === 1 && <span className="text-emerald-700">اقتراح وحيد حسب أرقام المركبة والتاريخ؛ يمكنك تغييره.</span>}
+                                  {selectedId && (() => { const chosen = candidates.find((candidate) => candidate.movementId === selectedId); return chosen && (!chosen.routeMatch || !chosen.descriptionMatch) ? <span className="font-bold text-rose-700">اللوحات متطابقة لكن مسار الحاوية أو وصفها لا يطابق تصنيف الفاتورة. هذا اختيار يدوي ويحتاج تأكيدًا إضافيًا.</span> : null; })()}
+                                  {candidates.length === 1 && !currentMovementId && candidates[0].routeMatch && candidates[0].descriptionMatch && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) > 1 && <span className="font-bold text-amber-700">التصنيف مطابق، لكن عدة إيصالات مرشحة لنفس الحركة؛ راجع رقم الإيصال.</span>}
+                                  {candidates.length === 1 && !currentMovementId && candidates[0].routeMatch && candidates[0].descriptionMatch && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) === 1 && <span className="text-emerald-700">تطابقت اللوحات ومسار الحاوية ووصفها؛ الاقتراح جاهز للمراجعة.</span>}
+                                  {candidates.length > 0 && !candidates.some((candidate) => candidate.routeMatch && candidate.descriptionMatch) && <span className="font-bold text-rose-700">لم يوجد تطابق في المسار والوصف؛ لم يتم الربط تلقائيًا.</span>}
                                 </div>
                               </td>
                             </tr>

@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import * as mammoth from 'mammoth';
 import { pdfjsLib } from './pdfjs';
 import { Movement } from '../types';
+import { getMovementService } from './serviceFees';
 
 export interface CashierInvoiceEntry {
   receipt_no: string;          // مسلسل الفاتورة (e.g. 0047-01-1/01-261021)
@@ -13,6 +14,8 @@ export interface CashierInvoiceEntry {
   trailer_digits: string;      // 3597
   trailer_letters: string;     // د ن ر
   booking_category: string;    // e.g. وارد حاويات / تعتيق حاوية فارغة
+  container_path: string;
+  container_desc: string;
   amount: number;              // e.g. 24.25
 }
 
@@ -39,8 +42,12 @@ export interface CashierMovementCandidate {
   truckNo: string;
   trailerNo: string;
   containerNo: string;
+  containerPath: string;
+  containerDesc: string;
   movementDate: string;
   exactPair: boolean;
+  routeMatch: boolean;
+  descriptionMatch: boolean;
   isCurrentOwner: boolean;
 }
 
@@ -267,12 +274,18 @@ export const parseCashierTextLines = (lines: string[], pdfRtlPlateOrder = false)
         }
       }
 
-      // Look for booking category
-      let booking_category = 'وارد حاويات';
+      // A missing invoice category must remain unknown; assuming "inbound"
+      // could silently attach an invoice to the wrong kind of container.
+      let booking_category = '';
       if (context.includes('تعتيق')) booking_category = 'تعتيق حاوية فارغة';
+      else if (context.includes('استلام')) booking_category = 'استلام حاوية فارغة';
       else if (context.includes('صادر')) booking_category = 'صادر حاويات';
       else if (context.includes('وارد')) booking_category = 'وارد حاويات';
-      else if (context.includes('استلام')) booking_category = 'استلام حاوية فارغة';
+      const invoiceService = getMovementService(booking_category);
+      const container_path = invoiceService === 'inbound' ? 'وارد'
+        : invoiceService === 'outbound' ? 'صادر'
+          : invoiceService === 'empty' ? 'فارغ' : '';
+      const container_desc = invoiceService ? booking_category : '';
 
       // Remove receipt number from context so its internal slash and digits do not pollute plate numbers
       const vehicleStr = context.replace(receipt_no, ' ');
@@ -285,6 +298,8 @@ export const parseCashierTextLines = (lines: string[], pdfRtlPlateOrder = false)
           raw_vehicle_str: vehicleStr,
           ...parsedVeh,
           booking_category,
+          container_path,
+          container_desc,
           amount,
         });
       }
@@ -391,6 +406,7 @@ export const getCashierEntryCandidates = (
   const receiptDate = getReceiptDate(entry.receipt_no);
   const currentOwners = movements.filter((movement) => getMovementReceiptNumbers(movement).includes(entry.receipt_no));
   const candidateMap = new Map<string, CashierMovementCandidate>();
+  const entryService = getMovementService(entry.booking_category, entry.container_path);
 
   movements.forEach((movement) => {
     const movementPlates = Array.from(new Set([
@@ -404,6 +420,9 @@ export const getCashierEntryCandidates = (
     // Arabic letters and digits for truck and trailer. Number-only or partial
     // plate matches are deliberately excluded to protect customer accounts.
     if (!exactPair) return;
+
+    const routeMatch = Boolean(entryService && getMovementService(undefined, movement.container_path) === entryService);
+    const descriptionMatch = Boolean(entryService && getMovementService(undefined, movement.container_desc) === entryService);
 
     const movementDate = getMovementDate(movement.movement_date || '');
     const dayDistance = receiptDate != null && movementDate != null
@@ -419,8 +438,12 @@ export const getCashierEntryCandidates = (
       truckNo: movement.truck_no || '',
       trailerNo: movement.trailer_no || '',
       containerNo: movement.container_no || '',
+      containerPath: movement.container_path || '',
+      containerDesc: movement.container_desc || '',
       movementDate: movement.movement_date || '',
       exactPair,
+      routeMatch,
+      descriptionMatch,
       isCurrentOwner: currentOwners.some((owner) => owner.id === movement.id),
     };
     candidateMap.set(movement.id, candidate);
@@ -430,6 +453,8 @@ export const getCashierEntryCandidates = (
   // date window, so the user can move a receipt away from an incorrect client.
   currentOwners.forEach((movement) => {
     if (candidateMap.has(movement.id)) return;
+    const routeMatch = Boolean(entryService && getMovementService(undefined, movement.container_path) === entryService);
+    const descriptionMatch = Boolean(entryService && getMovementService(undefined, movement.container_desc) === entryService);
     candidateMap.set(movement.id, {
       movementId: movement.id,
       movementSeq: movement.seq,
@@ -438,8 +463,12 @@ export const getCashierEntryCandidates = (
       truckNo: movement.truck_no || '',
       trailerNo: movement.trailer_no || '',
       containerNo: movement.container_no || '',
+      containerPath: movement.container_path || '',
+      containerDesc: movement.container_desc || '',
       movementDate: movement.movement_date || '',
       exactPair: false,
+      routeMatch,
+      descriptionMatch,
       isCurrentOwner: true,
     });
   });
@@ -454,7 +483,11 @@ export const getCashierEntryCandidates = (
     return bBatch - aBatch || b.movementSeq - a.movementSeq;
   });
   const currentMovementId = currentOwners.length === 1 ? currentOwners[0].id : '';
-  return { entry, candidates, currentMovementId, suggestedMovementId: currentMovementId };
+  const currentCandidate = candidates.find((candidate) => candidate.movementId === currentMovementId);
+  const suggestedMovementId = currentCandidate?.exactPair && currentCandidate.routeMatch && currentCandidate.descriptionMatch
+    ? currentMovementId
+    : '';
+  return { entry, candidates, currentMovementId, suggestedMovementId };
   });
 
   // A single candidate per receipt is not enough to safely auto-link: several
@@ -463,14 +496,16 @@ export const getCashierEntryCandidates = (
   const entriesPerMovement = new Map<string, number>();
   candidateSets.forEach(({ candidates, currentMovementId }) => {
     if (currentMovementId) return;
-    candidates.forEach(({ movementId }) => {
+    candidates.filter((candidate) => candidate.routeMatch && candidate.descriptionMatch).forEach(({ movementId }) => {
       entriesPerMovement.set(movementId, (entriesPerMovement.get(movementId) || 0) + 1);
     });
   });
 
   return candidateSets.map((candidateSet) => {
-    if (candidateSet.suggestedMovementId || candidateSet.candidates.length !== 1) return candidateSet;
-    const onlyCandidate = candidateSet.candidates[0];
+    if (candidateSet.suggestedMovementId) return candidateSet;
+    const eligibleCandidates = candidateSet.candidates.filter((candidate) => candidate.routeMatch && candidate.descriptionMatch);
+    if (eligibleCandidates.length !== 1) return candidateSet;
+    const onlyCandidate = eligibleCandidates[0];
     return (entriesPerMovement.get(onlyCandidate.movementId) || 0) === 1
       ? { ...candidateSet, suggestedMovementId: onlyCandidate.movementId }
       : candidateSet;
