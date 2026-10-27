@@ -88,12 +88,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('pls_is_authenticated');
     localStorage.removeItem('pls_active_user_id');
     try {
+      const systemCustomerIds = new Set(['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__']);
       const customers = JSON.parse(localStorage.getItem('pls_customers') || '[]') as Array<{ id?: string }>;
-      localStorage.setItem('pls_customers', JSON.stringify(customers.filter((customer) => customer.id !== '__SYSTEM_USERS_CONFIG__')));
+      localStorage.setItem('pls_customers', JSON.stringify(customers.filter((customer) => !systemCustomerIds.has(customer.id || ''))));
       const backups = JSON.parse(localStorage.getItem('pls_safety_backups_v1') || '[]') as Array<{ customers?: Array<{ id?: string }> }>;
       localStorage.setItem('pls_safety_backups_v1', JSON.stringify(backups.map((backup) => ({
         ...backup,
-        customers: (backup.customers || []).filter((customer) => customer.id !== '__SYSTEM_USERS_CONFIG__'),
+        customers: (backup.customers || []).filter((customer) => !systemCustomerIds.has(customer.id || '')),
       }))));
     } catch { /* Keep normal startup available if an old local backup is malformed. */ }
   }, []);

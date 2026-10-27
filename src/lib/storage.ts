@@ -15,6 +15,9 @@ const KEYS = {
   SAFETY_BACKUPS: 'pls_safety_backups_v1',
 };
 
+const SYSTEM_CUSTOMER_IDS = new Set(['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__']);
+const isSystemCustomer = (customer: Pick<Customer, 'id'>) => SYSTEM_CUSTOMER_IDS.has(customer.id);
+
 export interface OperationalSafetyBackup {
   id: string;
   label: string;
@@ -60,7 +63,7 @@ export const restoreSafetyBackupToSupabase = async (backup: OperationalSafetyBac
 
   const resetAt = new Date().toISOString();
   const writes: Array<[string, Record<string, unknown>[]]> = [
-    ['customers', backup.customers.map(customerForCloud)],
+    ['customers', backup.customers.filter((customer) => !isSystemCustomer(customer)).map(customerForCloud)],
     ['berths', backup.berths.map((row) => ({ ...row }))],
   ];
   for (const [table, rows] of writes) {
@@ -260,7 +263,24 @@ type PendingSync = {
 const getPendingSync = (): PendingSync => {
   try {
     const raw = localStorage.getItem(KEYS.PENDING_SYNC);
-    return raw ? JSON.parse(raw) as PendingSync : { upserts: {}, deletes: {} };
+    const pending = raw ? JSON.parse(raw) as PendingSync : { upserts: {}, deletes: {} };
+    pending.upserts ||= {};
+    pending.deletes ||= {};
+    const customerUpserts = pending.upserts.customers || {};
+    let removedLegacyCustomer = false;
+    for (const id of SYSTEM_CUSTOMER_IDS) {
+      if (customerUpserts[id]) {
+        delete customerUpserts[id];
+        removedLegacyCustomer = true;
+      }
+    }
+    const customerDeletes = pending.deletes.customers || [];
+    const safeCustomerDeletes = customerDeletes.filter((id) => !SYSTEM_CUSTOMER_IDS.has(id));
+    if (safeCustomerDeletes.length !== customerDeletes.length) removedLegacyCustomer = true;
+    pending.upserts.customers = customerUpserts;
+    pending.deletes.customers = safeCustomerDeletes;
+    if (removedLegacyCustomer) localStorage.setItem(KEYS.PENDING_SYNC, JSON.stringify(pending));
+    return pending;
   } catch {
     return { upserts: {}, deletes: {} };
   }
@@ -459,7 +479,7 @@ export const saveBerths = (berths: Berth[]) => {
 export const getStoredCustomers = (): Customer[] => {
   try {
     const raw = localStorage.getItem(KEYS.CUSTOMERS);
-    if (raw) return (JSON.parse(raw) as Customer[]).map(customerForApp);
+    if (raw) return (JSON.parse(raw) as Customer[]).filter((customer) => !isSystemCustomer(customer)).map(customerForApp);
   } catch (e) {
     console.error(e);
   }
@@ -468,7 +488,7 @@ export const getStoredCustomers = (): Customer[] => {
 };
 
 export const saveCustomers = (customers: Customer[]) => {
-  localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers.map(customerForApp)));
+  localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers.filter((customer) => !isSystemCustomer(customer)).map(customerForApp)));
 };
 
 export const getStoredMovements = (): Movement[] => {
@@ -778,8 +798,9 @@ export const restoreLocalDataToSupabase = async (data: {
   payments: PaymentReceipt[];
   expenses?: OfficeExpense[];
 }) => {
+  const customers = data.customers.filter((customer) => !isSystemCustomer(customer));
   data.movements.forEach((row) => setPendingUpsert('movements', row));
-  data.customers.forEach((row) => setPendingUpsert('customers', customerForCloud(row) as unknown as Customer));
+  customers.forEach((row) => setPendingUpsert('customers', customerForCloud(row) as unknown as Customer));
   data.berths.forEach((row) => setPendingUpsert('berths', row));
   data.payments.forEach((row) => setPendingUpsert('payments', row));
   (data.expenses || []).forEach((row) => setPendingUpsert('office_expenses', row));
@@ -789,7 +810,7 @@ export const restoreLocalDataToSupabase = async (data: {
 
   // Restore parent rows before rows that reference them through foreign keys.
   const orderedWrites = [
-    ['customers', data.customers.map(customerForCloud)],
+    ['customers', customers.map(customerForCloud)],
     ['berths', data.berths],
   ] as const;
   for (const [table, rows] of orderedWrites) {
@@ -802,7 +823,7 @@ export const restoreLocalDataToSupabase = async (data: {
     const { error } = await supabase.from('payments').upsert(data.payments.map(paymentForCloud) as never);
     if (error) throw new Error(`تعذرت استعادة البيانات إلى Supabase: ${error.message}`);
   }
-  for (const row of data.customers) clearPendingUpsert('customers', row.id);
+  for (const row of customers) clearPendingUpsert('customers', row.id);
   for (const row of data.berths) clearPendingUpsert('berths', row.id);
   for (const row of data.payments) clearPendingUpsert('payments', row.id);
   for (const row of data.expenses || []) clearPendingUpsert('office_expenses', row.id);
