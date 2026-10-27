@@ -12,17 +12,35 @@ jobs:
     timeout-minutes: 10
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_POOLER_URL: ${{ secrets.SUPABASE_POOLER_URL }}
       PROJECT_REF: jfhmarmaebrzdnsvkqzv
     steps:
       - uses: actions/checkout@v4
       - name: Check required deployment credentials
         run: |
           test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Missing GitHub Actions secret: SUPABASE_ACCESS_TOKEN"; exit 1; }
-          test -n "$SUPABASE_DB_URL" || { echo "Missing GitHub Actions secret: SUPABASE_DB_URL"; exit 1; }
+          test -n "$SUPABASE_DB_PASSWORD" || { echo "Missing GitHub Actions secret: SUPABASE_DB_PASSWORD"; exit 1; }
+          test -n "$SUPABASE_POOLER_URL" || { echo "Missing GitHub Actions secret: SUPABASE_POOLER_URL"; exit 1; }
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Prepare IPv4 session pooler URL
+        shell: bash
+        run: |
+          db_url="$(python3 - <<'PY'
+          import os
+          from urllib.parse import quote
+
+          template = os.environ['SUPABASE_POOLER_URL'].strip()
+          password = quote(os.environ['SUPABASE_DB_PASSWORD'], safe='')
+          if '[YOUR-PASSWORD]' not in template:
+              raise SystemExit('SUPABASE_POOLER_URL must contain the [YOUR-PASSWORD] placeholder.')
+          print(template.replace('[YOUR-PASSWORD]', password))
+          PY
+          )"
+          echo "::add-mask::$db_url"
+          echo "SUPABASE_DB_URL=$db_url" >> "$GITHUB_ENV"
       - name: Apply database migrations
         run: supabase db push --db-url "$SUPABASE_DB_URL"
       - name: Deploy username login endpoint
