@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { ManagedUser, RolePermissions, SystemSettings } from '../types';
 import { OperationalSafetyBackup } from '../lib/storage';
+import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -118,6 +119,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
   // Active selected user for permissions/password management
   const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
+  const [userSearch, setUserSearch] = useState('');
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -280,6 +282,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   };
 
   const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[0];
+  const filteredUsers = users.filter((user) => [user.name, user.username, user.email, user.role].some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(userSearch.trim().toLocaleLowerCase('ar-EG'))));
 
   // If not admin, block completely from viewing or accessing Admin Control
   if (currentUser.role !== 'admin') {
@@ -475,8 +478,9 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
         </div>
 
         {/* Users List Tabs */}
+        <ProfessionalSearchField value={userSearch} onChange={setUserSearch} placeholder="ابحث باسم المستخدم أو اسم الدخول أو البريد أو الصلاحية" className="sm:max-w-md" compact />
         <div className="flex flex-wrap gap-2">
-          {users.map((u) => {
+          {filteredUsers.map((u) => {
             const isSelected = u.id === activeEditingUserId;
             return (
               <button
@@ -504,6 +508,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
               </button>
             );
           })}
+          {filteredUsers.length === 0 && <p className="w-full rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">لا يوجد مستخدم مطابق للبحث.</p>}
         </div>
 
         {/* Selected User Account Details & Password Changer */}

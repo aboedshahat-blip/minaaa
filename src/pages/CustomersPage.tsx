@@ -13,8 +13,8 @@ import {
   CreditCard,
   ChevronDown,
   ChevronUp,
-  Search,
 } from 'lucide-react';
+import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 
 interface CustomersPageProps {
   customers: Customer[];
@@ -142,14 +142,12 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
         </div>
 
         {/* Search */}
-        <div className="mt-5 relative max-w-md">
-          <Search className="w-4 h-4 absolute right-3 top-3 text-slate-400" />
-          <input
-            type="text"
-            placeholder="ابحث بالعميل أو السائق أو رقم الشاحنة أو الحاوية أو وصفها أو التاريخ..."
+        <div className="mt-5 max-w-md">
+          <ProfessionalSearchField
             value={searchTerm}
-            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-            className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs focus:ring-1 focus:ring-blue-500"
+            onChange={(value) => { setSearchTerm(value); setCurrentPage(1); }}
+            placeholder="ابحث بالعميل أو السائق أو رقم الشاحنة أو الحاوية أو وصفها أو التاريخ"
+            compact
           />
         </div>
         <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Berth, Movement } from '../types';
-import { Anchor, Plus, Edit2, Trash2, CheckCircle2, XCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, CheckCircle2, XCircle } from 'lucide-react';
+import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 
 interface BerthsPageProps {
   berths: Berth[];
@@ -17,6 +18,13 @@ export const BerthsPage: React.FC<BerthsPageProps> = ({
   onEditBerth,
   onDeleteBerth,
 }) => {
+  const [search, setSearch] = useState('');
+  const filteredBerths = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase('ar-EG');
+    if (!term) return berths;
+    return berths.filter((berth) => [berth.name, berth.code, berth.description].some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(term)));
+  }, [berths, search]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -43,9 +51,13 @@ export const BerthsPage: React.FC<BerthsPageProps> = ({
         </div>
       </div>
 
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <ProfessionalSearchField value={search} onChange={setSearch} placeholder="ابحث باسم الرصيف أو الكود أو الوصف" className="sm:max-w-md" compact />
+      </div>
+
       {/* Berths Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {berths.map((b) => {
+        {filteredBerths.map((b) => {
           const berthMovements = movements.filter(
             (m) => m.berth_id === b.id || m.berth_name === b.name
           );
@@ -110,6 +122,7 @@ export const BerthsPage: React.FC<BerthsPageProps> = ({
             </div>
           );
         })}
+        {filteredBerths.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 md:col-span-2 lg:col-span-3">لا توجد أرصفة مطابقة للبحث.</div>}
       </div>
     </div>
   );

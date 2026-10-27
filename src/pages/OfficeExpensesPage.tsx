@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { Download, FileText, Paperclip, Plus, Search, Trash2, Pencil, X, CalendarDays, Wallet } from 'lucide-react';
+import { Download, FileText, Paperclip, Plus, Trash2, Pencil, X, CalendarDays, Wallet } from 'lucide-react';
 import { OfficeExpense, PaymentReceipt } from '../types';
 import { getOfficeExpenseReceiptUrl } from '../lib/storage';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 
 type ExpenseFormData = Omit<OfficeExpense, 'id' | 'created_at' | 'created_by' | 'created_by_name' | 'receipt_path' | 'receipt_name'>;
 
@@ -115,7 +116,7 @@ export const OfficeExpensesPage: React.FC<OfficeExpensesPageProps> = ({ expenses
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">سجل المصروفات</h2><button onClick={exportCsv} type="button" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Download size={16} />تصدير النتائج</button></div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <label className="relative md:col-span-2 xl:col-span-1"><span className="sr-only">ابحث</span><Search size={17} className="absolute right-3 top-3.5 text-slate-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث بالنوع أو المستفيد أو البيان" className="min-h-11 w-full rounded-lg border border-slate-300 bg-white pr-10 pl-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" /></label>
+        <ProfessionalSearchField value={query} onChange={setQuery} placeholder="ابحث بنوع المصروف أو المستفيد أو البيان" className="md:col-span-2 xl:col-span-1" />
         <label className="relative"><span className="absolute right-3 top-3.5 text-slate-400"><CalendarDays size={16} /></span><input aria-label="من تاريخ" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 px-3 pr-10 text-sm" /></label>
         <label className="relative"><span className="absolute right-3 top-3.5 text-slate-400"><CalendarDays size={16} /></span><input aria-label="إلى تاريخ" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="min-h-11 w-full rounded-lg border border-slate-300 px-3 pr-10 text-sm" /></label>
         <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} aria-label="طريقة الدفع" className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="all">كل طرق الدفع</option>{methods.map((method) => <option key={method.value} value={method.value}>{method.label}</option>)}</select>

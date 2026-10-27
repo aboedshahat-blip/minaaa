@@ -5,7 +5,6 @@ import {
   TrendingUp,
   Receipt,
   CreditCard,
-  Search,
   Download,
   Printer,
   CheckCircle,
@@ -19,6 +18,7 @@ import {
   Percent,
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
+import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
 type AccountsSubTab = 'clients' | 'system_revenue' | 'receipts' | 'drivers';
@@ -54,6 +54,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [activeSubTab, setActiveSubTab] = useState<AccountsSubTab>(getStoredAccountsSubTab);
   const [driverSearch, setDriverSearch] = useState('');
+  const [receiptSearch, setReceiptSearch] = useState('');
   const [selectedDriverForInvoice, setSelectedDriverForInvoice] = useState<{ name: string; moves: Movement[] } | null>(null);
   const [isDriverInvoiceOpen, setIsDriverInvoiceOpen] = useState(false);
 
@@ -243,6 +244,18 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
 
     return { cashier, systemCommission, nafez, discount, total, paid, remaining };
   }, [movements]);
+
+  const filteredPayments = useMemo(() => {
+    const term = receiptSearch.trim().toLocaleLowerCase('ar-EG');
+    if (!term) return payments;
+    return payments.filter((payment) => [
+      payment.receipt_no,
+      payment.customer_name,
+      payment.date,
+      payment.notes,
+      payment.payment_method === 'cash' ? 'نقدي' : payment.payment_method === 'bank_transfer' ? 'تحويل بنكي' : payment.payment_method === 'check' ? 'شيك' : 'أخرى',
+    ].some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(term)));
+  }, [payments, receiptSearch]);
 
   // Export Customer Financials to Excel
   const handleExportAccountsExcel = async () => {
@@ -434,48 +447,46 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             <h2 className="text-base font-bold text-slate-900">
               جدول أرصدة وحسابات العملاء (تفصيل دفع كام وناقص كام)
             </h2>
-            <div className="w-full sm:w-72">
-              <input
-                type="text"
-                placeholder="ابحث بالعميل أو السائق أو الحاوية أو وصفها أو التاريخ..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs"
-              />
-            </div>
+            <ProfessionalSearchField
+              value={searchTerm}
+              onChange={setSearchTerm}
+              placeholder="ابحث بالعميل أو السائق أو اللوحة أو الحاوية أو التاريخ"
+              className="w-full sm:w-80"
+              compact
+            />
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-xs text-right border-collapse">
+            <table className="w-full min-w-[980px] text-[11px] text-right border-collapse">
               <thead className="bg-slate-900 text-white font-bold">
                 <tr>
                   <th className="p-2.5 border border-slate-700 text-center w-10">م</th>
-                  <th className="p-2.5 border border-slate-700">كود العميل</th>
-                  <th className="p-2.5 border border-slate-700">اسم العميل (السائق)</th>
-                  <th className="p-2.5 border border-slate-700 text-center">عدد النقلات</th>
-                  <th className="p-2.5 border border-slate-700 text-center font-bold text-indigo-300">المدفوع له كاشير بالميناء</th>
-                  <th className="p-2.5 border border-slate-700 text-center">خدمة المنظومة</th>
-                  <th className="p-2.5 border border-slate-700 text-center text-rose-300">الخصم</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-blue-950 font-black">الصافي المطلوب</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-emerald-950 font-bold">المحصل (دفع كام)</th>
-                  <th className="p-2.5 border border-slate-700 text-center bg-rose-950 font-black">المتبقي (ناقص كام)</th>
-                  <th className="p-2.5 border border-slate-700 text-center">حالة الحساب</th>
-                  <th className="p-2.5 border border-slate-700 text-center">كشف وسداد</th>
+                  <th className="p-2 border border-slate-700">كود العميل</th>
+                  <th className="w-36 max-w-36 p-2 border border-slate-700">اسم العميل (السائق)</th>
+                  <th className="p-2 border border-slate-700 text-center">عدد النقلات</th>
+                  <th className="p-2 border border-slate-700 text-center font-bold text-indigo-300">المدفوع له كاشير بالميناء</th>
+                  <th className="p-2 border border-slate-700 text-center">خدمة المنظومة</th>
+                  <th className="p-2 border border-slate-700 text-center text-rose-300">الخصم</th>
+                  <th className="p-2 border border-slate-700 text-center bg-blue-950 font-black">الصافي المطلوب</th>
+                  <th className="p-2 border border-slate-700 text-center bg-emerald-950 font-bold">المحصل (دفع كام)</th>
+                  <th className="p-2 border border-slate-700 text-center bg-rose-950 font-black">المتبقي (ناقص كام)</th>
+                  <th className="p-2 border border-slate-700 text-center">حالة الحساب</th>
+                  <th className="p-2 border border-slate-700 text-center">كشف وسداد</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {customerLedger.map((row, idx) => (
                   <tr key={row.customer.id} className="hover:bg-slate-50">
-                    <td className="p-2.5 border border-slate-200 text-center font-bold text-blue-900 bg-slate-50">
+                    <td className="p-2 border border-slate-200 text-center font-bold text-blue-900 bg-slate-50">
                       {idx + 1}
                     </td>
-                    <td className="p-2.5 border border-slate-200 font-mono font-bold text-blue-700">
+                    <td className="p-2 border border-slate-200 font-mono font-bold text-blue-700">
                       {row.customer.code}
                     </td>
-                    <td className="p-2.5 border border-slate-200 font-bold text-slate-900">
-                      {row.customer.name}
+                    <td className="max-w-36 p-2 border border-slate-200 font-bold text-slate-900">
+                      <span className="block truncate" title={row.customer.name}>{row.customer.name}</span>
                     </td>
-                    <td className="p-2.5 border border-slate-200 text-center font-semibold">
+                    <td className="p-2 border border-slate-200 text-center font-semibold">
                       {row.truckCount}
                     </td>
                     <td className="p-2.5 border border-slate-200 text-center font-mono">
@@ -597,7 +608,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
       {/* Tab 3: Receipts Ledger */}
       {activeSubTab === 'receipts' && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Receipt className="w-5 h-5 text-indigo-600" />
               <span>سجل سندات القبض والدفعات المحصلة</span>
@@ -610,6 +621,11 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             </button>
           </div>
 
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <ProfessionalSearchField value={receiptSearch} onChange={setReceiptSearch} placeholder="ابحث برقم السند أو اسم العميل أو التاريخ أو طريقة الدفع" className="w-full sm:max-w-lg" compact />
+            <span className="text-[11px] font-semibold text-slate-500">{filteredPayments.length} من {payments.length} سند</span>
+          </div>
+
           {payments.some((payment) => (Number(payment.unallocated_amount) || 0) > 0) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
               <span className="font-bold text-amber-900">أرصدة غير موزعة من سندات قديمة (لا تخصم تلقائيًا)</span>
@@ -619,36 +635,34 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             </div>
           )}
 
-          {payments.length > 0 ? (
+          {filteredPayments.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-right border-collapse">
+              <table className="w-full min-w-[760px] text-[11px] text-right border-collapse">
                 <thead className="bg-slate-800 text-white font-bold">
                   <tr>
-                    <th className="p-2.5 border border-slate-700">رقم السند</th>
-                    <th className="p-2.5 border border-slate-700">التاريخ</th>
-                    <th className="p-2.5 border border-slate-700">العميل</th>
-                    <th className="p-2.5 border border-slate-700 text-center">المبلغ المحصل</th>
-                    <th className="p-2.5 border border-slate-700 text-center">حالة توزيع السند</th>
-                    <th className="p-2.5 border border-slate-700">طريقة الدفع</th>
-                    <th className="p-2.5 border border-slate-700">ملاحظات</th>
+                    <th className="p-2 border border-slate-700">رقم السند</th>
+                    <th className="p-2 border border-slate-700">التاريخ</th>
+                    <th className="w-36 p-2 border border-slate-700">العميل</th>
+                    <th className="p-2 border border-slate-700 text-center">المبلغ المحصل</th>
+                    <th className="p-2 border border-slate-700 text-center">حالة توزيع السند</th>
+                    <th className="p-2 border border-slate-700">طريقة الدفع</th>
+                    <th className="p-2 border border-slate-700">ملاحظات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {payments.map((p) => (
+                  {filteredPayments.map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="p-2.5 border border-slate-200 font-mono font-bold text-blue-900">
+                      <td className="p-2 border border-slate-200 font-mono font-bold text-blue-900">
                         {p.receipt_no}
                       </td>
-                      <td className="p-2.5 border border-slate-200 text-slate-600">
+                      <td className="p-2 border border-slate-200 text-slate-600">
                         {p.date}
                       </td>
-                      <td className="p-2.5 border border-slate-200 font-bold text-slate-900">
-                        {p.customer_name}
-                      </td>
-                      <td className="p-2.5 border border-slate-200 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50">
+                      <td className="max-w-36 p-2 border border-slate-200 font-bold text-slate-900"><span className="block truncate" title={p.customer_name}>{p.customer_name}</span></td>
+                      <td className="p-2 border border-slate-200 text-center font-mono font-bold text-emerald-800 bg-emerald-50/50">
                         {p.amount.toLocaleString()} ج.م
                       </td>
-                      <td className="p-2.5 border border-slate-200 text-center">
+                      <td className="p-2 border border-slate-200 text-center">
                         {(Number(p.unallocated_amount) || 0) > 0 ? (
                           <span className="inline-flex flex-col rounded-lg bg-amber-50 px-2 py-1 text-amber-900 border border-amber-200">
                             <span className="font-bold">رصيد قديم غير موزع</span>
@@ -660,13 +674,13 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
                           <span className="text-slate-600">تحصيل مديونية</span>
                         )}
                       </td>
-                      <td className="p-2.5 border border-slate-200 text-slate-700">
+                      <td className="p-2 border border-slate-200 text-slate-700">
                         {p.payment_method === 'cash' && 'نقدي'}
                         {p.payment_method === 'bank_transfer' && 'تحويل بنكي'}
                         {p.payment_method === 'check' && 'شيك مصرفي'}
                         {p.payment_method === 'other' && 'أخرى'}
                       </td>
-                      <td className="p-2.5 border border-slate-200 text-slate-500">
+                      <td className="p-2 border border-slate-200 text-slate-500">
                         {p.notes || '-'}
                       </td>
                     </tr>
@@ -676,7 +690,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
             </div>
           ) : (
             <div className="text-center py-8 text-slate-400 text-xs">
-              لم يتم تسجيل سندات قبض حتى الآن. اضغط "تسجيل سند قبض جديد" لإضافة دفعة.
+              {payments.length ? 'لا توجد سندات تطابق البحث الحالي.' : 'لم يتم تسجيل سندات قبض حتى الآن. اضغط "تسجيل سند قبض جديد" لإضافة دفعة.'}
             </div>
           )}
         </div>
@@ -697,16 +711,7 @@ export const AccountsPage: React.FC<AccountsPageProps> = ({
           </div>
 
           {/* Search Box */}
-          <div className="relative w-full sm:w-96">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="ابحث بالاسم أو رقم الحاوية أو وصفها أو التاريخ..."
-              value={driverSearch}
-              onChange={(e) => setDriverSearch(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-400"
-            />
-          </div>
+          <ProfessionalSearchField value={driverSearch} onChange={setDriverSearch} placeholder="ابحث بالسائق أو العميل أو اللوحة أو الحاوية أو التاريخ" className="w-full sm:max-w-md" />
 
           {/* Autocomplete hints */}
           {driverSearch.trim().length >= 1 && driverLedger.length === 0 && (

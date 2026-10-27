@@ -3,7 +3,6 @@ import { Berth, Customer, Movement } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { exportTemplateToExcel } from '../lib/excelUtils';
 import {
-  Search,
   Download,
   Printer,
   Trash2,
@@ -33,6 +32,7 @@ import { SheetProcessingPage } from './SheetProcessingPage';
 import { getMovementService, getServiceCommission, type MovementService } from '../lib/serviceFees';
 import { normalizeCustomerName } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 
 interface MovementsPageProps {
   movements: Movement[];
@@ -635,7 +635,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
           <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-              <div className="relative"><Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400"/><input value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setDailyPage(1); }} placeholder="ابحث بالعميل، السائق، الشاحنة أو الحاوية" className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pe-9 ps-3 text-sm"/></div>
+              <ProfessionalSearchField value={searchTerm} onChange={(value) => { setSearchTerm(value); setDailyPage(1); }} placeholder="ابحث بالعميل أو السائق أو اللوحة أو الحاوية أو الإيصال" />
               <div className="flex gap-2">
                 <button onClick={() => { const today = new Date().toLocaleDateString('en-CA'); setEntryDateFrom(today); setEntryDateTo(today); setEntryTimeFrom(''); setEntryTimeTo(''); setDailyPage(1); }} className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800">اليوم</button>
                 <button onClick={() => { const to = new Date(); const from = new Date(); from.setDate(to.getDate() - 6); setEntryDateFrom(from.toLocaleDateString('en-CA')); setEntryDateTo(to.toLocaleDateString('en-CA')); setEntryTimeFrom(''); setEntryTimeTo(''); setDailyPage(1); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">آخر 7 أيام</button>
@@ -692,16 +692,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           {/* Filter Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-              <div className="relative sm:col-span-2 xl:col-span-3">
-                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="ابحث بالعميل أو السائق أو الشاحنة أو المقطورة أو الحاوية..."
-                  value={manifestSearch}
-                  onChange={(e) => setManifestSearch(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pr-9 pl-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
+              <ProfessionalSearchField
+                value={manifestSearch}
+                onChange={setManifestSearch}
+                placeholder="ابحث بالعميل أو السائق أو الشاحنة أو المقطورة أو الحاوية أو وصفها أو مسارها"
+                className="sm:col-span-2 xl:col-span-3"
+              />
               <select
                 value={manifestCustomerFilter}
                 onChange={(e) => setManifestCustomerFilter(e.target.value)}
@@ -788,7 +784,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           {/* Clean 12-Column Table (NO financials) */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-xs text-right border-collapse">
+              <table className="w-full min-w-[900px] text-[11px] text-right border-collapse">
                 <thead className="bg-rose-800 text-white font-bold">
                   <tr>
                     <th className="p-2.5 border border-rose-700 text-center w-10">م</th>
@@ -798,7 +794,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                     <th className="p-2.5 border border-rose-700 whitespace-nowrap">رقم المقطورة</th>
                     <th className="p-2.5 border border-rose-700 text-center whitespace-nowrap">وزن المقطورة<span className="block text-[9px] font-normal opacity-70">من واقع الرخصة</span></th>
                     <th className="p-2.5 border border-rose-700 text-center whitespace-nowrap">محاور المقطورة</th>
-                    <th className="p-2.5 border border-rose-700 min-w-[130px]">اسم السائق</th>
+                    <th className="w-24 max-w-24 p-1.5 border border-rose-700">اسم السائق</th>
                     <th className="p-2.5 border border-rose-700 whitespace-nowrap">رقم الاقرار</th>
                     <th className="p-2.5 border border-rose-700 whitespace-nowrap">رقم الحاوية</th>
                     <th className="p-2.5 border border-rose-700 min-w-[130px]">وصف الحاوية</th>
@@ -819,7 +815,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       <td className="p-2 border border-slate-100 font-medium whitespace-nowrap">{m.trailer_no || '-'}</td>
                       <td className="p-2 border border-slate-100 text-center font-mono">{m.trailer_weight ?? 11.5}</td>
                       <td className="p-2 border border-slate-100 text-center font-mono">{m.trailer_axles ?? 30}</td>
-                      <td className="p-2 border border-slate-100 text-slate-800">{m.driver_name || '-'}</td>
+                      <td className="max-w-24 p-1.5 border border-slate-100 text-slate-800"><span className="block truncate" title={m.driver_name || '-'}>{m.driver_name || '-'}</span></td>
                       <td className="p-2 border border-slate-100 font-mono text-slate-700 whitespace-nowrap">{m.declaration_no || '-'}</td>
                       <td className="p-2 border border-slate-100 font-mono font-bold text-blue-800 whitespace-nowrap">{m.container_no || '-'}</td>
                       <td className="p-2 border border-slate-100 text-slate-600">{m.container_desc || '-'}</td>
@@ -858,10 +854,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           {/* Filter Bar */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 no-print">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-                <input type="text" placeholder="ابحث بالاسم أو رقم الحاوية أو وصفها أو التاريخ أو الإيصال..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
-              </div>
+              <ProfessionalSearchField value={searchTerm} onChange={setSearchTerm} placeholder="ابحث بالعميل أو السائق أو الشاحنة أو المقطورة أو الحاوية أو الوصف أو الإيصال أو التاريخ" className="min-w-[220px] flex-1" compact />
               {canViewFinancials && (
                 <select value={selectedPaymentStatus} onChange={(e) => setSelectedPaymentStatus(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
                   <option value="">حالة السداد (الكل)</option>
@@ -897,24 +890,24 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               )}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-xs text-right border-collapse">
+              <table className="w-full min-w-[1120px] text-[11px] text-right border-collapse">
                 <thead className="bg-emerald-800 text-white font-bold">
                   <tr>
-                    <th className="p-2.5 border border-emerald-700 text-center w-10">م</th>
-                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">رقم الشاحنة</th>
-                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">المقطورة</th>
-                    <th className="p-2.5 border border-emerald-700">اسم السائق</th>
-                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">رقم الحاوية</th>
-                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">وصف الحاوية</th>
-                    <th className="p-2.5 border border-emerald-700 whitespace-nowrap">مسار الحاوية</th>
+                    <th className="p-1.5 border border-emerald-700 text-center w-8">م</th>
+                    <th className="p-1.5 border border-emerald-700 whitespace-nowrap">رقم الشاحنة</th>
+                    <th className="p-1.5 border border-emerald-700 whitespace-nowrap">المقطورة</th>
+                    <th className="w-24 max-w-24 p-1.5 border border-emerald-700">اسم السائق</th>
+                    <th className="p-1.5 border border-emerald-700 whitespace-nowrap">رقم الحاوية</th>
+                    <th className="p-1.5 border border-emerald-700 whitespace-nowrap">وصف الحاوية</th>
+                    <th className="p-1.5 border border-emerald-700 whitespace-nowrap">مسار الحاوية</th>
                     {canViewFinancials && (
                       <>
-                        <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">رقم إيصال الكاشير</th>
-                        <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">مبلغ الكاشير</th>
-                        <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">عمولة المنظومة</th>
-                        <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">نافذ</th>
-                        <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">الإجمالي المستحق</th>
-                        <th className="p-2.5 border border-emerald-700 text-center whitespace-nowrap">الحالة</th>
+                        <th className="p-1.5 border border-emerald-700 text-center whitespace-nowrap">رقم إيصال الكاشير</th>
+                        <th className="p-1.5 border border-emerald-700 text-center whitespace-nowrap">مبلغ الكاشير</th>
+                        <th className="p-1.5 border border-emerald-700 text-center whitespace-nowrap">عمولة المنظومة</th>
+                        <th className="p-1.5 border border-emerald-700 text-center whitespace-nowrap">نافذ</th>
+                        <th className="p-1.5 border border-emerald-700 text-center whitespace-nowrap">الإجمالي المستحق</th>
+                        <th className="p-1.5 border border-emerald-700 text-center whitespace-nowrap">الحالة</th>
                       </>
                     )}
                     <th className="p-2.5 border border-emerald-700 text-center w-20 no-print">ربط / تعديل</th>
@@ -926,7 +919,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       <td className="p-2 border border-slate-100 text-center font-bold text-emerald-800 bg-slate-50">{m.seq || i + 1}</td>
                       <td className="p-2 border border-slate-100 font-bold text-slate-900 whitespace-nowrap">{m.truck_no}</td>
                       <td className="p-2 border border-slate-100 text-slate-700 whitespace-nowrap">{m.trailer_no || '-'}</td>
-                      <td className="p-2 border border-slate-100 text-slate-800">{m.driver_name || '-'}</td>
+                      <td className="max-w-24 p-1.5 border border-slate-100 text-slate-800"><span className="block truncate" title={m.driver_name || '-'}>{m.driver_name || '-'}</span></td>
                       <td className="p-2 border border-slate-100 font-mono font-bold text-blue-800 whitespace-nowrap">{m.container_no || '-'}</td>
                       <td className="p-2 border border-slate-100 text-slate-700">{m.container_desc || '-'}</td>
                       <td className="p-2 border border-slate-100 text-slate-700">{m.container_path || '-'}</td>
@@ -982,14 +975,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <div className="space-y-4">
           <div className="no-print rounded-xl border border-slate-200 bg-white p-3">
             <div className="relative max-w-md">
-              <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="ابحث بالعميل أو السائق أو رقم الحاوية أو وصفها أو التاريخ..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pr-9 pl-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
+              <ProfessionalSearchField value={searchTerm} onChange={setSearchTerm} placeholder="ابحث بالعميل أو السائق أو الشاحنة أو المقطورة أو الحاوية أو الوصف أو التاريخ" compact />
             </div>
           </div>
 
@@ -1209,8 +1195,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             {/* Filter Bar */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2">
               <div className="md:col-span-2 relative">
-                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
-                <input type="text" placeholder="ابحث بالعميل أو السائق أو رقم الحاوية أو وصفها أو التاريخ..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-2 text-xs" />
+                <ProfessionalSearchField value={searchTerm} onChange={setSearchTerm} placeholder="ابحث بالعميل أو السائق أو الشاحنة أو المقطورة أو الحاوية أو الوصف أو الإيصال أو التاريخ" compact />
               </div>
               <select value={selectedBerth} onChange={(e) => setSelectedBerth(e.target.value)} className="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-700">
                 <option value="">جميع الأرصفة</option>
@@ -1254,7 +1239,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <p className="text-xs text-gray-600 mt-1">تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-xs text-right border-collapse">
+              <table className="w-full min-w-[1100px] text-[11px] text-right border-collapse">
                 <thead className="bg-slate-900 text-white font-bold select-none">
                   <tr>
                     <th className="p-2.5 border border-slate-700 text-center w-12">م</th>
@@ -1264,7 +1249,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                     <th className="p-2.5 border border-slate-700 whitespace-nowrap">رقم المقطورة</th>
                     <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap">وزن المقطورة<span className="block text-[10px] font-normal text-slate-400">من واقع الرخصة</span></th>
                     <th className="p-2.5 border border-slate-700 text-center whitespace-nowrap">محاور المقطورة</th>
-                    <th className="p-2.5 border border-slate-700 whitespace-nowrap min-w-[140px]">اسم السائق</th>
+                    <th className="w-24 max-w-24 p-1.5 border border-slate-700">اسم السائق</th>
                     <th className="p-2.5 border border-slate-700 whitespace-nowrap">رقم الاقرار</th>
                     <th className="p-2.5 border border-slate-700 whitespace-nowrap">رقم الحاوية</th>
                     <th className="p-2.5 border border-slate-700 whitespace-nowrap min-w-[150px]">وصف الحاوية</th>
@@ -1295,7 +1280,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       <td className="p-2 border border-slate-200 font-medium whitespace-nowrap">{m.trailer_no || '-'}</td>
                       <td className="p-2 border border-slate-200 text-center font-mono font-semibold">{m.trailer_weight ?? 11.5}</td>
                       <td className="p-2 border border-slate-200 text-center font-mono font-semibold">{m.trailer_axles ?? 30}</td>
-                      <td className="p-2 border border-slate-200 text-slate-800">{m.driver_name || '-'}</td>
+                      <td className="max-w-24 p-1.5 border border-slate-200 text-slate-800"><span className="block truncate" title={m.driver_name || '-'}>{m.driver_name || '-'}</span></td>
                       <td className="p-2 border border-slate-200 font-mono text-slate-700 whitespace-nowrap">{m.declaration_no || '-'}</td>
                       <td className="p-2 border border-slate-200 font-mono font-bold text-blue-800 whitespace-nowrap">{m.container_no || '-'}</td>
                       <td className="p-2 border border-slate-200 text-slate-600">{m.container_desc || '-'}</td>
