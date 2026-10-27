@@ -56,6 +56,15 @@ as $$
   select exists (select 1 from public.app_user_profiles p where p.user_id = auth.uid() and p.is_active);
 $$;
 
+create table if not exists public.system_settings (
+  key text primary key,
+  value jsonb not null
+);
+insert into public.system_settings (key, value) values (
+  'commissions',
+  '{"default_system_commission":200,"default_nafez_commission":0,"default_truck_axles":20,"default_truck_weight":7.5,"default_trailer_axles":30,"default_trailer_weight":11.5}'::jsonb
+) on conflict (key) do nothing;
+
 create table if not exists public.movement_financials (
   movement_id text primary key references public.movements(id) on delete cascade,
   cashier_invoice numeric not null default 0,
