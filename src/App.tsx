@@ -230,7 +230,9 @@ const AppContent: React.FC = () => {
             const total = Number(local.total_amount) || Math.max(0, cashierInvoice + systemCommission + nafezCommission - discount);
             const paid = local.customer_paid_amount !== undefined
               ? Number(local.customer_paid_amount) || 0
-              : Number(local.paid_amount) || 0;
+              : local.cashier_receipt_no
+                ? Math.max(0, (Number(local.paid_amount) || 0) - cashierInvoice)
+                : Number(local.paid_amount) || 0;
             const remaining = Math.max(0, total - paid);
             return {
               ...movement,
