@@ -68,6 +68,7 @@ const PaymentModal = lazy(() => import('./components/PaymentModal').then((module
 import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
 import { getMovementService, getServiceCommission } from './lib/serviceFees';
 import { ConfirmActionProvider, useConfirmAction } from './contexts/ConfirmActionContext';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
   const cloudIds = new Set(cloudRows.map((row) => row.id));
@@ -635,7 +636,7 @@ const AppContent: React.FC = () => {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تأكيد مزامنة الشيت.';
-      setCloudFeedback(`${message} حُفظت البيانات محليًا وستتم إعادة المزامنة عند عودة الاتصال.`);
+      setCloudFeedback(`${message} حُفظت البيانات محليًا وستتم إعادة المزامنة عند عودة ا��اتصال.`);
       return false;
     } finally {
       // Also invalidate reads that started while the import was syncing.
@@ -1038,6 +1039,7 @@ export default function App() {
     <ConfirmActionProvider>
       <AuthProvider>
         <AppContent />
+        <SpeedInsights />
       </AuthProvider>
     </ConfirmActionProvider>
   );
