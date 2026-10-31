@@ -84,7 +84,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
         <meta charset="utf-8" />
         <title>فاتورة حساب سائق - ${driverName}</title>
         <style>
-          @page { size: A4 landscape; margin: 8mm 8mm 26mm; }
+          @page { size: A4 landscape; margin: 5mm 7mm; }
           * { box-sizing: border-box; }
           body {
             font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
@@ -92,83 +92,88 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             text-align: right;
             color: #0f172a;
             margin: 0;
-            padding: 15px;
-            font-size: 12px;
+            padding: 0;
+            font-size: 9px;
           }
-          .header-box { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px; display: grid; grid-template-columns: 76px minmax(0,1fr) auto; gap: 12px; align-items: center; }
-          .title { font-size: 20px; font-weight: 900; margin: 0 0 4px 0; color: #1e3a8a; }
-          .office-name { max-width: 620px; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
-          .brand-logo { display: block; width: 70px; height: 62px; max-width: 70px; max-height: 62px; object-fit: contain; object-position: center; border-radius: 8px; }
-          .subtitle { font-size: 13px; font-weight: bold; color: #475569; margin: 0; }
+          .header-box { border-bottom: 1.5px solid #0f172a; padding-bottom: 4px; margin-bottom: 6px; display: grid; grid-template-columns: 54px minmax(0,1fr) auto; gap: 8px; align-items: center; }
+          .title { font-size: 16px; font-weight: 900; margin: 0 0 2px 0; color: #1e3a8a; }
+          .office-name { max-width: 620px; overflow-wrap: anywhere; word-break: break-word; line-height: 1.25; }
+          .brand-logo { display: block; width: 48px; height: 42px; max-width: 48px; max-height: 42px; object-fit: contain; object-position: center; border-radius: 6px; }
+          .subtitle { font-size: 10px; font-weight: bold; color: #475569; margin: 0; }
           .meta-box {
             background-color: #f1f5f9;
             border: 1px solid #cbd5e1;
             border-radius: 8px;
-            padding: 10px;
-            margin-bottom: 15px;
+            padding: 5px 7px;
+            margin-bottom: 7px;
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-            font-size: 12px;
+            gap: 5px;
+            font-size: 9px;
           }
           .meta-item { display: flex; flex-direction: column; }
-          .meta-label { color: #64748b; font-size: 10px; font-weight: bold; }
-          .meta-val { font-weight: bold; color: #0f172a; margin-top: 2px; }
+          .meta-label { color: #64748b; font-size: 8px; font-weight: bold; }
+          .meta-val { font-weight: bold; color: #0f172a; margin-top: 1px; }
           table {
             width: 100%;
             table-layout: fixed;
             border-collapse: collapse;
-            margin-bottom: 15px;
-            font-size: 11px;
+            margin-bottom: 7px;
+            font-size: 8px;
           }
           th {
             background-color: #0f172a;
             color: white;
-            padding: 7px 5px;
+            padding: 4px 3px;
             border: 1px solid #334155;
             text-align: center;
           }
           td {
-            padding: 6px 5px;
+            padding: 3px 2px;
             border: 1px solid #cbd5e1;
             text-align: center;
             vertical-align: middle;
             white-space: normal;
             overflow-wrap: anywhere;
             word-break: normal;
-            line-height: 1.45;
+            line-height: 1.2;
           }
-          th { text-align: center; vertical-align: middle; white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.35; }
+          th { text-align: center; vertical-align: middle; white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.2; }
           tr:nth-child(even) { background-color: #f8fafc; }
           .totals-table {
             width: 50%;
             margin-right: auto;
             border-collapse: collapse;
-            margin-bottom: 20px;
-            font-size: 12px;
+            margin: 0;
+            font-size: 9px;
           }
-          .totals-table td { padding: 6px 10px; border: 1px solid #94a3b8; }
-          .totals-table .highlight { background-color: #1e3a8a; color: white; font-weight: 900; font-size: 14px; }
-          .totals-table .due-box { background-color: #be123c; color: white; font-weight: 900; font-size: 14px; }
+          .totals-table td { padding: 3px 6px; border: 1px solid #94a3b8; }
+          .totals-table .highlight { background-color: #1e3a8a; color: white; font-weight: 900; font-size: 10px; }
+          .totals-table .due-box { background-color: #be123c; color: white; font-weight: 900; font-size: 10px; }
+          .financial-summary { display: flex; flex-direction: row; align-items: stretch; gap: 8px; margin-bottom: 6px; }
+          .financial-summary > div:first-child { flex: 1 1 auto; min-width: 0; }
+          .financial-summary > div:last-child { flex: 0 0 52%; width: 52%; }
+          .financial-summary .totals-table { width: 100%; }
           .signatures {
             display: flex;
             justify-content: space-between;
-            margin-top: 35px;
-            padding-top: 20px;
+            margin-top: 8px;
+            padding-top: 6px;
             border-top: 1px dashed #94a3b8;
           }
-          .sign-col { text-align: center; width: 30%; font-size: 12px; font-weight: bold; }
-          .transport-stamp { width: 125px; height: 58px; margin: 14px auto 0; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 800; }
+          .sign-col { text-align: center; width: 30%; font-size: 10px; font-weight: bold; }
+          .transport-stamp { width: 100px; height: 35px; margin: 5px auto 0; border: 1.5px dashed #64748b; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 800; }
           .sign-line { margin-top: 45px; border-top: 1px solid #64748b; }
-          .footer-note { text-align: center; font-size: 10px; color: #64748b; margin-top: 25px; }
+          .footer-note { text-align: center; font-size: 8px; color: #64748b; margin-top: 5px; padding-top: 4px; }
           @media print {
-            body { padding: 0; font-size: 10px; }
-            th, td { padding: 4px 3px !important; }
-            tr { break-inside: avoid; }
+            body { padding: 0; font-size: 9px; }
+            #printable-driver-invoice { width: 100%; max-width: none; padding: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+            th, td { padding: 3px 2px !important; }
+            tr, .financial-summary, .invoice-stamp-footer, .footer-note { break-inside: avoid; page-break-inside: avoid; }
             thead { display: table-header-group; }
             .overflow-x-auto { overflow: visible !important; }
-            .driver-invoice-content { padding-bottom: 18mm !important; }
-            .invoice-stamp-footer { position: fixed; left: 0; right: 0; bottom: -18mm; margin: 0 !important; background: #fff; }
+            .driver-invoice-content { padding-bottom: 0 !important; }
+            .invoice-stamp-footer { position: static !important; margin: 4px 0 0 !important; padding-top: 4px !important; background: #fff; }
           }
         </style>
       </head>
@@ -310,7 +315,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             </div>
 
             {/* Financial Totals Breakdown Table */}
-            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+            <div className="financial-summary flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
               <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200 flex-1 w-full">
                 <span className="font-bold text-slate-800 block mb-1">ملاحظات الفاتورة:</span>
                 <p className="text-slate-600 text-[11px]">{notes}</p>
