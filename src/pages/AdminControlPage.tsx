@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
-import { ActivityLog, ManagedUser, RolePermissions, SystemSettings } from '../types';
+import { ActivityLog, ManagedUser, RolePermissions, SystemSettings, UserRole } from '../types';
 import { fetchRecentActivityLogs, OperationalSafetyBackup } from '../lib/storage';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 import {
@@ -58,6 +58,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     users,
     currentUser,
     updateUserPermissions,
+    updateUserRole,
     updateUserStatus,
     updateUserPassword,
     addNewUser,
@@ -74,7 +75,8 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [newUsername, setNewUsername] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newFullName, setNewFullName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'accountant' | 'data_entry'>('accountant');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'accountant' | 'data_entry'>('accountant');
+  const [roleToAssign, setRoleToAssign] = useState<UserRole>('accountant');
   const [newUserPassword, setNewUserPassword] = useState('');
 
   // Password editing state for active selected user
@@ -222,7 +224,22 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
     // Default permission templates based on role
     const defaultPerms: RolePermissions =
-      newUserRole === 'accountant'
+      newUserRole === 'admin'
+        ? {
+            can_view_financials: true,
+            can_view_system_revenue: true,
+            can_add_movements: true,
+            can_edit_movements: true,
+            can_delete_movements: true,
+            can_upload_sheets: true,
+            can_export_excel: true,
+            can_manage_customers: true,
+            can_delete_customers: true,
+            can_manage_payments: true,
+            can_manage_berths: true,
+            can_edit_commissions: true,
+          }
+        : newUserRole === 'accountant'
         ? {
             can_view_financials: true,
             can_view_system_revenue: false,
@@ -252,7 +269,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             can_edit_commissions: false,
           };
 
-    if (!await confirmAction(`هل تريد إضافة المستخدم ${newFullName.trim()} بالصلاحيات المحددة؟`, 'نعم، أضف المستخدم')) return;
+    if (!await confirmAction(`هل تريد إضافة المستخدم ${newFullName.trim()} ${newUserRole === 'admin' ? 'كمدير عام كامل الصلاحيات' : 'بالصلاحيات المحددة'}؟`, 'نعم، أضف المستخدم')) return;
     try {
       await addNewUser({
         email: newUserEmail.trim().toLowerCase(),
@@ -277,7 +294,20 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   };
 
   const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[0];
+  useEffect(() => { if (selectedUser) setRoleToAssign(selectedUser.role); }, [selectedUser?.id, selectedUser?.role]);
   const filteredUsers = users.filter((user) => [user.name, user.username, user.email, user.role].some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(userSearch.trim().toLocaleLowerCase('ar-EG'))));
+
+  const handleChangeSelectedUserRole = async () => {
+    if (!selectedUser || selectedUser.role === roleToAssign) return;
+    const targetRoleName = roleToAssign === 'admin' ? 'مديرًا عامًا كامل الصلاحيات' : roleToAssign === 'accountant' ? 'محاسبًا' : 'مدخل بيانات';
+    if (!await confirmAction(`سيتم تغيير دور ${selectedUser.name} (${selectedUser.email || selectedUser.username}) إلى ${targetRoleName}. هل تريد المتابعة؟`, 'نعم، غيّر الدور')) return;
+    try {
+      await updateUserRole(selectedUser.id, roleToAssign);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر تحديث دور المستخدم.');
+      setRoleToAssign(selectedUser.role);
+    }
+  };
 
   // If not admin, block completely from viewing or accessing Admin Control
   if (currentUser.role !== 'admin') {
@@ -532,6 +562,15 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 <p className="text-xs text-slate-500 mt-1">
                   الدور: {selectedUser.role === 'admin' ? 'مدير عام كامل الصلاحيات' : selectedUser.role === 'accountant' ? 'محاسب مالي' : 'مدخل بيانات شاحنات'}
                 </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <label htmlFor="selected-user-role" className="text-xs font-semibold text-slate-600">تغيير الدور</label>
+                  <select id="selected-user-role" value={roleToAssign} onChange={(event) => setRoleToAssign(event.target.value as UserRole)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800">
+                    <option value="admin">مدير عام</option>
+                    <option value="accountant">محاسب</option>
+                    <option value="data_entry">مدخل بيانات</option>
+                  </select>
+                  <button type="button" disabled={roleToAssign === selectedUser.role} onClick={() => void handleChangeSelectedUserRole()} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">حفظ الدور</button>
+                </div>
               </div>
 
               {/* Account status */}
@@ -790,6 +829,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                   onChange={(e) => setNewUserRole(e.target.value as any)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold"
                 >
+                  <option value="admin">مدير عام (كامل الصلاحيات)</option>
                   <option value="accountant">محاسب (مالية ومستحقات وسندات قبض)</option>
                   <option value="data_entry">مدخل بيانات (تشغيل وحركات شاحنات فقط)</option>
                 </select>

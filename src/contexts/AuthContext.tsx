@@ -19,6 +19,7 @@ interface AuthContextType {
   setCurrentUserId: (id: string) => void;
   verifyCurrentPassword: (password: string) => Promise<boolean>;
   updateUserPermissions: (userId: string, permissions: RolePermissions) => Promise<void>;
+  updateUserRole: (userId: string, role: UserRole) => Promise<void>;
   updateUserStatus: (userId: string, isActive: boolean) => Promise<void>;
   updateUserPassword: (userId: string, newPassword: string) => Promise<void>;
   addNewUser: (user: Omit<ManagedUser, 'id' | 'created_at'> & { password: string }) => Promise<void>;
@@ -297,6 +298,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateUserPermissions = (userId: string, permissions: RolePermissions) => invokeUserAdmin('update_permissions', { user_id: userId, permissions });
+  const updateUserRole = (userId: string, role: UserRole) => invokeUserAdmin('update_role', { user_id: userId, role });
   const updateUserStatus = (userId: string, isActive: boolean) => invokeUserAdmin('update_status', { user_id: userId, is_active: isActive });
   const updateUserPassword = (userId: string, newPassword: string) => invokeUserAdmin('update_password', { user_id: userId, password: newPassword });
   const addNewUser = (user: Omit<ManagedUser, 'id' | 'created_at'> & { password: string }) => invokeUserAdmin('create', {
@@ -311,7 +313,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     currentUser, users, isAuthenticated, isLoading, isPasswordRecovery, sessionNotice, login,
     requestPasswordRecovery, completePasswordRecovery, finishPasswordRecovery,
     logout, setCurrentUserId, verifyCurrentPassword,
-    updateUserPermissions, updateUserStatus, updateUserPassword, addNewUser, deleteUser,
+    updateUserPermissions, updateUserRole, updateUserStatus, updateUserPassword, addNewUser, deleteUser,
     canViewFinancials: isAdmin || perms.can_view_financials,
     canViewSystemRevenue: isAdmin || perms.can_view_system_revenue,
     canAddMovements: isAdmin || perms.can_add_movements,

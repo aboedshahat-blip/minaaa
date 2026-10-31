@@ -88,6 +88,17 @@ Deno.serve(async (request) => {
     if (!body.permissions || typeof body.permissions !== 'object') return respond({ error: 'الصلاحيات غير صالحة.' }, 400);
     const { error } = await admin.from('app_user_profiles').update({ permissions: body.permissions }).eq('user_id', targetId);
     if (error) return respond({ error: 'تعذر حفظ الصلاحيات.' }, 400);
+  } else if (action === 'update_role') {
+    const role = String(body.role || '');
+    if (!['admin', 'accountant', 'data_entry'].includes(role)) return respond({ error: 'نوع الحساب غير صالح.' }, 400);
+    if (target.role === 'admin' && role !== 'admin' && target.is_active) {
+      if (targetId === callerData.user.id) return respond({ error: 'لا يمكن تغيير دور حسابك الحالي. عيّن مديرًا آخر أولًا ثم ادخل بحسابه.' }, 409);
+      const { count, error: countError } = await admin.from('app_user_profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
+      if (countError) return respond({ error: 'تعذر التأكد من وجود مدير بديل؛ لم يتغير الدور.' }, 400);
+      if ((count || 0) <= 1) return respond({ error: 'لا يمكن تغيير دور آخر مدير نشط.' }, 409);
+    }
+    const { error } = await admin.from('app_user_profiles').update({ role }).eq('user_id', targetId);
+    if (error) return respond({ error: 'تعذر تحديث دور المستخدم.' }, 400);
   } else if (action === 'update_status') {
     if (typeof body.is_active !== 'boolean') return respond({ error: 'حالة الحساب غير صالحة.' }, 400);
     if (!body.is_active && target.role === 'admin') {
