@@ -74,7 +74,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
           #official-clean-manifest-print-zone table { table-layout: fixed; width: 100%; direction: rtl; }
           #official-clean-manifest-print-zone thead { display: table-header-group !important; }
           #official-clean-manifest-print-zone tfoot { display: table-footer-group !important; }
-          #official-clean-manifest-print-zone th, #official-clean-manifest-print-zone td { overflow-wrap: anywhere; word-break: normal; line-height: 1.5; padding: 6px 4px !important; font-size: 10pt !important; }
+          #official-clean-manifest-print-zone th, #official-clean-manifest-print-zone td { text-align: center !important; vertical-align: middle !important; white-space: normal !important; overflow-wrap: anywhere; word-break: normal; line-height: 1.5; padding: 6px 4px !important; font-size: 10pt !important; }
           #official-clean-manifest-print-zone th { font-size: 9pt !important; }
           #official-clean-manifest-print-zone tfoot tr, #official-clean-manifest-print-zone tfoot td { break-inside: avoid !important; page-break-inside: avoid !important; }
           #official-clean-manifest-print-zone .manifest-stamp { break-inside: avoid; margin: 0 !important; padding-top: 2mm !important; }

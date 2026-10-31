@@ -132,11 +132,13 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             padding: 6px 5px;
             border: 1px solid #cbd5e1;
             text-align: center;
+            vertical-align: middle;
+            white-space: normal;
             overflow-wrap: anywhere;
-            word-break: break-word;
-            line-height: 1.4;
+            word-break: normal;
+            line-height: 1.45;
           }
-          th { overflow-wrap: anywhere; line-height: 1.35; }
+          th { text-align: center; vertical-align: middle; white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.35; }
           tr:nth-child(even) { background-color: #f8fafc; }
           .totals-table {
             width: 50%;

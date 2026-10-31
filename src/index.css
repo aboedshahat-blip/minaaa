@@ -58,6 +58,15 @@
   .print-only {
     display: block !important;
   }
+  .client-report-print table th,
+  .client-report-print table td {
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: normal !important;
+    line-height: 1.45 !important;
+  }
   @page {
     size: landscape;
     margin: 8mm;

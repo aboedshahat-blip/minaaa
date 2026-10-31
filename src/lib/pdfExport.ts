@@ -10,6 +10,17 @@ const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (
   "'": '&#39;',
 }[character] as string));
 
+const centerTableCells = (root: ParentNode) => {
+  root.querySelectorAll<HTMLTableCellElement>('table th, table td').forEach((cell) => {
+    cell.style.textAlign = 'center';
+    cell.style.verticalAlign = 'middle';
+    cell.style.whiteSpace = 'normal';
+    cell.style.overflowWrap = 'anywhere';
+    cell.style.wordBreak = 'normal';
+    cell.style.lineHeight = '1.45';
+  });
+};
+
 const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5, repeatTransportStamp = false) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -104,18 +115,18 @@ export async function exportMovementsToOfficialPdf(
   const tableRows = movements.map(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #cbd5e1; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; font-weight: bold; text-align: center; color: #0f172a;">${escapeHtml(m.truck_no || '-')}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.truck_weight ?? 7.5}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.truck_axles ?? 20}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${escapeHtml(m.trailer_no || '-')}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.trailer_weight ?? 11.5}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center;">${m.trailer_axles ?? 30}</td>
-      <td style="padding: 7px 8px; border: 1px solid #94a3b8; font-weight: 600; color: #1e293b;">${escapeHtml(m.driver_name || '-')}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-family: monospace; font-size: 11px;">${escapeHtml(m.declaration_no || '-')}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-family: monospace; font-weight: bold; color: #1d4ed8; font-size: 11px;">${escapeHtml(m.container_no || '-')}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${escapeHtml(m.container_desc || '-')}</td>
-      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; font-size: 11px;">${escapeHtml(m.container_path || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-weight: bold; color: #0f172a;">${escapeHtml(m.truck_no || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45;">${m.truck_weight ?? 7.5}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45;">${m.truck_axles ?? 20}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45;">${escapeHtml(m.trailer_no || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45;">${m.trailer_weight ?? 11.5}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45;">${m.trailer_axles ?? 30}</td>
+      <td style="padding: 7px 8px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-weight: 600; color: #1e293b;">${escapeHtml(m.driver_name || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-family: monospace; font-size: 11px;">${escapeHtml(m.declaration_no || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-family: monospace; font-weight: bold; color: #1d4ed8; font-size: 11px;">${escapeHtml(m.container_no || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-size: 11px;">${escapeHtml(m.container_desc || '-')}</td>
+      <td style="padding: 7px 6px; border: 1px solid #94a3b8; text-align: center; vertical-align: middle; overflow-wrap: anywhere; line-height: 1.45; font-size: 11px;">${escapeHtml(m.container_path || '-')}</td>
     </tr>
   `
     );
@@ -193,6 +204,7 @@ export async function exportMovementsToOfficialPdf(
           <tbody>${pageRows}</tbody>
         </table>
         ${stampFooter}`;
+      centerTableCells(container);
       const canvas = await html2canvas(container, {
         scale: 2,
         useCORS: true,
@@ -292,16 +304,16 @@ export async function exportCustomerStatementPdf(
       (m, idx) => `
     <tr style="border-bottom: 1px solid #e2e8f0; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding: 6px 4px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #1e3a8a;">${idx + 1}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}<br><span style="font-family:Arial,sans-serif;font-size:9px;font-weight:normal;color:#475569;">${escapeHtml(m.container_desc || '-')} · ${escapeHtml(m.container_path || '-')}</span></td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace;">${escapeHtml(m.declaration_no || '-')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center; direction:ltr; unicode-bidi:plaintext;">${escapeHtml(m.truck_no || '-')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-size: 12px;">${escapeHtml(m.movement_date || '-')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-size: 11px; color: #4338ca; direction:ltr; unicode-bidi:plaintext; overflow-wrap:anywhere;">${escapeHtml(m.cashier_receipt_no || '-')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: bold;">${(Number(m.cashier_invoice) || 0).toLocaleString('en-US')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #1d4ed8;">${(Number(m.system_commission) || 0).toLocaleString('en-US')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: #0f766e;">${(Number(m.nafez_commission) || 0).toLocaleString('en-US')}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; color: ${m.discount ? '#e11d48' : '#64748b'};">${m.discount ? `${Number(m.discount).toLocaleString('en-US')}-` : '0'}</td>
-      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; font-family: monospace; font-weight: 900; background-color: #eff6ff;">${(Number(m.total_amount) || 0).toLocaleString('en-US')} ج.م</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align:center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace; font-weight: bold; color: #1d4ed8;">${escapeHtml(m.container_no || '-')}<br><span style="font-family:Arial,sans-serif;font-size:9px;font-weight:normal;color:#475569;">${escapeHtml(m.container_desc || '-')} · ${escapeHtml(m.container_path || '-')}</span></td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace;">${escapeHtml(m.declaration_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; font-weight: 600; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; direction:ltr; unicode-bidi:plaintext;">${escapeHtml(m.truck_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-size: 12px;">${escapeHtml(m.movement_date || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; word-break:normal; line-height:1.45; font-family: monospace; font-size: 11px; color: #4338ca; direction:ltr; unicode-bidi:plaintext;">${escapeHtml(m.cashier_receipt_no || '-')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace; font-weight: bold;">${(Number(m.cashier_invoice) || 0).toLocaleString('en-US')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace; color: #1d4ed8;">${(Number(m.system_commission) || 0).toLocaleString('en-US')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace; color: #0f766e;">${(Number(m.nafez_commission) || 0).toLocaleString('en-US')}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace; color: ${m.discount ? '#e11d48' : '#64748b'};">${m.discount ? `${Number(m.discount).toLocaleString('en-US')}-` : '0'}</td>
+      <td style="padding: 8px 6px; border: 1px solid #cbd5e1; text-align: center; vertical-align:middle; overflow-wrap:anywhere; line-height:1.45; font-family: monospace; font-weight: 900; background-color: #eff6ff;">${(Number(m.total_amount) || 0).toLocaleString('en-US')} ج.م</td>
     </tr>
   `
     )
@@ -337,7 +349,7 @@ export async function exportCustomerStatementPdf(
     </div>
 
     <!-- Movements Table -->
-    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; border: 1px solid #cbd5e1; text-align: right; margin-bottom: 15px; overflow-wrap:anywhere;word-break:break-word;">
+    <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; border: 1px solid #cbd5e1; text-align: center; vertical-align: middle; margin-bottom: 15px; overflow-wrap:anywhere; word-break:normal; line-height:1.45;">
       <thead>
         <tr style="background-color: #0f172a; color: #ffffff; text-align: center;">
           <th style="padding: 7px 4px; border: 1px solid #334155; width: 30px;">م</th>
@@ -409,6 +421,7 @@ export async function exportCustomerStatementPdf(
 
   `;
 
+  centerTableCells(container);
   document.body.appendChild(container);
 
   try {
