@@ -1,8 +1,8 @@
--- Deprecated unsafe standalone migration. This script previously granted anon
--- users unrestricted access. Run secure_auth_and_rls.sql instead; it creates
--- this table and installs authenticated, active-user policies.
--- Refuse to create an insecure partial setup when the security migration has
--- not been applied.
+-- DEPRECATED one-off patch. Office expenses and their storage policies are
+-- managed by the ordered migrations. Do not run this standalone script.
+do $$ begin raise exception 'Deprecated script. Apply pending supabase/migrations/ instead.'; end $$;
+
+/*
 
 do $$ begin
   if to_regprocedure('public.app_user_is_active()') is null then
@@ -64,3 +64,4 @@ create policy office_expense_receipts_app_access
   to authenticated
   using (bucket_id = 'office-expense-receipts' and public.app_user_is_active())
   with check (bucket_id = 'office-expense-receipts' and public.app_user_is_active());
+*/

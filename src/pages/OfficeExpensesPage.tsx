@@ -111,7 +111,7 @@ export const OfficeExpensesPage: React.FC<OfficeExpensesPageProps> = ({ expenses
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm"><div className="flex items-center gap-2 text-sm text-amber-800"><Wallet size={17} />إجمالي المصروفات المعروضة</div><strong className="mt-2 block text-2xl text-amber-900">{money(total)}</strong></div>
     </section>
 
-    {cloudReady === false && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-900" role="status"><strong>مزامنة مصاريف المكتب تحتاج إعداد قاعدة البيانات.</strong><p>شغّل ملف <code dir="ltr">supabase/add_office_expenses.sql</code> في محرر SQL داخل Supabase. سجلات المصروفات تُحفظ محلياً لحين تجهيز الجدول؛ رفع الإيصالات يحتاج كذلك إعداد المخزن الذي ينشئه الملف.</p></div>}
+    {cloudReady === false && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-900" role="status"><strong>مزامنة مصاريف المكتب تحتاج تحديث قاعدة البيانات.</strong><p>قاعدة البيانات لا تحتوي جدول المصروفات بعد. على المسؤول تطبيق الترحيلات المعلقة من مجلد <code dir="ltr">supabase/migrations/</code> باستخدام مسار النشر المعتمد، ثم إعادة تحميل الصفحة. ستظل السجلات المحلية محفوظة حتى يكتمل التحديث.</p></div>}
 
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">سجل المصروفات</h2><button onClick={exportCsv} type="button" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Download size={16} />تصدير النتائج</button></div>

@@ -1,8 +1,8 @@
--- Secure existing VIB data before production use.
--- Run only after confirming a Supabase project backup exists.
--- Moves financial columns out of movements so data-entry accounts cannot read them.
+-- DEPRECATED duplicate of the historical initial security migration.
+-- Do not run this standalone copy. Use supabase/migrations/ in order.
+do $$ begin raise exception 'Deprecated script. Apply pending supabase/migrations/ instead.'; end $$;
 
-begin;
+/*
 
 create table if not exists public.app_user_profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -251,3 +251,4 @@ commit;
 -- After creating/inviting the owner in Supabase Auth, promote that profile once:
 -- update public.app_user_profiles set role='admin', permissions='{}'::jsonb
 -- where email=lower('OWNER_EMAIL_HERE');
+*/
