@@ -48,6 +48,8 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [fileName, setFileName] = useState('');
   const [parsedRows, setParsedRows] = useState<Partial<Movement>[]>([]);
+  const [driverNameReviewRows, setDriverNameReviewRows] = useState<number[]>([]);
+  const [showAllPreviewRows, setShowAllPreviewRows] = useState(false);
   const [originalHeaders, setOriginalHeaders] = useState<string[]>([]);
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashierInvoice, setDefaultCashierInvoice] = useState<number>(0);
@@ -107,9 +109,14 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     try {
       const result = await parseUploadedSheet(file);
       setParsedRows(result.rows);
+      const namesToReview = result.driverNameReviewRows || [];
+      setDriverNameReviewRows(namesToReview);
+      setShowAllPreviewRows(namesToReview.length > 0);
       setOriginalHeaders(result.headers);
       if (result.needsDriverReview) {
-        alert('تمت قراءة الملف. راجع أسماء السائقين في الجدول قبل إضافتها، لأن وضوح النص في ملف PDF قد يؤثر على القراءة.');
+        alert(namesToReview.length
+          ? `تمت قراءة الملف. أسماء السائقين المظللة (${namesToReview.length} صف) قُرئت آليًا من PDF؛ راجعها وعدّل غير الصحيح في المعاينة قبل الحفظ.`
+          : 'تمت قراءة الملف. توجد أسماء سائقين تحتاج مراجعة في المعاينة قبل الحفظ.');
       }
     } catch (err: any) {
       console.error(err);
@@ -123,6 +130,8 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     if (!parsedRows.length && !fileName) return;
     if (!await confirmAction(`سيتم إلغاء الملف ${fileName ? `(${fileName})` : 'الحالي'} وحذف ${parsedRows.length} صف من المعاينة فقط. لن تُضاف أي بيانات للنظام. هل تريد الإلغاء؟`, 'نعم، ألغِ الشيت')) return;
     setParsedRows([]);
+    setDriverNameReviewRows([]);
+    setShowAllPreviewRows(false);
     setOriginalHeaders([]);
     setFileName('');
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -138,7 +147,10 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       alert('لا توجد بيانات مستخلصة لحفظها');
       return;
     }
-    if (!await confirmAction(`هل راجعت الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${parsedRows.length}.`, 'نعم، راجعت الشيت')) return;
+    const nameReviewNote = driverNameReviewRows.length
+      ? ` راجع أسماء السائقين المظللة (${driverNameReviewRows.length} صف) وصحح أي خطأ قبل الاعتماد.`
+      : '';
+    if (!await confirmAction(`هل راجعت الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${parsedRows.length}.${nameReviewNote}`, 'نعم، راجعت الشيت')) return;
     if (!await confirmAction(`هل تريد رفع ${parsedRows.length} حركة إلى السيستم ومزامنتها؟`, 'نعم، ارفع الشيت')) return;
     if (savingLockRef.current) return;
 
@@ -477,10 +489,25 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                   <span className="text-xs font-bold text-slate-700">
                     معاينة البيانات المصفاة طبقاً لاسطمبة السيستم المعتمدة:
                   </span>
-                  <span className="text-xs text-slate-500">
-                    عدد الصفوف: {parsedRows.length}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">عدد الصفوف: {parsedRows.length}</span>
+                    {parsedRows.length > 30 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllPreviewRows((current) => !current)}
+                        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-50"
+                      >
+                        {showAllPreviewRows ? 'عرض أول 30 حركة' : `عرض كل الحركات (${parsedRows.length})`}
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {driverNameReviewRows.length > 0 && (
+                  <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+                    راجع أسماء السائقين المظللة؛ تم استخراجها آليًا من PDF وقد يخطئ التعرف في حرف أو مسافة. يمكنك تعديل الاسم هنا قبل الحفظ.
+                  </div>
+                )}
 
                 <div className="overflow-x-auto max-h-72">
                   <table className="w-full text-xs text-right border-collapse">
@@ -501,7 +528,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
-                      {parsedRows.slice(0, 30).map((row, idx) => (
+                      {parsedRows.slice(0, showAllPreviewRows ? parsedRows.length : 30).map((row, idx) => (
                         <tr key={idx} className="hover:bg-slate-50">
                           <td className="p-2 border border-slate-200 text-center font-bold text-blue-900">
                             {idx + 1}
@@ -512,7 +539,20 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                           <td className="p-2 border border-slate-200">{row.trailer_no || '-'}</td>
                           <td className="p-2 border border-slate-200 text-center">{row.trailer_weight ?? 11.5}</td>
                           <td className="p-2 border border-slate-200 text-center">{row.trailer_axles ?? 30}</td>
-                          <td dir="auto" className="p-2 border border-slate-200">{row.driver_name || '-'}</td>
+                          <td dir="auto" className={`p-1 border border-slate-200 ${driverNameReviewRows.includes(idx) ? 'bg-amber-50' : ''}`}>
+                            {driverNameReviewRows.includes(idx) ? (
+                              <input
+                                type="text"
+                                dir="auto"
+                                aria-label={`مراجعة اسم السائق في الصف ${idx + 1}`}
+                                value={row.driver_name || ''}
+                                onChange={(event) => setParsedRows((current) => current.map((item, itemIndex) =>
+                                  itemIndex === idx ? { ...item, driver_name: event.target.value } : item
+                                ))}
+                                className="w-36 rounded-md border border-amber-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
+                              />
+                            ) : (row.driver_name || '-')}
+                          </td>
                           <td className="p-2 border border-slate-200 font-mono">{row.declaration_no || '-'}</td>
                           <td className="p-2 border border-slate-200 font-mono">{row.container_no || '-'}</td>
                           <td className="p-2 border border-slate-200">{row.container_desc || '-'}</td>
@@ -522,7 +562,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                     </tbody>
                   </table>
                 </div>
-                {parsedRows.length > 30 && (
+                {parsedRows.length > 30 && !showAllPreviewRows && (
                   <div className="bg-slate-50 p-2 text-center text-xs text-slate-500 border-t">
                     يتم عرض أول 30 صف للمعاينة، وسيتم حفظ جميع الـ {parsedRows.length} صف كاملة.
                   </div>

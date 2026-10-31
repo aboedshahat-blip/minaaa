@@ -122,6 +122,7 @@ export const parseUploadedSheet = async (file: File): Promise<{
   rawRowCount: number;
   fileType?: string;
   needsDriverReview?: boolean;
+  driverNameReviewRows?: number[];
 }> => {
   const { parseAnyDocument } = await import('./fileParser');
   return parseAnyDocument(file);

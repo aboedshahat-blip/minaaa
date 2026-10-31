@@ -8,6 +8,7 @@ export interface ParsedDocumentResult {
   rawRowCount: number;
   fileType: 'excel' | 'word' | 'pdf';
   needsDriverReview?: boolean;
+  driverNameReviewRows?: number[];
 }
 
 const readArabicNamesFromPdf = async (
@@ -120,6 +121,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   let ocrWorker: OcrWorker | undefined;
   let ocrUnavailable = false;
   let needsDriverReview = false;
+  const driverNameReviewRows = new Set<number>();
   // Many booking PDFs print the table header only on the first page. Keep the
   // container columns so later pages can still read route/description cells.
   let knownContainerPathCenter: number | null = null;
@@ -439,6 +441,13 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     });
 
     if (rowsNeedingOcr.length > 0 && driverColumnWidth > 0 && !ocrUnavailable) {
+      // OCR can return plausible but incorrect Arabic names with a high
+      // confidence score. Keep each OCR-derived row explicitly reviewable
+      // before it is saved instead of trusting confidence as proof.
+      needsDriverReview = true;
+      rowsNeedingOcr.forEach(({ movementIndexes }) => {
+        movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
+      });
       try {
         if (!ocrWorker) {
           const { createWorker, PSM } = await import('tesseract.js');
@@ -471,6 +480,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       }
     } else if (rowsNeedingOcr.length > 0) {
       needsDriverReview = true;
+      rowsNeedingOcr.forEach(({ movementIndexes }) => {
+        movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
+      });
     }
   }
 
@@ -482,6 +494,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     rawRowCount: allMovements.length,
     fileType: 'pdf',
     needsDriverReview,
+    driverNameReviewRows: Array.from(driverNameReviewRows),
   };
 };
 
