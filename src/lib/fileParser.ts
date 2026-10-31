@@ -98,6 +98,23 @@ const joinArabicNameFragments = (value: string) => value
   .replace(/\s+/g, ' ')
   .trim();
 
+const joinPositionedArabicNameFragments = (
+  items: { x: number; str: string; width?: number }[],
+) => {
+  const ordered = [...items].sort((a, b) => b.x - a.x);
+  const joined = ordered.reduce((value, item, index) => {
+    if (index === 0) return item.str.trim();
+    const rightItem = ordered[index - 1];
+    const gap = rightItem.x - (item.x + (item.width || item.str.length * 5));
+    return `${value}${gap <= 1.5 ? '' : ' '}${item.str.trim()}`;
+  }, '');
+  return joinArabicNameFragments(joined);
+};
+
+const normalizeArabicNameForComparison = (value: string) => normalizePdfArabicText(value)
+  .replace(/[أإآ]/g, 'ا')
+  .replace(/ى/g, 'ي');
+
 const pdfTextContainsArabicLabel = (text: string, label: string) => {
   const normalizedText = normalizePdfArabicText(text);
   const normalizedLabel = normalizePdfArabicText(label);
@@ -122,6 +139,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   let ocrUnavailable = false;
   let needsDriverReview = false;
   const driverNameReviewRows = new Set<number>();
+  const driverNameCorrections = new Map<string, string>();
   // Many booking PDFs print the table header only on the first page. Keep the
   // container columns so later pages can still read route/description cells.
   let knownContainerPathCenter: number | null = null;
@@ -341,10 +359,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
           const center = item.x + (item.width || item.str.length * 5) / 2;
           return center >= driverLeft && center < driverRight && /[ء-ي]/.test(item.str);
         });
-        const orderedDriverItems = driverItems.length > 1 && driverItems.every((item) => item.dir === 'rtl')
-          ? [...driverItems].sort((a, b) => b.x - a.x)
-          : driverItems;
-        driver_name = joinArabicNameFragments(orderedDriverItems.map((item) => item.str).join(' '));
+        driver_name = driverItems.length > 1 && driverItems.every((item) => item.dir === 'rtl')
+          ? joinPositionedArabicNameFragments(driverItems)
+          : joinArabicNameFragments(driverItems.map((item) => item.str).join(' '));
       } else if (axleIdx > 0) {
         driver_name = joinArabicNameFragments(afterDec.slice(0, axleIdx).join(' '));
       }
@@ -432,22 +449,32 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       dataRowYs.push(bucket.y);
     });
 
-    // Use OCR only for rows whose driver cell could not be read from the PDF
-    // text. The saved column position is reused when later pages omit headers.
-    const rowsNeedingOcr = dataRowYs.flatMap((rowY, index) => {
+    // Use OCR for blank names and one sample from each repeated name group.
+    // Some Arabic PDF fonts produce a non-empty but incorrect text layer; OCR
+    // the repeated sample to catch that without processing every row.
+    const pageRowsByDriverName = new Map<string, number[]>();
+    dataRowMovementIndexes.forEach(([movementIndex]) => {
+      const driverName = allMovements[movementIndex]?.driver_name?.trim() || '';
+      const comparisonName = normalizeArabicNameForComparison(driverName);
+      if (!comparisonName) return;
+      pageRowsByDriverName.set(comparisonName, [...(pageRowsByDriverName.get(comparisonName) || []), movementIndex]);
+    });
+    const rowsToVerify = dataRowYs.flatMap((rowY, index) => {
       const movementIndex = dataRowMovementIndexes[index]?.[0];
       const driverName = movementIndex == null ? '' : allMovements[movementIndex]?.driver_name || '';
-      return driverName ? [] : [{ rowY, movementIndexes: dataRowMovementIndexes[index] || [] }];
+      if (!driverName) return [{ rowY, movementIndexes: dataRowMovementIndexes[index] || [], sourceName: '' }];
+      const sourceName = normalizeArabicNameForComparison(driverName);
+      const matchingRows = pageRowsByDriverName.get(sourceName) || [];
+      // Some booking PDFs have a broken Arabic font map in their text layer.
+      // Verify one representative for repeated names instead of OCR'ing every
+      // row, then apply a confident correction to that repeated group.
+      if (matchingRows.length > 1 && matchingRows[0] === movementIndex) {
+        return [{ rowY, movementIndexes: matchingRows, sourceName }];
+      }
+      return [];
     });
 
-    if (rowsNeedingOcr.length > 0 && driverColumnWidth > 0 && !ocrUnavailable) {
-      // OCR can return plausible but incorrect Arabic names with a high
-      // confidence score. Keep each OCR-derived row explicitly reviewable
-      // before it is saved instead of trusting confidence as proof.
-      needsDriverReview = true;
-      rowsNeedingOcr.forEach(({ movementIndexes }) => {
-        movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
-      });
+    if (rowsToVerify.length > 0 && driverColumnWidth > 0 && !ocrUnavailable) {
       try {
         if (!ocrWorker) {
           const { createWorker, PSM } = await import('tesseract.js');
@@ -459,18 +486,30 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         }
         const recognizedNames = await readArabicNamesFromPdf(
           page,
-          rowsNeedingOcr.map((row) => row.rowY),
+          rowsToVerify.map((row) => row.rowY),
           driverColumnCenter,
           driverColumnWidth,
           ocrWorker,
         );
         recognizedNames.forEach(({ name, confidence }, index) => {
-          const movementIndexes = rowsNeedingOcr[index]?.movementIndexes || [];
+          const rowToVerify = rowsToVerify[index];
+          const movementIndexes = rowToVerify?.movementIndexes || [];
           if (name && /[\u0600-\u06ff]/.test(name)) {
-            movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = name; });
-            if (confidence < 70) needsDriverReview = true;
+            const recognizedName = joinArabicNameFragments(name);
+            if (rowToVerify?.sourceName) {
+              if (confidence >= 65) driverNameCorrections.set(rowToVerify.sourceName, recognizedName);
+              if (normalizeArabicNameForComparison(recognizedName) !== rowToVerify.sourceName || confidence < 70) {
+                needsDriverReview = true;
+                movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
+              }
+            } else {
+              movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = recognizedName; });
+              needsDriverReview = true;
+              movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
+            }
           } else {
             needsDriverReview = true;
+            movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
           }
         });
       } catch (error) {
@@ -478,9 +517,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
         ocrUnavailable = true;
         needsDriverReview = true;
       }
-    } else if (rowsNeedingOcr.length > 0) {
+    } else if (rowsToVerify.length > 0) {
       needsDriverReview = true;
-      rowsNeedingOcr.forEach(({ movementIndexes }) => {
+      rowsToVerify.forEach(({ movementIndexes }) => {
         movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
       });
     }
@@ -488,13 +527,23 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
 
   if (ocrWorker) await ocrWorker.terminate();
 
+  allMovements.forEach((movement, movementIndex) => {
+    const sourceName = normalizeArabicNameForComparison(movement.driver_name || '');
+    const correctedName = driverNameCorrections.get(sourceName);
+    if (correctedName && normalizeArabicNameForComparison(correctedName) !== sourceName) {
+      movement.driver_name = correctedName;
+      driverNameReviewRows.add(movementIndex);
+      needsDriverReview = true;
+    }
+  });
+
   return {
     rows: allMovements,
     headers: STANDARD_HEADERS,
     rawRowCount: allMovements.length,
     fileType: 'pdf',
     needsDriverReview,
-    driverNameReviewRows: Array.from(driverNameReviewRows),
+      driverNameReviewRows: Array.from(driverNameReviewRows),
   };
 };
 
