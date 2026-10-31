@@ -24,6 +24,9 @@ import {
   DollarSign,
   FileSpreadsheet,
   Trash2,
+  ChevronDown,
+  ChevronUp,
+  Activity,
 } from 'lucide-react';
 
 interface AdminControlPageProps {
@@ -62,6 +65,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     updateUserStatus,
     updateUserPassword,
     addNewUser,
+    deleteUser,
     verifyCurrentPassword,
   } = useAuth();
 
@@ -88,6 +92,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [isActivityExpanded, setIsActivityExpanded] = useState(false);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
   const [restorePassword, setRestorePassword] = useState('');
@@ -96,6 +101,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [isRestoring, setIsRestoring] = useState(false);
   const [isClearingOperationalData, setIsClearingOperationalData] = useState(false);
   const [clearOperationalDataError, setClearOperationalDataError] = useState<string | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   const refreshActivity = async () => {
     setIsLoadingActivity(true);
@@ -103,7 +109,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     catch (error) { setActivityError(error instanceof Error ? error.message : 'تعذر تحميل سجل النشاط.'); }
     finally { setIsLoadingActivity(false); }
   };
-  useEffect(() => { void refreshActivity(); }, []);
+  useEffect(() => { if (isActivityExpanded && !activityLogs.length) void refreshActivity(); }, [isActivityExpanded]);
 
   const openLatestUndo = () => {
     const latestBackup = safetyBackups[0];
@@ -309,6 +315,23 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     }
   };
 
+  const handleDeleteSelectedUser = async () => {
+    if (!selectedUser) return;
+    if (!await confirmAction(`سيتم إزالة حساب ${selectedUser.name} (${selectedUser.email || selectedUser.username}) من النظام نهائيًا، ولن يستطيع تسجيل الدخول بعد ذلك. سجل نشاطه السابق سيظل محفوظًا. هل تريد المتابعة؟`, 'نعم، أزل المستخدم')) return;
+    setIsDeletingUser(true);
+    try {
+      await deleteUser(selectedUser.id);
+      const nextUser = users.find((user) => user.id !== selectedUser.id);
+      setActiveEditingUserId(nextUser?.id || '');
+      setEditingPassword('');
+      alert('تمت إزالة المستخدم. بقي سجل نشاطه السابق محفوظًا للمدير.');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذرت إزالة المستخدم.');
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
   // If not admin, block completely from viewing or accessing Admin Control
   if (currentUser.role !== 'admin') {
     return (
@@ -468,16 +491,24 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
-          <div><h2 className="font-black text-slate-900">سجل رفع وتعديل البيانات</h2><p className="mt-1 text-xs text-slate-500">يعرض اسم المستخدم والبريد ووقت رفع الشيت أو تعديل الحركة وربط الفاتورة.</p></div>
-          <button type="button" onClick={() => void refreshActivity()} disabled={isLoadingActivity} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">{isLoadingActivity ? 'جارٍ التحديث…' : 'تحديث السجل'}</button>
+          <button type="button" aria-expanded={isActivityExpanded} onClick={() => setIsActivityExpanded((open) => !open)} className="flex min-w-0 items-center gap-2 text-right">
+            <Activity className="h-5 w-5 shrink-0 text-blue-700" />
+            <span className="font-black text-slate-900">سجل رفع وتعديل البيانات</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{activityLogs.length}</span>
+            {isActivityExpanded ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+          </button>
+          {isActivityExpanded && <button type="button" onClick={() => void refreshActivity()} disabled={isLoadingActivity} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">{isLoadingActivity ? 'جارٍ التحديث…' : 'تحديث السجل'}</button>}
         </div>
-        <div className="max-h-[28rem] overflow-auto">
-          {activityError && <p role="status" className="m-3 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-800">{activityError} سيظهر السجل بعد تطبيق تحديث قاعدة البيانات.</p>}
-          <table className="w-full min-w-[760px] text-right text-xs"><thead className="sticky top-0 bg-slate-900 text-white"><tr>{['الوقت', 'المستخدم', 'العملية', 'الملف / السجل', 'التفاصيل'].map((heading) => <th key={heading} className="px-3 py-2.5">{heading}</th>)}</tr></thead>
-            <tbody className="divide-y divide-slate-100">{activityLogs.map((entry) => <tr key={entry.id} className="hover:bg-slate-50"><td className="whitespace-nowrap px-3 py-2">{new Date(entry.created_at).toLocaleString('ar-EG')}</td><td className="px-3 py-2"><strong className="block">{entry.actor_name}</strong><span className="text-slate-500">{entry.actor_email}</span></td><td className="px-3 py-2">{entry.action === 'upload' ? 'رفع' : entry.action === 'delete' ? 'إزالة' : entry.action === 'create' ? 'إضافة' : 'تعديل'}</td><td className="px-3 py-2">{entry.entity_name}</td><td className="px-3 py-2">{entry.summary}</td></tr>)}
-              {!activityLogs.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">لا توجد أنشطة مسجلة بعد.</td></tr>}</tbody>
-          </table>
-        </div>
+        {isActivityExpanded && <>
+          <p className="px-4 pt-3 text-xs text-slate-500">يعرض اسم المستخدم والبريد ووقت رفع الشيت أو تعديل الحركة وربط الفاتورة.</p>
+          <div className="max-h-[28rem] overflow-auto">
+            {activityError && <p role="status" className="m-3 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-800">{activityError} سيظهر السجل بعد تطبيق تحديث قاعدة البيانات.</p>}
+            <table className="w-full min-w-[760px] text-right text-xs"><thead className="sticky top-0 bg-slate-900 text-white"><tr>{['الوقت', 'المستخدم', 'العملية', 'الملف / السجل', 'التفاصيل'].map((heading) => <th key={heading} className="px-3 py-2.5">{heading}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100">{activityLogs.map((entry) => <tr key={entry.id} className="hover:bg-slate-50"><td className="whitespace-nowrap px-3 py-2">{new Date(entry.created_at).toLocaleString('ar-EG')}</td><td className="px-3 py-2"><strong className="block">{entry.actor_name}</strong><span className="text-slate-500">{entry.actor_email}</span></td><td className="px-3 py-2">{entry.action === 'upload' ? 'رفع' : entry.action === 'delete' ? 'إزالة' : entry.action === 'create' ? 'إضافة' : 'تعديل'}</td><td className="px-3 py-2">{entry.entity_name}</td><td className="px-3 py-2">{entry.summary}</td></tr>)}
+                {!activityLogs.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">{isLoadingActivity ? 'جارٍ تحميل السجل…' : 'لا توجد أنشطة مسجلة بعد.'}</td></tr>}</tbody>
+            </table>
+          </div>
+        </>}
       </section>
 
       {/* Users & Granular Permissions Matrix */}
@@ -573,9 +604,9 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 </div>
               </div>
 
-              {/* Account status */}
-              {selectedUser.role !== 'admin' && (
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Account status */}
+                {selectedUser.role !== 'admin' && (
                   <button
                     onClick={async () => {
                       const nextActive = !selectedUser.is_active;
@@ -593,9 +624,13 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                     {selectedUser.is_active ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
                     <span>{selectedUser.is_active ? 'الحساب مفعل' : 'الحساب معطل'}</span>
                   </button>
-
-                </div>
-              )}
+                )}
+                {selectedUser.id !== currentUser.id && (
+                  <button type="button" disabled={isDeletingUser} onClick={() => void handleDeleteSelectedUser()} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:cursor-wait disabled:opacity-50">
+                    <Trash2 className="h-3.5 w-3.5" />{isDeletingUser ? 'جارٍ الإزالة…' : 'إزالة المستخدم'}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Change Password Card */}
