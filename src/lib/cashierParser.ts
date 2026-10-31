@@ -1,5 +1,5 @@
 import { Movement } from '../types';
-import { getMovementService } from './serviceFees';
+import { getMovementService, matchesMovementService } from './serviceFees';
 
 export interface CashierInvoiceEntry {
   receipt_no: string;          // مسلسل الفاتورة (e.g. 0047-01-1/01-261021)
@@ -48,6 +48,7 @@ export interface CashierMovementCandidate {
   exactPair: boolean;
   routeMatch: boolean;
   descriptionMatch: boolean;
+  classificationMatch: boolean;
   isCurrentOwner: boolean;
 }
 
@@ -426,6 +427,7 @@ export const getCashierEntryCandidates = (
 
     const routeMatch = Boolean(entryService && getMovementService(undefined, movement.container_path) === entryService);
     const descriptionMatch = Boolean(entryService && getMovementService(undefined, movement.container_desc) === entryService);
+    const classificationMatch = matchesMovementService(entryService, movement.container_path, movement.container_desc);
 
     const movementDate = getMovementDate(movement.movement_date || '');
     const dayDistance = receiptDate != null && movementDate != null
@@ -447,6 +449,7 @@ export const getCashierEntryCandidates = (
       exactPair,
       routeMatch,
       descriptionMatch,
+      classificationMatch,
       isCurrentOwner: currentOwners.some((owner) => owner.id === movement.id),
     };
     candidateMap.set(movement.id, candidate);
@@ -458,6 +461,7 @@ export const getCashierEntryCandidates = (
     if (candidateMap.has(movement.id)) return;
     const routeMatch = Boolean(entryService && getMovementService(undefined, movement.container_path) === entryService);
     const descriptionMatch = Boolean(entryService && getMovementService(undefined, movement.container_desc) === entryService);
+    const classificationMatch = matchesMovementService(entryService, movement.container_path, movement.container_desc);
     candidateMap.set(movement.id, {
       movementId: movement.id,
       movementSeq: movement.seq,
@@ -472,6 +476,7 @@ export const getCashierEntryCandidates = (
       exactPair: false,
       routeMatch,
       descriptionMatch,
+      classificationMatch,
       isCurrentOwner: true,
     });
   });
@@ -487,7 +492,7 @@ export const getCashierEntryCandidates = (
   });
   const currentMovementId = currentOwners.length === 1 ? currentOwners[0].id : '';
   const currentCandidate = candidates.find((candidate) => candidate.movementId === currentMovementId);
-  const suggestedMovementId = currentCandidate?.exactPair && currentCandidate.routeMatch && currentCandidate.descriptionMatch
+  const suggestedMovementId = currentCandidate?.exactPair && currentCandidate.classificationMatch
     ? currentMovementId
     : '';
   return { entry, candidates, currentMovementId, suggestedMovementId };
@@ -499,14 +504,14 @@ export const getCashierEntryCandidates = (
   const entriesPerMovement = new Map<string, number>();
   candidateSets.forEach(({ candidates, currentMovementId }) => {
     if (currentMovementId) return;
-    candidates.filter((candidate) => candidate.routeMatch && candidate.descriptionMatch).forEach(({ movementId }) => {
+    candidates.filter((candidate) => candidate.classificationMatch).forEach(({ movementId }) => {
       entriesPerMovement.set(movementId, (entriesPerMovement.get(movementId) || 0) + 1);
     });
   });
 
   return candidateSets.map((candidateSet) => {
     if (candidateSet.suggestedMovementId) return candidateSet;
-    const eligibleCandidates = candidateSet.candidates.filter((candidate) => candidate.routeMatch && candidate.descriptionMatch);
+    const eligibleCandidates = candidateSet.candidates.filter((candidate) => candidate.classificationMatch);
     if (eligibleCandidates.length !== 1) return candidateSet;
     const onlyCandidate = eligibleCandidates[0];
     return (entriesPerMovement.get(onlyCandidate.movementId) || 0) === 1

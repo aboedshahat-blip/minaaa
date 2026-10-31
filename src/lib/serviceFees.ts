@@ -25,6 +25,25 @@ export const getMovementService = (
   return classify(path) || classify(category);
 };
 
+/**
+ * A cashier service may be checked against the booking path, container
+ * description, or both. Empty metadata is unknown, while conflicting populated
+ * fields must never be treated as a safe match.
+ */
+export const matchesMovementService = (
+  service: MovementService | null,
+  containerPath?: string | null,
+  containerDescription?: string | null,
+): boolean => {
+  if (!service) return false;
+  const pathService = getMovementService(undefined, containerPath);
+  const descriptionService = getMovementService(undefined, containerDescription);
+  const knownServices = [pathService, descriptionService].filter(
+    (value): value is MovementService => value !== null,
+  );
+  return knownServices.length > 0 && knownServices.every((value) => value === service);
+};
+
 export const getMovementServiceLabel = (service: MovementService | null): string => {
   if (service === 'inbound') return 'وارد حاويات';
   if (service === 'outbound') return 'صادر حاويات';

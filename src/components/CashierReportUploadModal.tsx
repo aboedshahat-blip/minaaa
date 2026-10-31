@@ -6,7 +6,7 @@ import type {
   CashierInvoiceEntry,
   CashierMatchResult,
 } from '../lib/cashierParser';
-import { getMovementService } from '../lib/serviceFees';
+import { getMovementService, matchesMovementService } from '../lib/serviceFees';
 import {
   Upload,
   FileText,
@@ -102,7 +102,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const candidateReceiptCountByMovement = new Map<string, number>();
   matchCandidates.forEach(({ candidates, currentMovementId }) => {
     if (currentMovementId) return;
-    candidates.filter((candidate) => candidate.routeMatch && candidate.descriptionMatch).forEach(({ movementId }) => {
+    candidates.filter((candidate) => candidate.classificationMatch).forEach(({ movementId }) => {
       candidateReceiptCountByMovement.set(
         movementId,
         (candidateReceiptCountByMovement.get(movementId) || 0) + 1,
@@ -220,8 +220,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
 
     const selectedMovement = movements.find((movement) => movement.id === selectedMovementId);
     const invoiceService = getMovementService(manualCategory);
-    const routeMatches = Boolean(invoiceService && getMovementService(undefined, selectedMovement?.container_path) === invoiceService);
-    const descriptionMatches = Boolean(invoiceService && getMovementService(undefined, selectedMovement?.container_desc) === invoiceService);
+    const classificationMatches = matchesMovementService(invoiceService, selectedMovement?.container_path, selectedMovement?.container_desc);
     const sysComm = selectedMovement?.system_commission ?? settings.default_system_commission ?? 200;
     const nafezComm = selectedMovement?.nafez_commission ?? settings.default_nafez_commission ?? 0;
     const cashierVal = Number(manualAmount);
@@ -252,9 +251,9 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       return m;
     });
 
-    const classificationWarning = routeMatches && descriptionMatches
+    const classificationWarning = classificationMatches
       ? ''
-      : 'تنبيه: تصنيف الفاتورة لا يطابق مسار الحاوية أو وصفها في الحركة، أو أن إحدى الخانتين غير محددة. ';
+      : 'تنبيه: تصنيف الفاتورة لا يطابق بيانات المسار والوصف المتاحة في الحركة. ';
     if (!await confirmAction(`${classificationWarning}هل تريد ربط الفاتورة بالحركة التي اخترتها يدويًا؟ المبلغ: ${cashierVal.toLocaleString()} ج.م`, 'نعم، اربطها')) return;
     const synced = await onBatchUpdateMovements(updated);
     alert(synced
@@ -289,14 +288,14 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       if (!movementId) return false;
       const candidateSet = matchCandidates.find((item) => item.entry.receipt_no === receiptNo);
       const candidate = candidateSet?.candidates.find((item) => item.movementId === movementId);
-      return Boolean(candidate && (!candidate.routeMatch || !candidate.descriptionMatch));
+      return Boolean(candidate && !candidate.classificationMatch);
     }).length;
     if (manualClassificationOverrides > 0 && !await confirmAction(
-      `تم اختيار ${manualClassificationOverrides} إيصال يدويًا رغم اختلاف أو نقص مسار الحاوية أو وصفها عن تصنيف الفاتورة. راجع الحركات المختارة جيدًا لتجنب ربط فاتورة بالحركة الخطأ. هل تريد المتابعة؟`,
+      `تم اختيار ${manualClassificationOverrides} إيصال يدويًا رغم اختلاف تصنيف الفاتورة عن بيانات المسار والوصف المتاحة. راجع الحركات المختارة جيدًا لتجنب ربط فاتورة بالحركة الخطأ. هل تريد المتابعة؟`,
       'نعم، راجعت وأريد المتابعة',
     )) return;
 
-    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين، بعد مطابقة اللوحات وتصنيف الفاتورة مع مسار الحاوية ووصفها. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
+    if (!await confirmAction(`سيتم تحديث ${matchResults.length} حركة وربط ${Object.values(selectedMovementByReceipt).filter(Boolean).length} إيصال بالحركات والعملاء المحددين، بعد مطابقة اللوحات وتصنيف الفاتورة مع بيانات المسار والوصف المتاحة. الإيصالات غير المختارة ستظل بدون ربط. هل تريد المتابعة؟`, 'نعم، احفظ الربط المحدد')) return;
     setIsSavingMatches(true);
     setSaveErrorMessage('');
     try {
@@ -615,17 +614,17 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
                                   <option value="">اترك الإيصال بدون ربط</option>
                                   {candidates.map((candidate) => (
                                     <option key={candidate.movementId} value={candidate.movementId}>
-                                      {candidate.customerName} — حركة {candidate.movementSeq} — {candidate.movementDate || 'بدون تاريخ'} — شاحنة {candidate.truckNo || '—'} / مقطورة {candidate.trailerNo || '—'} — حاوية {candidate.containerNo || '—'} — مسار {candidate.containerPath || 'غير محدد'} — وصف {candidate.containerDesc || 'غير محدد'} — {candidate.routeMatch && candidate.descriptionMatch ? 'مطابق للتصنيف' : 'مراجعة المسار/الوصف'}{candidate.isCurrentOwner ? ' — الربط الحالي' : ''}
+                                      {candidate.customerName} — حركة {candidate.movementSeq} — {candidate.movementDate || 'بدون تاريخ'} — شاحنة {candidate.truckNo || '—'} / مقطورة {candidate.trailerNo || '—'} — حاوية {candidate.containerNo || '—'} — مسار {candidate.containerPath || 'غير محدد'} — وصف {candidate.containerDesc || 'غير محدد'} — {candidate.classificationMatch ? 'مطابق للتصنيف المتاح' : 'مراجعة المسار/الوصف'}{candidate.isCurrentOwner ? ' — الربط الحالي' : ''}
                                     </option>
                                   ))}
                                 </select>
                                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
                                   {candidates.length > 1 && <span className="font-bold text-amber-700">أكثر من حركة بنفس المركبة؛ راجع العميل قبل الحفظ.</span>}
                                   {isReassigning && <span className="font-bold text-rose-700">سيُنقل الإيصال من العميل المرتبط حاليًا إلى الاختيار الجديد.</span>}
-                                  {selectedId && (() => { const chosen = candidates.find((candidate) => candidate.movementId === selectedId); return chosen && (!chosen.routeMatch || !chosen.descriptionMatch) ? <span className="font-bold text-rose-700">اللوحات متطابقة لكن مسار الحاوية أو وصفها لا يطابق تصنيف الفاتورة. هذا اختيار يدوي ويحتاج تأكيدًا إضافيًا.</span> : null; })()}
-                                  {candidates.length === 1 && !currentMovementId && candidates[0].routeMatch && candidates[0].descriptionMatch && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) > 1 && <span className="font-bold text-amber-700">التصنيف مطابق، لكن عدة إيصالات مرشحة لنفس الحركة؛ راجع رقم الإيصال.</span>}
-                                  {candidates.length === 1 && !currentMovementId && candidates[0].routeMatch && candidates[0].descriptionMatch && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) === 1 && <span className="text-emerald-700">تطابقت اللوحات ومسار الحاوية ووصفها؛ الاقتراح جاهز للمراجعة.</span>}
-                                  {candidates.length > 0 && !candidates.some((candidate) => candidate.routeMatch && candidate.descriptionMatch) && <span className="font-bold text-rose-700">لم يوجد تطابق في المسار والوصف؛ لم يتم الربط تلقائيًا.</span>}
+                                  {selectedId && (() => { const chosen = candidates.find((candidate) => candidate.movementId === selectedId); return chosen && !chosen.classificationMatch ? <span className="font-bold text-rose-700">اللوحات متطابقة لكن بيانات التصنيف المتاحة لا توافق الفاتورة. هذا اختيار يدوي ويحتاج تأكيدًا إضافيًا.</span> : null; })()}
+                                  {candidates.length === 1 && !currentMovementId && candidates[0].classificationMatch && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) > 1 && <span className="font-bold text-amber-700">التصنيف المتاح مطابق، لكن عدة إيصالات مرشحة لنفس الحركة؛ راجع رقم الإيصال.</span>}
+                                  {candidates.length === 1 && !currentMovementId && candidates[0].classificationMatch && (candidateReceiptCountByMovement.get(candidates[0].movementId) || 0) === 1 && <span className="text-emerald-700">تطابقت اللوحات والتصنيف المتاح؛ الاقتراح جاهز للمراجعة.</span>}
+                                  {candidates.length > 0 && !candidates.some((candidate) => candidate.classificationMatch) && <span className="font-bold text-rose-700">لا يوجد تطابق بين تصنيف الفاتورة وبيانات المسار والوصف المتاحة؛ لن يتم الربط تلقائيًا.</span>}
                                 </div>
                               </td>
                             </tr>
