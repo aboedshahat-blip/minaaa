@@ -39,6 +39,10 @@ const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5, 
     const context = pageCanvas.getContext('2d');
     if (!context) throw new Error('تعذر تجهيز صفحة PDF في المتصفح.');
 
+    // JPEG has no transparency channel. Fill the unused part of a short final
+    // page before encoding so transparent pixels cannot turn into a black band.
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
     context.drawImage(canvas, 0, top, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
     if (repeatTransportStamp) {
       const stampTop = sliceHeight + 2 * pixelsPerMm;
@@ -426,26 +430,78 @@ export async function exportCustomerStatementPdf(
 
   try {
     await Promise.all(Array.from(container.querySelectorAll('img')).map((image) => image.decode().catch(() => undefined)));
-    const canvas = await html2canvas(container, {
-      scale: 1.25,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      // Tailwind v4 emits OKLCH colors, which html2canvas cannot parse.
-      // The export markup is fully styled inline, so strip app stylesheets
-      // from the cloned document before html2canvas reads its CSS rules.
-      onclone: (clonedDocument) => {
-        clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
-      },
-    });
+    const children = Array.from(container.children) as HTMLElement[];
+    const sourceTable = container.querySelector('table');
+    if (!sourceTable || children.length < 4) throw new Error('تعذر تجهيز جدول الفاتورة.');
+    const sourceRows = Array.from(sourceTable.querySelectorAll('tbody tr'));
+    const totalsPanel = children[children.length - 1];
+    const paymentsPanel = paymentReceipts.length ? children[children.length - 2] : null;
+    const rowsPerPage = 12;
+    const pageCount = Math.ceil(sourceRows.length / rowsPerPage);
+    const pageElements: HTMLElement[] = [];
 
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4',
-    });
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      const page = document.createElement('section');
+      page.style.cssText = 'box-sizing:border-box;width:1100px;min-height:778px;padding:14px 18px 10px;background:#fff;display:flex;flex-direction:column;direction:rtl;color:#0f172a;font-family:Cairo,Segoe UI,Tahoma,Arial,sans-serif';
+      const header = children[0].cloneNode(true) as HTMLElement;
+      header.style.paddingBottom = '7px';
+      header.style.marginBottom = '8px';
+      const customerInfo = children[1].cloneNode(true) as HTMLElement;
+      customerInfo.style.padding = '7px 10px';
+      customerInfo.style.marginBottom = '8px';
+      page.append(header, customerInfo);
 
-    addCanvasAsPdfPages(pdf, canvas, 5, true);
+      const table = sourceTable.cloneNode(false) as HTMLTableElement;
+      table.style.marginBottom = '0';
+      table.style.fontSize = '9px';
+      const tableHead = sourceTable.querySelector('thead');
+      if (tableHead) table.append(tableHead.cloneNode(true));
+      const tbody = document.createElement('tbody');
+      sourceRows.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage).forEach((row) => {
+        const copy = row.cloneNode(true) as HTMLTableRowElement;
+        copy.querySelectorAll('td').forEach((cell) => { cell.style.padding = '4px 3px'; });
+        tbody.append(copy);
+      });
+      table.append(tbody);
+      page.append(table);
+
+      if (pageIndex === pageCount - 1) {
+        if (paymentsPanel) page.append(paymentsPanel.cloneNode(true));
+        page.append(totalsPanel.cloneNode(true));
+      } else {
+        const spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        page.append(spacer);
+      }
+      const stamp = document.createElement('footer');
+      stamp.style.cssText = 'margin-top:auto;padding-top:6px;border-top:1px dashed #cbd5e1;text-align:center;color:#475569;font-size:10px;background:#fff';
+      stamp.innerHTML = '<strong>ختم مكتب النقل</strong><div style="width:150px;height:38px;border:1px dashed #64748b;border-radius:4px;margin:4px auto 0;background:#fff"></div>';
+      page.append(stamp);
+      pageElements.push(page);
+    }
+
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 5;
+    for (let pageIndex = 0; pageIndex < pageElements.length; pageIndex += 1) {
+      const page = pageElements[pageIndex];
+      container.replaceChildren(page);
+      const canvas = await html2canvas(page, {
+        scale: 1.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDocument) => {
+          clonedDocument.querySelectorAll('style, link[rel="stylesheet"]').forEach((stylesheet) => stylesheet.remove());
+        },
+      });
+      if (pageIndex > 0) pdf.addPage();
+      const fit = Math.min((pageWidth - margin * 2) / canvas.width, (pageHeight - margin * 2) / canvas.height);
+      const imageWidth = canvas.width * fit;
+      const imageHeight = canvas.height * fit;
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.94), 'JPEG', (pageWidth - imageWidth) / 2, (pageHeight - imageHeight) / 2, imageWidth, imageHeight, undefined, 'FAST');
+    }
 
     const safeName = customerName.replace(/[^ء-يa-zA-Z0-9_-]/g, '_');
     pdf.save(`فاتورة_حساب_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`);
