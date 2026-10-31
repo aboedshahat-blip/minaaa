@@ -137,6 +137,7 @@ const movementForCloud = (row: Movement): Record<string, unknown> => {
   const {
     import_batch_id, import_batch_name, import_batch_at, customer_paid_amount,
     cashier_invoice, cashier_receipt_no, system_commission, nafez_commission, discount,
+    cashier_receipt_details,
     total_amount, payment_status, paid_amount, remaining_amount,
     ...cloudRow
   } = movement;
