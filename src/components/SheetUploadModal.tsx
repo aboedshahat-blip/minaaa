@@ -3,7 +3,7 @@ import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from
 import { Customer, Berth, Movement, SystemSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
-import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
+import { findCloseCustomerName, normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import {
@@ -49,6 +49,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const [fileName, setFileName] = useState('');
   const [parsedRows, setParsedRows] = useState<Partial<Movement>[]>([]);
   const [driverNameReviewRows, setDriverNameReviewRows] = useState<number[]>([]);
+  const [driverNamesReviewed, setDriverNamesReviewed] = useState(true);
   const [showAllPreviewRows, setShowAllPreviewRows] = useState(false);
   const [originalHeaders, setOriginalHeaders] = useState<string[]>([]);
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
@@ -109,8 +110,11 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     try {
       const result = await parseUploadedSheet(file);
       setParsedRows(result.rows);
-      const namesToReview = result.driverNameReviewRows || [];
+      const namesToReview = result.fileType === 'pdf'
+        ? result.rows.map((_, index) => index)
+        : result.driverNameReviewRows || [];
       setDriverNameReviewRows(namesToReview);
+      setDriverNamesReviewed(namesToReview.length === 0);
       setShowAllPreviewRows(namesToReview.length > 0);
       setOriginalHeaders(result.headers);
       if (result.needsDriverReview) {
@@ -131,6 +135,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     if (!await confirmAction(`سيتم إلغاء الملف ${fileName ? `(${fileName})` : 'الحالي'} وحذف ${parsedRows.length} صف من المعاينة فقط. لن تُضاف أي بيانات للنظام. هل تريد الإلغاء؟`, 'نعم، ألغِ الشيت')) return;
     setParsedRows([]);
     setDriverNameReviewRows([]);
+    setDriverNamesReviewed(true);
     setShowAllPreviewRows(false);
     setOriginalHeaders([]);
     setFileName('');
@@ -145,6 +150,10 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const handleProcessAndSave = async () => {
     if (parsedRows.length === 0) {
       alert('لا توجد بيانات مستخلصة لحفظها');
+      return;
+    }
+    if (driverNameReviewRows.length > 0 && !driverNamesReviewed) {
+      alert('راجع أسماء السائقين في الملف، وصحح الأسماء المقروءة خطأ، ثم أكد المراجعة قبل الحفظ حتى لا يُنشأ عميل باسم غير صحيح.');
       return;
     }
     const nameReviewNote = driverNameReviewRows.length
@@ -504,8 +513,12 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                 </div>
 
                 {driverNameReviewRows.length > 0 && (
-                  <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-                    راجع أسماء السائقين المظللة؛ تم استخراجها آليًا من PDF وقد يخطئ التعرف في حرف أو مسافة. يمكنك تعديل الاسم هنا قبل الحفظ.
+                  <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 space-y-2">
+                    <p>أسماء السائقين تحتاج مراجعة؛ قراءة PDF قد تخطئ في حرف وتحوّل الاسم إلى عميل جديد. صحح الاسم من الشيت قبل الاعتماد.</p>
+                    <label className="flex items-center gap-2 font-bold">
+                      <input type="checkbox" checked={driverNamesReviewed} onChange={(event) => setDriverNamesReviewed(event.target.checked)} />
+                      راجعت أسماء السائقين الظاهرة في المعاينة
+                    </label>
                   </div>
                 )}
 
@@ -541,16 +554,31 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
                           <td className="p-2 border border-slate-200 text-center">{row.trailer_axles ?? 30}</td>
                           <td dir="auto" className={`p-1 border border-slate-200 ${driverNameReviewRows.includes(idx) ? 'bg-amber-50' : ''}`}>
                             {driverNameReviewRows.includes(idx) ? (
-                              <input
-                                type="text"
-                                dir="auto"
-                                aria-label={`مراجعة اسم السائق في الصف ${idx + 1}`}
-                                value={row.driver_name || ''}
-                                onChange={(event) => setParsedRows((current) => current.map((item, itemIndex) =>
-                                  itemIndex === idx ? { ...item, driver_name: event.target.value } : item
-                                ))}
-                                className="w-36 rounded-md border border-amber-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
-                              />
+                              <div className="space-y-1">
+                                <input
+                                  type="text"
+                                  dir="auto"
+                                  aria-label={`مراجعة اسم السائق في الصف ${idx + 1}`}
+                                  value={row.driver_name || ''}
+                                  onChange={(event) => {
+                                    setDriverNamesReviewed(false);
+                                    setParsedRows((current) => current.map((item, itemIndex) =>
+                                      itemIndex === idx ? { ...item, driver_name: event.target.value } : item
+                                    ));
+                                  }}
+                                  className="w-36 rounded-md border border-amber-300 bg-white px-2 py-1.5 text-xs text-slate-900 focus:border-blue-500 focus:outline-none"
+                                />
+                                {row.driver_name && findCloseCustomerName(row.driver_name, customers) && (() => {
+                                  const suggestion = findCloseCustomerName(row.driver_name, customers)!;
+                                  const sourceName = normalizeCustomerName(row.driver_name);
+                                  return <button type="button" className="block max-w-48 text-right text-[10px] font-bold text-blue-700 underline" onClick={() => {
+                                    setDriverNamesReviewed(false);
+                                    setParsedRows((current) => current.map((item) => normalizeCustomerName(item.driver_name || '') === sourceName
+                                      ? { ...item, driver_name: suggestion.name }
+                                      : item));
+                                  }}>تصحيح الصفوف المشابهة إلى: {suggestion.name}</button>;
+                                })()}
+                              </div>
                             ) : (row.driver_name || '-')}
                           </td>
                           <td className="p-2 border border-slate-200 font-mono">{row.declaration_no || '-'}</td>

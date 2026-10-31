@@ -49,6 +49,8 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   const [fileType, setFileType] = useState<'excel' | 'word' | 'pdf' | ''>('');
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<Partial<Movement>[]>([]);
+  const [pdfNamesNeedReview, setPdfNamesNeedReview] = useState(false);
+  const [pdfNamesReviewed, setPdfNamesReviewed] = useState(true);
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashier, setDefaultCashier] = useState<number>(0);
   const [movementDateTime, setMovementDateTime] = useState(() => getLocalDateTimeInputValue());
@@ -69,6 +71,9 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     try {
       const res = await parseUploadedSheet(file);
       setRows(res.rows);
+      const needsNameReview = res.fileType === 'pdf' && res.rows.length > 0;
+      setPdfNamesNeedReview(needsNameReview);
+      setPdfNamesReviewed(!needsNameReview);
       if (res.needsDriverReview) {
         alert('تمت قراءة الملف. راجع أسماء السائقين في الجدول قبل إضافتها، لأن وضوح النص في ملف PDF قد يؤثر على القراءة.');
       }
@@ -104,6 +109,8 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     setRows([]);
     setFileName('');
     setFileType('');
+    setPdfNamesNeedReview(false);
+    setPdfNamesReviewed(true);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -114,6 +121,10 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     }
     if (rows.length === 0) {
       alert('لا توجد بيانات للاستيراد');
+      return;
+    }
+    if (pdfNamesNeedReview && !pdfNamesReviewed) {
+      alert('راجع أسماء السائقين في الجدول وصحح أي اسم مقروء خطأ، ثم أكد المراجعة قبل رفع PDF حتى لا يُنشأ عميل جديد باسم غير صحيح.');
       return;
     }
     if (!movementDateTime || Number.isNaN(new Date(movementDateTime).getTime())) {
@@ -495,6 +506,15 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
 
           {/* Editable Live Table */}
           <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            {pdfNamesNeedReview && (
+              <div className="border-b border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
+                <p className="font-semibold">راجع أسماء السائقين في كل الصفوف؛ قراءة PDF قد تخطئ في حرف واحد، والاسم غير المصحح قد يُسجل كعميل جديد. يمكنك تعديل الاسم مباشرة في الجدول.</p>
+                <label className="flex items-center gap-2 font-bold">
+                  <input type="checkbox" checked={pdfNamesReviewed} onChange={(event) => setPdfNamesReviewed(event.target.checked)} />
+                  راجعت وصححت أسماء السائقين في المعاينة
+                </label>
+              </div>
+            )}
             <div className="overflow-x-auto max-h-96">
               <table className="w-full text-xs text-right border-collapse">
                 <thead className="bg-slate-900 text-white font-bold sticky top-0">
@@ -575,7 +595,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
                           type="text"
                           dir="auto"
                           value={row.driver_name || ''}
-                          onChange={(e) => handleUpdateRowCell(idx, 'driver_name', e.target.value)}
+                          onChange={(e) => { setPdfNamesReviewed(false); handleUpdateRowCell(idx, 'driver_name', e.target.value); }}
                           className="w-full bg-transparent px-1.5 py-1 text-xs focus:bg-white focus:ring-1 focus:ring-blue-500 rounded"
                         />
                       </td>

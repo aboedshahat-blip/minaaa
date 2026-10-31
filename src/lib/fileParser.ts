@@ -139,7 +139,6 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
   let ocrUnavailable = false;
   let needsDriverReview = false;
   const driverNameReviewRows = new Set<number>();
-  const driverNameCorrections = new Map<string, string>();
   // Many booking PDFs print the table header only on the first page. Keep the
   // container columns so later pages can still read route/description cells.
   let knownContainerPathCenter: number | null = null;
@@ -497,7 +496,6 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
           if (name && /[\u0600-\u06ff]/.test(name)) {
             const recognizedName = joinArabicNameFragments(name);
             if (rowToVerify?.sourceName) {
-              if (confidence >= 65) driverNameCorrections.set(rowToVerify.sourceName, recognizedName);
               if (normalizeArabicNameForComparison(recognizedName) !== rowToVerify.sourceName || confidence < 70) {
                 needsDriverReview = true;
                 movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
@@ -527,15 +525,12 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
 
   if (ocrWorker) await ocrWorker.terminate();
 
+  // Keep the PDF text-layer spelling intact. OCR may misread a single Arabic
+  // character, so never overwrite a name automatically from one repeated row.
   allMovements.forEach((movement, movementIndex) => {
-    const sourceName = normalizeArabicNameForComparison(movement.driver_name || '');
-    const correctedName = driverNameCorrections.get(sourceName);
-    if (correctedName && normalizeArabicNameForComparison(correctedName) !== sourceName) {
-      movement.driver_name = correctedName;
-      driverNameReviewRows.add(movementIndex);
-      needsDriverReview = true;
-    }
+    if (movement.driver_name?.trim()) driverNameReviewRows.add(movementIndex);
   });
+  if (driverNameReviewRows.size > 0) needsDriverReview = true;
 
   return {
     rows: allMovements,
