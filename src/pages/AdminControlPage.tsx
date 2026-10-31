@@ -23,6 +23,7 @@ import {
   Building2,
   DollarSign,
   FileSpreadsheet,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminControlPageProps {
@@ -32,9 +33,11 @@ interface AdminControlPageProps {
   customerCount: number;
   berthCount: number;
   paymentCount: number;
+  expenseCount: number;
   safetyBackups: OperationalSafetyBackup[];
   onRefreshDataFromCloud: () => Promise<void>;
   onRestoreSafetyBackup: (backup: OperationalSafetyBackup) => Promise<void>;
+  onClearOperationalData: () => Promise<void>;
 }
 
 export const AdminControlPage: React.FC<AdminControlPageProps> = ({
@@ -44,9 +47,11 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   customerCount,
   berthCount,
   paymentCount,
+  expenseCount,
   safetyBackups,
   onRefreshDataFromCloud,
   onRestoreSafetyBackup,
+  onClearOperationalData,
 }) => {
   const confirmAction = useConfirmAction();
   const {
@@ -87,6 +92,8 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [selectedBackupId, setSelectedBackupId] = useState('');
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isClearingOperationalData, setIsClearingOperationalData] = useState(false);
+  const [clearOperationalDataError, setClearOperationalDataError] = useState<string | null>(null);
 
   const refreshActivity = async () => {
     setIsLoadingActivity(true);
@@ -169,6 +176,20 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       setRestoreError(error instanceof Error ? error.message : 'تعذرت استعادة النسخة.');
     } finally {
       setIsRestoring(false);
+    }
+  };
+
+  const handleClearOperationalData = async () => {
+    const description = `سيتم حذف جميع بيانات التشغيل الحالية نهائيًا من قاعدة البيانات والأجهزة: ${movementCount} حركة، ${customerCount} عميل ومركبة، ${paymentCount} سند قبض، و${expenseCount} مصروف مكتب مع مرفقاته. سيحفظ النظام نسخة أمان على هذا الجهاز أولًا. ستظل حسابات المستخدمين وصلاحياتهم والإعدادات والأرصفة وسجل النشاط كما هي. هل تريد المتابعة؟`;
+    if (!await confirmAction(description, 'نعم، صفّر بيانات التشغيل')) return;
+    setIsClearingOperationalData(true);
+    setClearOperationalDataError(null);
+    try {
+      await onClearOperationalData();
+    } catch (error) {
+      setClearOperationalDataError(error instanceof Error ? error.message : 'تعذر تصفير بيانات التشغيل.');
+    } finally {
+      setIsClearingOperationalData(false);
     }
   };
 
@@ -401,6 +422,18 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
           <button type="button" disabled={!safetyBackups.length} onClick={openLatestUndo} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>استعادة نسخة أمان</button>
         </div>
         {!safetyBackups.length && <p className="text-xs text-slate-600">لا توجد نسخة سابقة على هذا الجهاز حتى الآن. سيُنشئ النظام نسخة تلقائية قبل عمليات الحذف القادمة.</p>}
+      </section>
+
+      <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 sm:p-6 space-y-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-black text-rose-900"><Trash2 className="h-5 w-5"/>تصفير بيانات التشغيل</h2>
+            <p className="mt-1 text-xs leading-6 text-rose-800">يمسح الحركات والعملاء والمركبات وسندات القبض ومصاريف المكتب ومرفقاتها، ثم يزامن التصفير مع الأجهزة الأخرى.</p>
+            <p className="mt-1 text-xs leading-6 text-slate-700">سيحتفظ النظام بالمستخدمين والصلاحيات والإعدادات والأرصفة وسجل النشاط. تُحفظ نسخة أمان قبل التنفيذ على هذا الجهاز، ويمكن استعادتها من قسم استعادة نسخة الأمان.</p>
+          </div>
+          <button type="button" disabled={isClearingOperationalData} onClick={() => void handleClearOperationalData()} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-rose-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-rose-800 disabled:cursor-wait disabled:opacity-60"><Trash2 className="h-4 w-4"/>{isClearingOperationalData ? 'جارٍ تصفير البيانات…' : 'تصفير بيانات التشغيل'}</button>
+        </div>
+        {clearOperationalDataError && <p role="alert" className="rounded-lg border border-rose-200 bg-white p-3 text-sm font-semibold text-rose-800">{clearOperationalDataError}</p>}
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

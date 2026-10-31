@@ -37,6 +37,7 @@ import {
   getPendingSyncForTable,
   flushPendingSync,
   clearOperationalLocalData,
+  clearOperationalDataFromSupabase,
   getLocalDataResetAt,
   deleteMovementFromSupabase,
   deleteMovementsBatchFromSupabase,
@@ -212,13 +213,13 @@ const AppContent: React.FC = () => {
         const localCustomers = resetDetected ? [] : getStoredCustomers();
         const localBerths = getStoredBerths();
         const localPayments = resetDetected || !canViewFinancials ? [] : getStoredPayments();
-        const localExpenses = getStoredOfficeExpenses();
+        const localExpenses = resetDetected ? [] : getStoredOfficeExpenses();
         const pendingMovementsRaw = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Movement>('movements');
         const pendingMovements = canViewFinancials ? pendingMovementsRaw : { ...pendingMovementsRaw, upserts: pendingMovementsRaw.upserts.map(withoutFinancialDetails) };
         const pendingCustomers = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<Customer>('customers');
         const pendingBerths = getPendingSyncForTable<Berth>('berths');
         const pendingPayments = resetDetected || !canViewFinancials ? { upserts: [], deletes: [] } : getPendingSyncForTable<PaymentReceipt>('payments');
-        const pendingExpenses = getPendingSyncForTable<OfficeExpense>('office_expenses');
+        const pendingExpenses = resetDetected ? { upserts: [], deletes: [] } : getPendingSyncForTable<OfficeExpense>('office_expenses');
         const mergePending = <T extends { id: string }>(cloud: T[], local: T[], pending: { upserts: T[]; deletes: string[] }) => {
           const merged = new Map(cloud.map((row) => [row.id, row]));
           if (restoreDeviceOnlyData) {
@@ -473,6 +474,31 @@ const AppContent: React.FC = () => {
   const recordActivity = async (event: Parameters<typeof writeActivityLog>[0]) => {
     try { await writeActivityLog(event); }
     catch (error) { setCloudFeedback(`البيانات حُفظت، لكن سجل المدير لم يتحدث. تحقق من تحديث قاعدة البيانات. ${error instanceof Error ? error.message : ''}`); }
+  };
+
+  const handleClearOperationalData = async () => {
+    if (!isAdmin) throw new Error('تصفير بيانات التشغيل متاح للمدير العام فقط.');
+    if (cloudSyncState !== 'ready' || !hasLoadedCloudSnapshotRef.current) {
+      throw new Error('انتظر اكتمال المزامنة مع قاعدة البيانات ثم أعد المحاولة. لم يتم حذف أي بيانات.');
+    }
+
+    captureSafetyBackup('نسخة أمان قبل تصفير بيانات التشغيل');
+    const resetAt = await clearOperationalDataFromSupabase();
+    clearOperationalLocalData(resetAt);
+    setMovements([]);
+    setCustomers([]);
+    setPayments([]);
+    setExpenses([]);
+    setSafetyBackups(getSafetyBackups());
+    setCloudFeedback('تم تصفير الحركات والعملاء والفواتير والسندات ومصاريف المكتب ومزامنة التصفير مع الأجهزة.');
+    await recordActivity({
+      action: 'delete',
+      entity_type: 'sheet',
+      entity_id: resetAt,
+      entity_name: 'تصفير بيانات التشغيل',
+      summary: `تصفير بيانات التشغيل بواسطة ${currentUser.name}`,
+      details: { movements: movements.length, customers: customers.length, payments: payments.length, expenses: expenses.length },
+    });
   };
 
   // Movement Handlers
@@ -1056,9 +1082,11 @@ const AppContent: React.FC = () => {
             customerCount={customers.length}
             berthCount={berths.length}
             paymentCount={payments.length}
+            expenseCount={expenses.length}
             safetyBackups={safetyBackups}
             onRefreshDataFromCloud={async () => { await refreshDataFromCloud(); }}
             onRestoreSafetyBackup={handleRestoreSafetyBackup}
+            onClearOperationalData={handleClearOperationalData}
           />
         )}
         </Suspense>

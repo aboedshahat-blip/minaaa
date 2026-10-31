@@ -345,8 +345,9 @@ export const clearOperationalLocalData = (resetAt: string) => {
   saveMovements([]);
   saveCustomers([]);
   savePayments([]);
+  saveOfficeExpenses([]);
   const pending = getPendingSync();
-  for (const table of ['movements', 'customers', 'payments'] as const) {
+  for (const table of ['movements', 'customers', 'payments', 'office_expenses'] as const) {
     pending.upserts[table] = {};
     pending.deletes[table] = [];
   }
@@ -362,14 +363,32 @@ export const clearOperationalDataFromSupabase = async () => {
   if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
 
   const resetAt = new Date().toISOString();
-  const deleteAll = async (table: 'payments' | 'movements') => {
-    const { error } = await supabase.from(table).delete().not('id', 'is', null);
+  const deleteAll = async (table: 'payments' | 'movement_financials' | 'movements' | 'office_expenses') => {
+    const result = table === 'movement_financials'
+      ? await supabase.from(table).delete().not('movement_id', 'is', null)
+      : await supabase.from(table).delete().not('id', 'is', null);
+    const { error } = result;
+    if (error && ['movement_financials', 'office_expenses'].includes(table) && ['42P01', 'PGRST205'].includes(error.code || '')) return;
     if (error) throw new Error(`تعذر مسح بيانات ${table}: ${error.message}`);
   };
 
+  // Remove receipt objects before deleting their rows, so a storage failure does
+  // not silently leave expense records without their original attachments.
+  const { data: expenses, error: expensesError } = await supabase.from('office_expenses').select('receipt_path');
+  if (expensesError && !['42P01', 'PGRST205'].includes(expensesError.code || '')) {
+    throw new Error(`تعذر قراءة مرفقات المصروفات قبل التصفير: ${expensesError.message}`);
+  }
+  const receiptPaths = Array.from(new Set((expenses || []).map((row) => row.receipt_path).filter((path): path is string => Boolean(path))));
+  for (let index = 0; index < receiptPaths.length; index += 100) {
+    const { error } = await supabase.storage.from('office-expense-receipts').remove(receiptPaths.slice(index, index + 100));
+    if (error) throw new Error(`تعذر حذف مرفقات المصروفات؛ لم يكتمل تصفير البيانات: ${error.message}`);
+  }
+
   // Remove dependent records first, then customers while retaining system users.
   await deleteAll('payments');
+  await deleteAll('movement_financials');
   await deleteAll('movements');
+  await deleteAll('office_expenses');
   const { error: customersError } = await supabase
     .from('customers')
     .delete()
@@ -385,6 +404,13 @@ export const clearOperationalDataFromSupabase = async () => {
     created_at: resetAt,
   });
   if (markerError) throw new Error(`تم مسح بعض البيانات، لكن تعذر تسجيل علامة المزامنة: ${markerError.message}`);
+
+  const pending = getPendingSync();
+  for (const table of ['movements', 'customers', 'payments', 'office_expenses'] as const) {
+    pending.upserts[table] = {};
+    pending.deletes[table] = [];
+  }
+  savePendingSync(pending);
 
   return resetAt;
 };
