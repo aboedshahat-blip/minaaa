@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
-import { ManagedUser, RolePermissions, SystemSettings } from '../types';
-import { OperationalSafetyBackup } from '../lib/storage';
+import { ActivityLog, ManagedUser, RolePermissions, SystemSettings } from '../types';
+import { fetchRecentActivityLogs, OperationalSafetyBackup } from '../lib/storage';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 import {
   ShieldAlert,
@@ -12,7 +12,6 @@ import {
   Unlock,
   Key,
   Plus,
-  Trash2,
   Save,
   CheckCircle2,
   RefreshCw,
@@ -35,7 +34,6 @@ interface AdminControlPageProps {
   paymentCount: number;
   safetyBackups: OperationalSafetyBackup[];
   onRefreshDataFromCloud: () => Promise<void>;
-  onClearOperationalData: () => Promise<void>;
   onRestoreSafetyBackup: (backup: OperationalSafetyBackup) => Promise<void>;
 }
 
@@ -48,7 +46,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   paymentCount,
   safetyBackups,
   onRefreshDataFromCloud,
-  onClearOperationalData,
   onRestoreSafetyBackup,
 }) => {
   const confirmAction = useConfirmAction();
@@ -59,7 +56,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     updateUserStatus,
     updateUserPassword,
     addNewUser,
-    deleteUser,
     verifyCurrentPassword,
   } = useAuth();
 
@@ -83,16 +79,22 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
-  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
-  const [clearPassword, setClearPassword] = useState('');
-  const [clearError, setClearError] = useState<string | null>(null);
-  const [clearFeedback, setClearFeedback] = useState<string | null>(null);
-  const [isClearingData, setIsClearingData] = useState(false);
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
   const [restorePassword, setRestorePassword] = useState('');
   const [selectedBackupId, setSelectedBackupId] = useState('');
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+
+  const refreshActivity = async () => {
+    setIsLoadingActivity(true);
+    try { setActivityLogs(await fetchRecentActivityLogs(150)); setActivityError(null); }
+    catch (error) { setActivityError(error instanceof Error ? error.message : 'تعذر تحميل سجل النشاط.'); }
+    finally { setIsLoadingActivity(false); }
+  };
+  useEffect(() => { void refreshActivity(); }, []);
 
   const openLatestUndo = () => {
     const latestBackup = safetyBackups[0];
@@ -142,34 +144,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncFeedback(null), 4000);
-    }
-  };
-
-  const handleConfirmClearData = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!await verifyCurrentPassword(clearPassword)) {
-      setClearError('كلمة المرور غير صحيحة. أدخل كلمة مرور الأدمن للمتابعة.');
-      return;
-    }
-
-    const confirmed = await confirmAction(
-      'تحذير: سيتم حذف كل الحركات والعملاء وسندات القبض من قاعدة البيانات والأجهزة المرتبطة. ستظل حسابات المستخدمين والإعدادات والأرصفة محفوظة. هل تريد المتابعة؟',
-      'نعم، امسح بيانات التشغيل'
-    );
-    if (!confirmed) return;
-
-    setIsClearingData(true);
-    setClearError(null);
-    setClearFeedback(null);
-    try {
-      await onClearOperationalData();
-      setClearFeedback('تم مسح بيانات التشغيل ومزامنة التصفير مع الأجهزة المرتبطة.');
-      setClearPassword('');
-      setIsClearDialogOpen(false);
-    } catch (error) {
-      setClearError(error instanceof Error ? error.message : 'تعذر مسح البيانات.');
-    } finally {
-      setIsClearingData(false);
     }
   };
 
@@ -417,38 +391,30 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
         </div>
       </div>
 
-      <section className="bg-rose-50 rounded-2xl border border-rose-200 p-5 sm:p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-black text-rose-900 flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5" /> مسح بيانات التشغيل
-            </h2>
-            <p className="text-xs text-rose-800 mt-1 leading-6">
-              يمسح الحركات والعملاء وسندات القبض من السحابة والأجهزة المرتبطة. تبقى حسابات المستخدمين والإعدادات والأرصفة كما هي.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => { setClearError(null); setClearPassword(''); setIsClearDialogOpen(true); }}
-            className="shrink-0 bg-rose-700 hover:bg-rose-800 text-white text-sm font-bold px-5 py-3 rounded-xl flex items-center justify-center gap-2 transition shadow-sm"
-          >
-            <Trash2 className="w-4 h-4" /> مسح البيانات
-          </button>
-        </div>
-        {clearFeedback && <p role="status" className="text-sm font-bold text-emerald-700">{clearFeedback}</p>}
-        {clearError && !isClearDialogOpen && <p role="alert" className="text-sm font-bold text-rose-700">{clearError}</p>}
-      </section>
-
       <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6 space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-base font-black text-emerald-900"><RefreshCw className="h-5 w-5"/>استعادة نسخة الأمان</h2>
-            <p className="mt-1 text-xs leading-6 text-emerald-800">يحفظ النظام تلقائيًا آخر 10 نسخ قبل حذف الحركات أو العميل أو مسح بيانات التشغيل. النسخ محفوظة على هذا الجهاز، والاستعادة تتطلب كلمة مرور الأدمن.</p>
+            <p className="mt-1 text-xs leading-6 text-emerald-800">يحفظ النظام تلقائيًا آخر 10 نسخ قبل إزالة حركة أو شيت. النسخ محفوظة على هذا الجهاز، والاستعادة تتطلب كلمة مرور الأدمن.</p>
             {safetyBackups[0] && <p className="mt-1 text-xs font-bold text-emerald-900">آخر نسخة: {new Date(safetyBackups[0].created_at).toLocaleString('ar-EG')} — {safetyBackups[0].label}</p>}
           </div>
           <button type="button" disabled={!safetyBackups.length} onClick={openLatestUndo} className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="h-4 w-4"/>استعادة نسخة أمان</button>
         </div>
         {!safetyBackups.length && <p className="text-xs text-slate-600">لا توجد نسخة سابقة على هذا الجهاز حتى الآن. سيُنشئ النظام نسخة تلقائية قبل عمليات الحذف القادمة.</p>}
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
+          <div><h2 className="font-black text-slate-900">سجل رفع وتعديل البيانات</h2><p className="mt-1 text-xs text-slate-500">يعرض اسم المستخدم والبريد ووقت رفع الشيت أو تعديل الحركة وربط الفاتورة.</p></div>
+          <button type="button" onClick={() => void refreshActivity()} disabled={isLoadingActivity} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">{isLoadingActivity ? 'جارٍ التحديث…' : 'تحديث السجل'}</button>
+        </div>
+        <div className="max-h-[28rem] overflow-auto">
+          {activityError && <p role="status" className="m-3 rounded-lg bg-amber-50 p-3 text-xs font-semibold text-amber-800">{activityError} سيظهر السجل بعد تطبيق تحديث قاعدة البيانات.</p>}
+          <table className="w-full min-w-[760px] text-right text-xs"><thead className="sticky top-0 bg-slate-900 text-white"><tr>{['الوقت', 'المستخدم', 'العملية', 'الملف / السجل', 'التفاصيل'].map((heading) => <th key={heading} className="px-3 py-2.5">{heading}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100">{activityLogs.map((entry) => <tr key={entry.id} className="hover:bg-slate-50"><td className="whitespace-nowrap px-3 py-2">{new Date(entry.created_at).toLocaleString('ar-EG')}</td><td className="px-3 py-2"><strong className="block">{entry.actor_name}</strong><span className="text-slate-500">{entry.actor_email}</span></td><td className="px-3 py-2">{entry.action === 'upload' ? 'رفع' : entry.action === 'delete' ? 'إزالة' : entry.action === 'create' ? 'إضافة' : 'تعديل'}</td><td className="px-3 py-2">{entry.entity_name}</td><td className="px-3 py-2">{entry.summary}</td></tr>)}
+              {!activityLogs.length && <tr><td colSpan={5} className="p-8 text-center text-slate-500">لا توجد أنشطة مسجلة بعد.</td></tr>}</tbody>
+          </table>
+        </div>
       </section>
 
       {/* Users & Granular Permissions Matrix */}
@@ -535,7 +501,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                 </p>
               </div>
 
-              {/* Status and Delete Actions */}
+              {/* Account status */}
               {selectedUser.role !== 'admin' && (
                 <div className="flex items-center gap-2">
                   <button
@@ -556,18 +522,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
                     <span>{selectedUser.is_active ? 'الحساب مفعل' : 'الحساب معطل'}</span>
                   </button>
 
-                  <button
-                    onClick={async () => {
-                    if (await confirmAction(`سيتم حذف حساب المستخدم ${selectedUser.name}. هل تريد المتابعة؟`, 'نعم، احذف المستخدم')) {
-                      try { await deleteUser(selectedUser.id); }
-                      catch (error) { window.alert(error instanceof Error ? error.message : 'تعذر حذف الحساب.'); }
-                    }
-                    }}
-                    className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition"
-                    title="حذف هذا المستخدم"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 </div>
               )}
             </div>
@@ -842,39 +796,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
         </div>
       )}
 
-      {isClearDialogOpen && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4" dir="rtl">
-          <div role="dialog" aria-modal="true" aria-labelledby="clear-data-title" className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 p-6 space-y-4">
-            <div className="flex items-center gap-3 text-rose-700">
-              <div className="bg-rose-100 p-2.5 rounded-xl"><Lock className="w-5 h-5" /></div>
-              <div>
-                <h3 id="clear-data-title" className="font-black text-slate-900">تأكيد مسح بيانات التشغيل</h3>
-                <p className="text-xs text-slate-500 mt-1">أدخل كلمة مرور الأدمن نفسها المستخدمة لفتح لوحة التحكم.</p>
-              </div>
-            </div>
-            <form onSubmit={handleConfirmClearData} className="space-y-3">
-              <label htmlFor="clear-data-password" className="block text-xs font-bold text-slate-700">كلمة مرور الأدمن</label>
-              <input
-                id="clear-data-password"
-                type="password"
-                autoFocus
-                autoComplete="current-password"
-                value={clearPassword}
-                onChange={(e) => { setClearPassword(e.target.value); setClearError(null); }}
-                className="w-full text-center font-mono py-2.5 px-3 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
-                required
-              />
-              {clearError && <p role="alert" className="text-xs font-bold text-rose-700">{clearError}</p>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" disabled={isClearingData} onClick={() => setIsClearDialogOpen(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 disabled:opacity-50">إلغاء</button>
-                <button type="submit" disabled={isClearingData} className="bg-rose-700 hover:bg-rose-800 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-60 flex items-center gap-2">
-                  <Trash2 className="w-4 h-4" /> {isClearingData ? 'جارٍ المسح...' : 'تحقق وامسح البيانات'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {isRestoreDialogOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" dir="rtl">

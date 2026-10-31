@@ -37,10 +37,10 @@ import {
   getPendingSyncForTable,
   flushPendingSync,
   clearOperationalLocalData,
-  clearOperationalDataFromSupabase,
   getLocalDataResetAt,
   deleteMovementFromSupabase,
-  clearAllMovementsFromSupabase,
+  deleteMovementsBatchFromSupabase,
+  writeActivityLog,
   deleteCustomerFromSupabase,
   deleteBerthFromSupabase,
   syncOfficeExpenseToSupabase,
@@ -470,6 +470,11 @@ const AppContent: React.FC = () => {
   // Max seq calculation
   const currentMaxSeq = movements.reduce((max, m) => Math.max(max, m.seq || 0), 0);
 
+  const recordActivity = async (event: Parameters<typeof writeActivityLog>[0]) => {
+    try { await writeActivityLog(event); }
+    catch (error) { setCloudFeedback(`البيانات حُفظت، لكن سجل المدير لم يتحدث. تحقق من تحديث قاعدة البيانات. ${error instanceof Error ? error.message : ''}`); }
+  };
+
   // Movement Handlers
   const handleSaveMovement = (movementData: Partial<Movement>) => {
     if (editingMovement) {
@@ -477,7 +482,7 @@ const AppContent: React.FC = () => {
         alert('ليس لديك صلاحية لتعديل الحركات المسجلة');
         return;
       }
-      const updatedMovement = { ...editingMovement, ...movementData } as Movement;
+      const updatedMovement = { ...editingMovement, ...movementData, updated_by_user_id: currentUser.id, updated_by_email: currentUser.email, updated_by_name: currentUser.name || currentUser.email, updated_at: new Date().toISOString() } as Movement;
       const updated = movements.map((m) =>
         m.id === editingMovement.id ? updatedMovement : m
       );
@@ -489,7 +494,10 @@ const AppContent: React.FC = () => {
       void runCloudOperation(Promise.all([
         ...allocation.movements.filter((m) => m.id === updatedMovement.id || allocation.changedMovementIds.includes(m.id)).map((m) => syncMovementToSupabase(m)),
         ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
-      ]));
+      ]).then(async () => {
+        try { await writeActivityLog({ action: 'update', entity_type: 'movement', entity_id: updatedMovement.id, entity_name: updatedMovement.truck_no, summary: `تعديل الحركة ${updatedMovement.seq}`, details: { sequence: updatedMovement.seq, truck_no: updatedMovement.truck_no } }); }
+        catch (error) { setCloudFeedback(`تم حفظ التعديل، لكن تعذر تسجيل اسم المنفذ: ${error instanceof Error ? error.message : 'تحقق من تحديث قاعدة البيانات.'}`); }
+      }));
     } else {
       if (!canAddMovements) {
         alert('ليس لديك صلاحية لتسجيل حركات جديدة');
@@ -500,59 +508,110 @@ const AppContent: React.FC = () => {
         id: `m-${crypto.randomUUID()}`,
         seq: movementData.seq || currentMaxSeq + 1,
         created_at: new Date().toISOString(),
+        created_by_user_id: currentUser.id,
+        created_by_email: currentUser.email,
+        created_by_name: currentUser.name || currentUser.email,
       } as Movement;
       const updated = [newMovement, ...movements];
       setMovements(updated);
       saveMovements(updated);
-      void runCloudOperation(syncMovementToSupabase(newMovement));
+      void runCloudOperation(syncMovementToSupabase(newMovement).then(async () => {
+        try { await writeActivityLog({ action: 'create', entity_type: 'movement', entity_id: newMovement.id, entity_name: newMovement.truck_no, summary: `إضافة حركة ${newMovement.seq}`, details: { sequence: newMovement.seq, truck_no: newMovement.truck_no } }); }
+        catch (error) { setCloudFeedback(`تم حفظ الحركة، لكن تعذر تسجيل اسم المنفذ: ${error instanceof Error ? error.message : 'تحقق من تحديث قاعدة البيانات.'}`); }
+      }));
     }
     setEditingMovement(null);
   };
 
-  const handleDeleteMovement = async (id: string) => {
-    if (!canDeleteMovements) {
-      alert('ليس لديك صلاحية لحذف الحركات');
+  const handleDeleteMovement = async (movement: Movement) => {
+    if (!canDeleteMovements && !(movement.created_by_user_id === currentUser.id && (canUploadSheets || canAddMovements))) {
+      alert('يمكنك إزالة الحركات التي أضفتها فقط، أو اطلب صلاحية من المدير.');
       return;
     }
-    if (await confirmAction('هل تريد حذف هذه الحركة من النظام وقاعدة البيانات؟', 'نعم، احذف')) {
+    if (movement.customer_paid_amount || movement.paid_amount) {
+      alert('لا يمكن حذف حركة عليها دفعة مسجلة. راجع سندات القبض أولًا حتى لا يتأثر رصيد العميل.');
+      return;
+    }
+    if (payments.some((payment) => payment.movement_ids?.includes(movement.id))) {
+      alert('لا يمكن إزالة حركة مرتبطة بسند قبض. راجع السند أولًا حتى لا تبقى الحركة في سجل التحصيل.');
+      return;
+    }
+    if (await confirmAction(`سيتم إزالة الحركة رقم ${movement.seq} للشاحنة ${movement.truck_no} فقط. هل تريد المتابعة؟`, 'نعم، أزل الحركة')) {
       captureSafetyBackup('قبل حذف حركة');
-      const updated = movements.filter((m) => m.id !== id);
-      setMovements(updated);
-      saveMovements(updated);
-      void runCloudOperation(deleteMovementFromSupabase(id));
-    }
-  };
-
-  const handleClearAllMovements = async () => {
-    if (!isAdmin) {
-      alert('هذه العملية تتطلب صلاحيات المدير العام.');
-      return;
-    }
-    if (await confirmAction('تحذير: سيتم حذف كل الحركات والشحنات من النظام وقاعدة البيانات. هل تريد المتابعة؟', 'نعم، امسح الكل')) {
-      captureSafetyBackup('قبل مسح كل الحركات');
-      setMovements([]);
-      saveMovements([]);
       try {
-        await clearAllMovementsFromSupabase();
+        await deleteMovementFromSupabase(movement.id);
+        const updated = movements.filter((m) => m.id !== movement.id);
+        setMovements(updated);
+        saveMovements(updated);
+        await recordActivity({ action: 'delete', entity_type: 'movement', entity_id: movement.id, entity_name: movement.truck_no, summary: `إزالة الحركة رقم ${movement.seq}`, details: { sequence: movement.seq, truck_no: movement.truck_no } });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'تعذر مسح الحركات من قاعدة البيانات السحابية.';
-        setCloudFeedback(message);
-        alert(`تم مسح الحركات محلياً، لكن تعذر مسحها من قاعدة البيانات: ${message}`);
-        return;
+        alert(error instanceof Error ? error.message : 'تعذرت إزالة الحركة من قاعدة البيانات.');
       }
-      alert('✓ تم مسح وتصفير كافة الشحنات بنجاح. النظام الآن فارغ ونظيف وجاهز للتسليم للعميل.');
     }
   };
 
-  const handleClearOperationalData = async () => {
-    if (!isAdmin) throw new Error('هذه العملية متاحة للمدير العام فقط.');
-    captureSafetyBackup('قبل مسح بيانات التشغيل');
-    const resetAt = await clearOperationalDataFromSupabase();
-    clearOperationalLocalData(resetAt);
-    setMovements([]);
-    setCustomers([]);
-    setPayments([]);
-    setCloudFeedback('تم مسح بيانات التشغيل ومزامنة التصفير مع الأجهزة المرتبطة.');
+  const handleDeleteImportBatch = async (batchMovements: Movement[]) => {
+    if (!batchMovements.length) return;
+    const allowed = canDeleteMovements || batchMovements.every((movement) => movement.created_by_user_id === currentUser.id && (canUploadSheets || canAddMovements));
+    if (!allowed) throw new Error('يمكنك إزالة الشيتات التي رفعتها فقط، أو اطلب صلاحية من المدير.');
+    if (batchMovements.some((movement) => (movement.customer_paid_amount || 0) > 0 || (movement.paid_amount || 0) > 0)) {
+      throw new Error('هذا الشيت يحتوي على حركة عليها دفعة مسجلة. عالج سند القبض أولًا لحماية رصيد العميل.');
+    }
+    const ids = batchMovements.map((movement) => movement.id);
+    if (payments.some((payment) => payment.movement_ids?.some((movementId) => ids.includes(movementId)))) {
+      throw new Error('هذا الشيت مرتبط بسند قبض. راجع السند أولًا حتى لا يبقى سجل التحصيل مربوطًا بحركات محذوفة.');
+    }
+    const batchName = batchMovements[0].import_batch_name || 'الشيت المحدد';
+    if (!await confirmAction(`سيتم حذف «${batchName}» فقط، وعدد حركاته ${ids.length}. هل أنت متأكد؟`, 'نعم، احذف هذا الشيت')) return;
+    captureSafetyBackup(`قبل إزالة الشيت ${batchName}`);
+    await deleteMovementsBatchFromSupabase(ids);
+    const updated = movements.filter((movement) => !ids.includes(movement.id));
+    setMovements(updated);
+    saveMovements(updated);
+    await recordActivity({ action: 'delete', entity_type: 'sheet', entity_id: batchMovements[0].import_batch_id || batchName, entity_name: batchName, summary: `إزالة الشيت ${batchName} (${ids.length} حركة)`, details: { row_count: ids.length, movement_ids: ids } });
+    setCloudFeedback(`تمت إزالة الشيت المحدد «${batchName}» فقط.`);
+  };
+
+  const handleRemoveCashierReceipt = async (movementId: string, receiptNo: string) => {
+    const movement = movements.find((row) => row.id === movementId);
+    if (!movement || !canManagePayments) throw new Error('لا توجد صلاحية لإزالة ربط إيصال الكاشير.');
+    const details = movement.cashier_receipt_details || [];
+    const receipt = details.find((item) => item.receipt_no === receiptNo);
+    if (!receipt && (movement.cashier_receipt_no || '').split(',').map((item) => item.trim()).filter(Boolean).length > 1) {
+      throw new Error('لا يوجد مبلغ محفوظ مستقل لهذا الإيصال القديم؛ لن نغيّر حساب الحركة بالتخمين.');
+    }
+    const amount = receipt?.amount ?? movement.cashier_invoice;
+    const nextCashier = Math.max(0, Number((movement.cashier_invoice - amount).toFixed(2)));
+    const nextTotal = Math.max(0, Number((movement.total_amount - amount).toFixed(2)));
+    if ((movement.customer_paid_amount || movement.paid_amount || 0) > nextTotal) throw new Error('سبق تسجيل دفعة أكبر من الرصيد بعد إزالة الإيصال. راجع سندات القبض قبل فك الربط.');
+    if (!await confirmAction(`إزالة إيصال ${receiptNo} بمبلغ ${amount.toLocaleString()} ج.م من الحركة ${movement.seq} فقط؟`, 'نعم، أزل هذا الإيصال')) return;
+    const remaining = Math.max(0, Number((nextTotal - (movement.customer_paid_amount || movement.paid_amount || 0)).toFixed(2)));
+    const remainingReceipts = (movement.cashier_receipt_no || '').split(',').map((item) => item.trim()).filter((item) => item && item !== receiptNo);
+    const updated: Movement = {
+      ...movement,
+      cashier_invoice: nextCashier,
+      cashier_receipt_no: remainingReceipts.join(', '),
+      cashier_receipt_details: details.filter((item) => item.receipt_no !== receiptNo),
+      total_amount: nextTotal,
+      remaining_amount: remaining,
+      payment_status: nextTotal > 0 && remaining === 0 ? 'paid' : ((movement.customer_paid_amount || movement.paid_amount || 0) > 0 ? 'partial' : 'unpaid'),
+      updated_by_user_id: currentUser.id,
+      updated_by_email: currentUser.email,
+      updated_by_name: currentUser.name || currentUser.email,
+      updated_at: new Date().toISOString(),
+    };
+    captureSafetyBackup(`قبل فك ربط الإيصال ${receiptNo}`);
+    const nextMovements = movements.map((row) => row.id === movement.id ? updated : row);
+    try {
+      await syncMovementToSupabase(updated);
+      await recordActivity({ action: 'delete', entity_type: 'cashier_invoice', entity_id: movement.id, entity_name: receiptNo, summary: `فك ربط الإيصال ${receiptNo} من الحركة ${movement.seq}`, details: { amount, movement_id: movement.id, truck_no: movement.truck_no } });
+      setMovements(nextMovements);
+      saveMovements(nextMovements);
+      setCloudFeedback(`تم فك ربط الإيصال ${receiptNo} وتحديث المتبقي.`);
+    } catch (error) {
+      await refreshDataFromCloud(false).catch(() => undefined);
+      throw error;
+    }
   };
 
   const handleRestoreSafetyBackup = async (backup: OperationalSafetyBackup) => {
@@ -610,6 +669,9 @@ const AppContent: React.FC = () => {
       import_batch_id: batchId,
       import_batch_name: batchName,
       import_batch_at: batchAt,
+      created_by_user_id: currentUser.id,
+      created_by_email: currentUser.email,
+      created_by_name: currentUser.name || currentUser.email,
     }));
     const updatedMovements = [...importedBatch, ...movements];
     setMovements(updatedMovements);
@@ -632,6 +694,12 @@ const AppContent: React.FC = () => {
       const referencedCustomerIds = new Set(importedBatch.map((movement) => movement.customer_id).filter(Boolean));
       const referencedCustomers = customersAfterImport.filter((customer) => referencedCustomerIds.has(customer.id));
       await syncImportedBatchToSupabase(referencedCustomers, importedBatch);
+      try {
+        await writeActivityLog({ action: 'upload', entity_type: 'sheet', entity_id: batchId, entity_name: batchName, summary: `رفع شيت ${batchName} (${importedBatch.length} حركة)`, details: { row_count: importedBatch.length, movement_ids: importedBatch.map((movement) => movement.id) } });
+      } catch (error) {
+        setCloudFeedback(`تم حفظ الشيت، لكن تعذر تسجيل اسم الرافع. تحقق من تطبيق تحديث قاعدة البيانات. ${error instanceof Error ? error.message : ''}`);
+        return true;
+      }
       setCloudFeedback('تم حفظ الحركات والعملاء في قاعدة البيانات السحابية ومزامنتها.');
       return true;
     } catch (error) {
@@ -649,11 +717,15 @@ const AppContent: React.FC = () => {
     const existingMovementById = new Map(movements.map((movement) => [movement.id, movement]));
     // Batch editors keep untouched rows by reference. Persist only rows that
     // actually changed instead of firing one Supabase write per loaded movement.
-    const changedMovements = allocation.movements.filter(
+    let changedMovements = allocation.movements.filter(
       (movement) => existingMovementById.get(movement.id) !== movement,
     );
-    setMovements(allocation.movements);
-    saveMovements(allocation.movements);
+    const updatedAt = new Date().toISOString();
+    changedMovements = changedMovements.map((movement) => ({ ...movement, updated_by_user_id: currentUser.id, updated_by_email: currentUser.email, updated_by_name: currentUser.name || currentUser.email, updated_at: updatedAt }));
+    const changedById = new Map(changedMovements.map((movement) => [movement.id, movement]));
+    const finalMovements = allocation.movements.map((movement) => changedById.get(movement.id) || movement);
+    setMovements(finalMovements);
+    saveMovements(finalMovements);
     setPayments(allocation.payments);
     savePayments(allocation.payments);
     try {
@@ -661,6 +733,20 @@ const AppContent: React.FC = () => {
         ...changedMovements.map((movement) => syncMovementToSupabase(movement)),
         ...allocation.payments.filter((p) => allocation.changedPaymentIds.includes(p.id)).map((p) => syncPaymentToSupabase(p)),
       ]);
+      if (changedMovements.length) {
+        const receiptChanges = changedMovements.filter((movement) => {
+          const previous = existingMovementById.get(movement.id);
+          return previous?.cashier_receipt_no !== movement.cashier_receipt_no || previous?.cashier_invoice !== movement.cashier_invoice || previous?.cashier_receipt_details !== movement.cashier_receipt_details;
+        });
+        const edits = changedMovements.filter((movement) => !receiptChanges.includes(movement));
+        try { await Promise.all([
+          ...receiptChanges.map((movement) => writeActivityLog({ action: 'update', entity_type: 'cashier_invoice', entity_id: movement.id, entity_name: movement.cashier_receipt_no || 'إيصال كاشير', summary: `تعديل ربط الكاشير للحركة ${movement.seq}`, details: { truck_no: movement.truck_no, receipt_no: movement.cashier_receipt_no, cashier_invoice: movement.cashier_invoice } })),
+          ...edits.map((movement) => writeActivityLog({ action: 'update', entity_type: 'movement', entity_id: movement.id, entity_name: movement.truck_no, summary: `تعديل الحركة ${movement.seq}`, details: { sequence: movement.seq, truck_no: movement.truck_no } })),
+        ]); } catch (error) {
+          setCloudFeedback(`تم حفظ التغييرات، لكن تعذر تسجيلها في سجل المدير. تحقق من تطبيق تحديث قاعدة البيانات. ${error instanceof Error ? error.message : ''}`);
+          return true;
+        }
+      }
       setCloudFeedback(`تم حفظ ربط الفواتير ومزامنة ${changedMovements.length} حركة في قاعدة البيانات السحابية.`);
       return true;
     } catch (error) {
@@ -850,7 +936,8 @@ const AppContent: React.FC = () => {
               setIsMovementModalOpen(true);
             }}
             onDeleteMovement={handleDeleteMovement}
-            onClearAllMovements={handleClearAllMovements}
+            onDeleteImportBatch={handleDeleteImportBatch}
+            onRemoveCashierReceipt={handleRemoveCashierReceipt}
             onUndoLatestDeletion={handleUndoLatestDeletion}
             canUndoLatestDeletion={safetyBackups.length > 0}
             onOpenPaymentModal={(cId) => {
@@ -971,7 +1058,6 @@ const AppContent: React.FC = () => {
             paymentCount={payments.length}
             safetyBackups={safetyBackups}
             onRefreshDataFromCloud={async () => { await refreshDataFromCloud(); }}
-            onClearOperationalData={handleClearOperationalData}
             onRestoreSafetyBackup={handleRestoreSafetyBackup}
           />
         )}

@@ -81,6 +81,7 @@ export interface Movement {
   // Financial fields
   cashier_invoice: number; // قيمة فاتورة كاشير
   cashier_receipt_no?: string; // مسلسل فاتورة الكاشير (e.g. 0047-01-1/01-261021)
+  cashier_receipt_details?: Array<{ receipt_no: string; amount: number; report_name?: string; linked_at?: string }>;
   booking_category?: string; // تصنيف الحجز (تعتيق حاوية فارغة / وارد حاويات / صادر)
   system_commission: number; // عمولة المنظومة (default 200 or dynamic)
   nafez_commission: number; // عمولة نافذ (إن وجدت)
@@ -98,6 +99,27 @@ export interface Movement {
   import_batch_id?: string;
   import_batch_name?: string;
   import_batch_at?: string;
+  created_by_user_id?: string;
+  created_by_email?: string;
+  created_by_name?: string;
+  updated_by_user_id?: string;
+  updated_by_email?: string;
+  updated_by_name?: string;
+  updated_at?: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  actor_user_id: string;
+  actor_email: string;
+  actor_name: string;
+  action: string;
+  entity_type: 'sheet' | 'cashier_invoice' | 'movement';
+  entity_id: string;
+  entity_name: string;
+  summary: string;
+  details: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface PaymentReceipt {

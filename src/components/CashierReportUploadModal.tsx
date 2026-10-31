@@ -146,7 +146,7 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
       const { parseUploadedCashierReport, getCashierEntryCandidates, applyCashierMatches } = await import('../lib/cashierParser');
       applyCashierMatchesRef.current = applyCashierMatches;
       getCandidatesRef.current = getCashierEntryCandidates;
-      const entries = await parseUploadedCashierReport(file);
+      const entries = (await parseUploadedCashierReport(file)).map((entry) => ({ ...entry, report_name: file.name }));
       parsedEntriesRef.current = entries;
       setParsedEntries(entries);
 

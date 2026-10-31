@@ -1,4 +1,4 @@
-import { Berth, Customer, Movement, OfficeExpense, PaymentReceipt, SystemSettings } from '../types';
+import { ActivityLog, Berth, Customer, Movement, OfficeExpense, PaymentReceipt, SystemSettings } from '../types';
 import { initialBerths, initialCustomers, initialMovements, initialSettings } from './mockData';
 import { getSupabaseClient } from './supabase';
 import { normalizeCustomerName } from './customerName';
@@ -159,6 +159,7 @@ const movementFinancialsForCloud = (row: Movement) => ({
   paid_amount: Number(row.paid_amount) || 0,
   remaining_amount: Number(row.remaining_amount) || 0,
   customer_paid_amount: Number(row.customer_paid_amount) || 0,
+  cashier_receipt_details: row.cashier_receipt_details || [],
 });
 
 const canViewCloudFinancials = async (supabase: NonNullable<ReturnType<typeof getSupabaseClient>>) => {
@@ -194,6 +195,9 @@ const movementWithFinancials = (row: Movement, financials?: Record<string, unkno
   ...movementForApp(row),
   cashier_invoice: Number(financials?.cashier_invoice) || 0,
   cashier_receipt_no: String(financials?.cashier_receipt_no || ''),
+  cashier_receipt_details: Array.isArray(financials?.cashier_receipt_details)
+    ? financials.cashier_receipt_details as Movement['cashier_receipt_details']
+    : [],
   system_commission: Number(financials?.system_commission) || 0,
   nafez_commission: Number(financials?.nafez_commission) || 0,
   discount: Number(financials?.discount) || 0,
@@ -884,6 +888,43 @@ export const deleteMovementFromSupabase = async (id: string) => {
     console.error('Failed to delete movement from Supabase:', e);
     throw e;
   }
+};
+
+export const deleteMovementsBatchFromSupabase = async (ids: string[]) => {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (!uniqueIds.length) return;
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ. راجع رابط المشروع والمفتاح العام في الإعدادات.');
+  for (const id of uniqueIds) setPendingDelete('movements', id);
+  for (let index = 0; index < uniqueIds.length; index += 100) {
+    const group = uniqueIds.slice(index, index + 100);
+    const { error } = await supabase.from('movements').delete().in('id', group);
+    if (error) throw new Error(`تعذر إزالة بعض حركات الشيت المحدد: ${error.message}`);
+    const pending = getPendingSync();
+    pending.deletes.movements = (pending.deletes.movements || []).filter((id) => !group.includes(id));
+    pending.upserts.movements ||= {};
+    group.forEach((id) => { delete pending.upserts.movements![id]; });
+    savePendingSync(pending);
+  }
+};
+
+export const writeActivityLog = async (event: Pick<ActivityLog, 'action' | 'entity_type' | 'entity_id' | 'entity_name' | 'summary' | 'details'>) => {
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ.');
+  const { error } = await supabase.from('activity_logs').insert(event as never);
+  if (error) throw new Error(`تعذر تسجيل نشاط المستخدم: ${error.message}`);
+};
+
+export const fetchRecentActivityLogs = async (limit = 200): Promise<ActivityLog[]> => {
+  const settings = getStoredSettings();
+  const supabase = getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
+  if (!supabase) throw new Error('اتصال Supabase غير مهيأ.');
+  const { data, error } = await supabase.from('activity_logs').select('*')
+    .order('created_at', { ascending: false }).limit(limit);
+  if (error) throw new Error(`تعذر تحميل سجل النشاط: ${error.message}`);
+  return (data || []) as ActivityLog[];
 };
 
 export const clearAllMovementsFromSupabase = async () => {

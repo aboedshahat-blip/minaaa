@@ -14,6 +14,7 @@ export interface CashierInvoiceEntry {
   container_path: string;
   container_desc: string;
   amount: number;              // e.g. 24.25
+  report_name?: string;
 }
 
 export interface CashierMatchResult {
@@ -534,19 +535,27 @@ export const applyCashierMatches = (
     }
   });
 
-  const updateMovement = (movementIndex: number, cashierInvoice: number, receipts: string[], bookingCategory?: string) => {
+  const updateMovement = (
+    movementIndex: number,
+    cashierInvoice: number,
+    receipts: string[],
+    bookingCategory?: string,
+    receiptDetails?: Movement['cashier_receipt_details'],
+  ) => {
     const movement = updatedMovements[movementIndex];
     const oldCashier = Number(movement.cashier_invoice) || 0;
     const systemCommission = Number(movement.system_commission ?? defaultSystemCommission);
     const nafezCommission = Number(movement.nafez_commission ?? 0);
+    const discount = Math.max(0, Number(movement.discount) || 0);
     const customerPaid = movement.customer_paid_amount !== undefined
       ? Math.max(0, Number(movement.customer_paid_amount) || 0)
       : Math.max(0, (Number(movement.paid_amount) || 0) - oldCashier);
-    const total = cashierInvoice + systemCommission + nafezCommission;
+    const total = Math.max(0, cashierInvoice + systemCommission + nafezCommission - discount);
     const remaining = Math.max(0, total - customerPaid);
     updatedMovements[movementIndex] = {
       ...movement,
       cashier_receipt_no: Array.from(new Set(receipts)).join(', '),
+      cashier_receipt_details: receiptDetails ?? movement.cashier_receipt_details ?? [],
       cashier_invoice: cashierInvoice,
       paid_amount: customerPaid,
       customer_paid_amount: customerPaid,
@@ -565,11 +574,15 @@ export const applyCashierMatches = (
     updatedMovements.forEach((movement, movementIndex) => {
       const receipts = getMovementReceiptNumbers(movement);
       if (!receipts.includes(entry.receipt_no) || movement.id === movementId) return;
-      const cashierInvoice = Math.max(0, (Number(movement.cashier_invoice) || 0) - Math.max(0, Number(entry.amount) || 0));
+      const currentDetails = movement.cashier_receipt_details || [];
+      const existingDetail = currentDetails.find((detail) => detail.receipt_no === entry.receipt_no);
+      const cashierInvoice = Math.max(0, (Number(movement.cashier_invoice) || 0) - Math.max(0, Number(existingDetail?.amount ?? entry.amount) || 0));
       updateMovement(
         movementIndex,
         cashierInvoice,
         receipts.filter((receipt) => receipt !== entry.receipt_no),
+        undefined,
+        currentDetails.filter((detail) => detail.receipt_no !== entry.receipt_no),
       );
     });
   });
@@ -581,12 +594,26 @@ export const applyCashierMatches = (
     const movement = updatedMovements[movementIndex];
     const receipts = getMovementReceiptNumbers(movement);
     if (!receipts.includes(entry.receipt_no)) {
+      const details = movement.cashier_receipt_details || [];
       updateMovement(
         movementIndex,
         (Number(movement.cashier_invoice) || 0) + Math.max(0, Number(entry.amount) || 0),
         [...receipts, entry.receipt_no],
         entry.booking_category,
+        [...details, {
+          receipt_no: entry.receipt_no,
+          amount: Math.max(0, Number(entry.amount) || 0),
+          report_name: entry.report_name,
+          linked_at: new Date().toISOString(),
+        }],
       );
+    } else if (!(movement.cashier_receipt_details || []).some((detail) => detail.receipt_no === entry.receipt_no) && receipts.length === 1) {
+      updateMovement(movementIndex, Number(movement.cashier_invoice) || 0, receipts, movement.booking_category, [{
+        receipt_no: entry.receipt_no,
+        amount: Number(movement.cashier_invoice) || Number(entry.amount) || 0,
+        report_name: entry.report_name,
+        linked_at: new Date().toISOString(),
+      }]);
     }
     entriesByMovement.set(movementId, [...(entriesByMovement.get(movementId) || []), entry]);
   });

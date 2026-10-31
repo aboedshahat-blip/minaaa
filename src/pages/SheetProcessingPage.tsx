@@ -11,7 +11,6 @@ import {
   Upload,
   Download,
   CheckCircle2,
-  Trash2,
   Check,
   Eye,
   Plus,
@@ -512,7 +511,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
                     <th className="p-2 border border-slate-700 whitespace-nowrap">رقم الحاوية</th>
                     <th className="p-2 border border-slate-700 whitespace-nowrap">وصف الحاوية</th>
                     <th className="p-2 border border-slate-700 whitespace-nowrap">مسار الحاوية</th>
-                    <th className="p-2 border border-slate-700 text-center w-10">حذف</th>
+                    <th className="p-2 border border-slate-700 text-center w-16">استبعاد</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
@@ -618,7 +617,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
                           onClick={() => handleRemoveRow(idx)}
                           className="text-rose-500 hover:text-rose-700 p-1"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          استبعاد
                         </button>
                       </td>
                     </tr>

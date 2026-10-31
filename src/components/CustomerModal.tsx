@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, CustomerTruck } from '../types';
-import { X, Users, Plus, Trash2, Truck, Check } from 'lucide-react';
+import { X, Users, Plus, Truck, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 
@@ -250,14 +250,6 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                         </span>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTruck(index)}
-                      className="text-rose-500 hover:text-rose-700 p-1"
-                      title="حذف السيارة"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 ))}
               </div>

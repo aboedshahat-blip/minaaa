@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Berth, Movement } from '../types';
-import { Plus, Edit2, Trash2, CheckCircle2, XCircle } from 'lucide-react';
+import { Plus, Edit2, CheckCircle2, XCircle } from 'lucide-react';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 
 interface BerthsPageProps {
@@ -83,13 +83,6 @@ export const BerthsPage: React.FC<BerthsPageProps> = ({
                       title="تعديل الرصيف"
                     >
                       <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteBerth(b.id)}
-                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition"
-                      title="حذف الرصيف"
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

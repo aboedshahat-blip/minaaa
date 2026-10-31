@@ -5,7 +5,6 @@ import { exportTemplateToExcel } from '../lib/excelUtils';
 import {
   Download,
   Printer,
-  Trash2,
   Edit2,
   CheckCircle,
   Clock,
@@ -43,8 +42,9 @@ interface MovementsPageProps {
   currentMaxSeq: number;
   onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => Promise<boolean>;
   onEditMovement: (movement: Movement) => void;
-  onDeleteMovement: (id: string) => void;
-  onClearAllMovements?: () => void;
+  onDeleteMovement: (movement: Movement) => void;
+  onDeleteImportBatch?: (movements: Movement[]) => Promise<void>;
+  onRemoveCashierReceipt?: (movementId: string, receiptNo: string) => Promise<void>;
   onOpenPaymentModal?: (customerId?: string) => void;
   onUndoLatestDeletion?: () => Promise<void>;
   canUndoLatestDeletion?: boolean;
@@ -99,7 +99,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onImportMovements,
   onEditMovement,
   onDeleteMovement,
-  onClearAllMovements,
+  onDeleteImportBatch,
+  onRemoveCashierReceipt,
   onOpenPaymentModal,
   onUndoLatestDeletion,
   canUndoLatestDeletion = false,
@@ -108,7 +109,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   isCloudDataReady = true,
 }) => {
   const confirmAction = useConfirmAction();
-  const { canViewFinancials, canAddMovements, canUploadSheets, isAdmin, canManagePayments, canEditCommissions } = useAuth();
+  const { canViewFinancials, canAddMovements, canUploadSheets, canDeleteMovements, canManagePayments, canEditCommissions, currentUser } = useAuth();
+  const canRemoveMovement = (movement: Movement) => canDeleteMovements || (movement.created_by_user_id === currentUser.id && (canUploadSheets || canAddMovements));
 
   // Modals state
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -787,6 +789,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <button onClick={downloadPickedBatchesPdf} disabled={!pickedBatchMovements.length || isExportingPickedPdf} className="rounded-lg bg-indigo-700 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Download className="inline h-3.5 w-3.5 ml-1"/>{isExportingPickedPdf?'جاري تجهيز PDF...':'تنزيل PDF للمحدد'}</button>
                 <button onClick={()=>{setSelectedManifestBatchIds([]);setSelectedManifestBatch('latest');}} disabled={!selectedManifestBatchIds.length} className="rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50">إلغاء التحديد</button>
               </div>
+              {onDeleteImportBatch && <button type="button" disabled={selectedManifestBatchIds.length !== 1} onClick={() => {
+                if (selectedManifestBatchIds.length !== 1) return;
+                const selected = new Set([selectedManifestBatchIds[0]]);
+                const rows = movements.filter((movement) => selected.has(getMovementBatch(movement).id));
+                void onDeleteImportBatch(rows).catch((error) => window.alert(error instanceof Error ? error.message : 'تعذرت إزالة الشيت المحدد.'));
+              }} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40">إزالة الشيت المحدد فقط {selectedManifestBatchIds.length === 1 ? 'بعد التأكيد' : '(اختر شيتًا واحدًا)'}</button>}
             </>}
           </div>
 
@@ -832,7 +840,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       <td className="p-2 border border-slate-100 text-center no-print">
                         <div className="flex items-center justify-center gap-1">
                           <button onClick={() => onEditMovement(m)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="تعديل"><Edit2 className="w-3 h-3" /></button>
-                          <button onClick={() => onDeleteMovement(m.id)} className="p-1 text-rose-500 hover:bg-rose-50 rounded" title="حذف"><Trash2 className="w-3 h-3" /></button>
+                          {canRemoveMovement(m) && <button onClick={() => onDeleteMovement(m)} className="rounded-md px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-50">إزالة الحركة</button>}
                         </div>
                       </td>
                     </tr>
@@ -936,9 +944,15 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                         <>
                           <td className="p-2 border border-slate-100 text-center">
                             {m.cashier_receipt_no ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200">
-                                <CheckCircle className="w-3 h-3" />#{m.cashier_receipt_no}
-                              </span>
+                              <div className="flex flex-col items-center gap-1">
+                                {(m.cashier_receipt_details?.length ? m.cashier_receipt_details : m.cashier_receipt_no.split(',').map((receipt_no) => ({ receipt_no: receipt_no.trim(), amount: m.cashier_invoice }))).map((receipt) => (
+                                  <span key={receipt.receipt_no} className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-mono text-[10px] text-emerald-800">
+                                    <CheckCircle className="h-3 w-3" />#{receipt.receipt_no}
+                                    {onRemoveCashierReceipt && canManagePayments && <button type="button" onClick={() => void onRemoveCashierReceipt(m.id, receipt.receipt_no).catch((error) => window.alert(error instanceof Error ? error.message : 'تعذر فك ربط الإيصال.'))} className="mr-1 rounded px-1 font-sans font-bold text-rose-700 hover:bg-rose-100">إزالة الربط</button>}
+                                  </span>
+                                ))}
+                                {!m.cashier_receipt_details?.length && m.cashier_receipt_no.includes(',') && <span className="text-[9px] text-amber-700">الإيصالات القديمة لا تحتوي مبالغ منفصلة؛ لا يمكن فك إيصال منها بأمان</span>}
+                              </div>
                             ) : (
                               <span className="text-[11px] text-amber-600 font-semibold flex items-center justify-center gap-1">
                                 <Clock className="w-3 h-3" />لم يُربط
@@ -1196,9 +1210,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 {canViewFinancials && filteredMovements.length > 0 && (
                   <button onClick={() => setIsInvoiceModalOpen(true)} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><FileText className="w-4 h-4" /><span>فاتورة ({filteredMovements.length})</span></button>
                 )}
-                {isAdmin && movements.length > 0 && onClearAllMovements && (
-                  <button onClick={onClearAllMovements} className="bg-slate-600 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Trash2 className="w-4 h-4" /><span>مسح وتصفير</span></button>
-                )}
               </div>
             </div>
             {/* Filter Bar */}
@@ -1323,7 +1334,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                             </button>
                           )}
                           <button onClick={() => onEditMovement(m)} className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded" title="تعديل الحركة"><Edit2 className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => onDeleteMovement(m.id)} className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded" title="حذف الحركة"><Trash2 className="w-3.5 h-3.5" /></button>
+                          {canRemoveMovement(m) && <button onClick={() => onDeleteMovement(m)} className="rounded-md px-2 py-1 text-[10px] font-bold text-rose-700 hover:bg-rose-50">إزالة الحركة</button>}
                         </div>
                       </td>
                     </tr>

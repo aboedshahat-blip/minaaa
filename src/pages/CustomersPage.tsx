@@ -9,7 +9,6 @@ import {
   Phone,
   Mail,
   Edit2,
-  Trash2,
   CreditCard,
   ChevronDown,
   ChevronUp,
@@ -193,13 +192,6 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
                       title="تعديل العميل والسيارات"
                     >
                       <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteCustomer(customer.id)}
-                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition"
-                      title="حذف العميل"
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
