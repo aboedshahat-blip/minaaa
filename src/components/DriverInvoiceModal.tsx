@@ -43,8 +43,6 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
   const totalRemaining = movements.reduce((s, m) => s + (Number(m.remaining_amount) || 0), 0);
 
   // Distinct truck plates
-  const truckPlates = Array.from(new Set(movements.map((m) => m.truck_no).filter(Boolean))).join(' ، ');
-  const trailerPlates = Array.from(new Set(movements.map((m) => m.trailer_no).filter(Boolean))).join(' ، ');
   const berths = Array.from(new Set(movements.map((m) => m.berth_name).filter(Boolean))).join(' ، ');
 
   const handleDownloadPdf = async () => {
@@ -86,7 +84,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
         <meta charset="utf-8" />
         <title>فاتورة حساب سائق - ${driverName}</title>
         <style>
-          @page { size: A4 landscape; margin: 8mm; }
+          @page { size: A4 landscape; margin: 8mm 8mm 26mm; }
           * { box-sizing: border-box; }
           body {
             font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
@@ -97,17 +95,10 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             padding: 15px;
             font-size: 12px;
           }
-          .header-box {
-            border-bottom: 2px solid #0f172a;
-            padding-bottom: 12px;
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          }
+          .header-box { border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px; display: grid; grid-template-columns: 76px minmax(0,1fr) auto; gap: 12px; align-items: center; }
           .title { font-size: 20px; font-weight: 900; margin: 0 0 4px 0; color: #1e3a8a; }
           .office-name { max-width: 620px; overflow-wrap: anywhere; word-break: break-word; line-height: 1.45; }
-          .brand-logo { width: 108px; height: 76px; object-fit: contain; object-position: center; border-radius: 8px; }
+          .brand-logo { display: block; width: 70px; height: 62px; max-width: 70px; max-height: 62px; object-fit: contain; object-position: center; border-radius: 8px; }
           .subtitle { font-size: 13px; font-weight: bold; color: #475569; margin: 0; }
           .meta-box {
             background-color: #f1f5f9;
@@ -116,7 +107,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             padding: 10px;
             margin-bottom: 15px;
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
             font-size: 12px;
           }
@@ -168,7 +159,15 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
           .transport-stamp { width: 125px; height: 58px; margin: 14px auto 0; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-weight: 800; }
           .sign-line { margin-top: 45px; border-top: 1px solid #64748b; }
           .footer-note { text-align: center; font-size: 10px; color: #64748b; margin-top: 25px; }
-          @media print { body { padding: 0; font-size: 10px; } th, td { padding: 4px 3px !important; } tr { break-inside: avoid; } }
+          @media print {
+            body { padding: 0; font-size: 10px; }
+            th, td { padding: 4px 3px !important; }
+            tr { break-inside: avoid; }
+            thead { display: table-header-group; }
+            .overflow-x-auto { overflow: visible !important; }
+            .driver-invoice-content { padding-bottom: 18mm !important; }
+            .invoice-stamp-footer { position: fixed; left: 0; right: 0; bottom: -18mm; margin: 0 !important; background: #fff; }
+          }
         </style>
       </head>
       <body>
@@ -238,13 +237,13 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
         <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60">
           <div
             id="printable-driver-invoice"
-            className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-slate-200 max-w-3xl mx-auto text-right text-slate-900"
+            className="driver-invoice-content bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-slate-200 max-w-3xl mx-auto text-right text-slate-900"
           >
             {/* Invoice Header */}
-            <div className="header-box border-b-2 border-slate-900 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <img src={vibLogoUrl} alt="شعار VIB" className="brand-logo rounded-lg" />
-              <div>
-                <h1 className="title office-name text-xl font-black text-blue-900">{placeName}</h1>
+            <div className="header-box border-b-2 border-slate-900 pb-3 mb-4 grid grid-cols-[64px_minmax(0,1fr)] sm:grid-cols-[84px_minmax(0,1fr)_auto] items-center gap-3">
+              <img src={vibLogoUrl} alt="شعار VIB" className="brand-logo h-16 w-16 sm:h-[72px] sm:w-[84px] shrink-0 object-contain rounded-lg" />
+              <div className="min-w-0 text-center sm:text-right">
+                <h1 className="title office-name break-words text-lg sm:text-xl font-black text-blue-900">{placeName}</h1>
                 <p className="subtitle text-xs font-bold text-slate-600 mt-1">
                   إدارة الحركة والتشغيل — فاتورة ومطالبة مجمعة لحساب سائق
                 </p>
@@ -252,14 +251,14 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
                   <p className="text-[11px] text-slate-500 mt-0.5">الرصيف: {berths}</p>
                 )}
               </div>
-              <div className="text-left sm:text-left bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+              <div className="col-span-2 sm:col-span-1 justify-self-end text-left bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
                 <div className="font-mono font-black text-slate-900">{invoiceNo}</div>
                 <div className="text-slate-500 text-[11px] mt-0.5">التاريخ: {invoiceDate}</div>
               </div>
             </div>
 
             {/* Meta Information Cards */}
-            <div className="meta-box bg-slate-50 border border-slate-200 rounded-lg p-3.5 mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="meta-box bg-slate-50 border border-slate-200 rounded-lg p-3.5 mb-5 grid grid-cols-2 gap-3 text-xs">
               <div className="meta-item">
                 <span className="meta-label text-[11px] font-bold text-slate-500">اسم السائق:</span>
                 <span className="meta-val font-black text-slate-900 text-sm mt-0.5">{driverName}</span>
@@ -268,19 +267,11 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
                 <span className="meta-label text-[11px] font-bold text-slate-500">عدد الشحنات:</span>
                 <span className="meta-val font-bold text-blue-800 mt-0.5">{movements.length} حركة / حاوية</span>
               </div>
-              <div className="meta-item">
-                <span className="meta-label text-[11px] font-bold text-slate-500">رقم الشاحنة:</span>
-                <span className="meta-val font-mono font-bold text-slate-800 mt-0.5">{truckPlates || '-'}</span>
-              </div>
-              <div className="meta-item">
-                <span className="meta-label text-[11px] font-bold text-slate-500">رقم المقطورة:</span>
-                <span className="meta-val font-mono font-bold text-slate-800 mt-0.5">{trailerPlates || '-'}</span>
-              </div>
             </div>
 
             {/* Detailed Movements Table */}
             <div className="overflow-x-auto mb-5">
-              <table className="w-full min-w-[1100px] text-xs text-right border-collapse border border-slate-300">
+              <table className="w-full table-fixed text-xs text-right border-collapse border border-slate-300">
                 <thead className="bg-slate-900 text-white font-bold text-[11px]">
                   <tr>
                     <th className="p-2 border border-slate-700 text-center w-8">م</th>
@@ -361,7 +352,7 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
             </div>
 
             {/* Signatures & Stamps */}
-            <div className="flex justify-center items-center pt-6 border-t border-dashed border-slate-300 mt-6 text-xs font-bold text-slate-700">
+            <div className="invoice-stamp-footer flex justify-center items-center pt-4 border-t border-dashed border-slate-300 mt-5 text-xs font-bold text-slate-700">
               <div className="text-center">
                 <span>ختم مكتب النقل</span>
                 <div className="transport-stamp">ختم مكتب النقل</div>

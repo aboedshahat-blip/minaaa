@@ -10,23 +10,44 @@ const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (
   "'": '&#39;',
 }[character] as string));
 
-const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5) => {
+const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5, repeatTransportStamp = false) => {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
   const contentWidth = pageWidth - margin * 2;
-  const contentHeight = pageHeight - margin * 2;
+  const stampHeight = repeatTransportStamp ? 22 : 0;
+  const contentHeight = pageHeight - margin * 2 - stampHeight;
   const pixelsPerMm = canvas.width / contentWidth;
   const pagePixelHeight = Math.max(1, Math.floor(contentHeight * pixelsPerMm));
+  const stampPixelHeight = Math.floor(stampHeight * pixelsPerMm);
 
   for (let top = 0; top < canvas.height; top += pagePixelHeight) {
     const sliceHeight = Math.min(pagePixelHeight, canvas.height - top);
     const pageCanvas = document.createElement('canvas');
     pageCanvas.width = canvas.width;
-    pageCanvas.height = sliceHeight;
+    pageCanvas.height = sliceHeight + stampPixelHeight;
     const context = pageCanvas.getContext('2d');
     if (!context) throw new Error('تعذر تجهيز صفحة PDF في المتصفح.');
 
     context.drawImage(canvas, 0, top, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+    if (repeatTransportStamp) {
+      const stampTop = sliceHeight + 2 * pixelsPerMm;
+      const boxWidth = 48 * pixelsPerMm;
+      const boxHeight = 12 * pixelsPerMm;
+      const boxX = (pageCanvas.width - boxWidth) / 2;
+      const boxY = stampTop + 5 * pixelsPerMm;
+      context.save();
+      context.direction = 'rtl';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillStyle = '#475569';
+      context.font = `700 ${Math.max(12, Math.round(2.6 * pixelsPerMm))}px Tahoma, Arial, sans-serif`;
+      context.fillText('ختم مكتب النقل', pageCanvas.width / 2, stampTop + 1.5 * pixelsPerMm);
+      context.strokeStyle = '#64748b';
+      context.lineWidth = Math.max(1, 0.35 * pixelsPerMm);
+      context.setLineDash([1.5 * pixelsPerMm, 1 * pixelsPerMm]);
+      context.strokeRect(boxX, boxY, boxWidth, boxHeight);
+      context.restore();
+    }
     if (top > 0) pdf.addPage();
     pdf.addImage(
       pageCanvas.toDataURL('image/jpeg', 0.92),
@@ -34,7 +55,7 @@ const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5) 
       margin,
       margin,
       contentWidth,
-      sliceHeight / pixelsPerMm,
+      pageCanvas.height / pixelsPerMm,
       undefined,
       'FAST',
     );
@@ -256,7 +277,6 @@ export async function exportCustomerStatementPdf(
     day: 'numeric',
   });
 
-  const truckPlates = Array.from(new Set(movements.map((m) => m.truck_no).filter(Boolean))).join(' ، ');
   const paymentRowsHtml = paymentReceipts.map((payment, idx) => `
     <tr style="background-color:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding:6px;border:1px solid #cbd5e1;text-align:center;direction:ltr;unicode-bidi:plaintext;">${escapeHtml(payment.receipt_no || '-')}</td>
@@ -289,7 +309,7 @@ export async function exportCustomerStatementPdf(
 
   container.innerHTML = `
     <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 155px minmax(0,1fr) 175px; align-items: center; gap: 16px;">
-      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:150px;height:92px;object-fit:contain;object-position:center;border-radius:8px;justify-self:center;" />
+      <img src="${vibLogoUrl}" alt="شعار VIB" style="width:86px;height:64px;max-width:86px;object-fit:contain;object-position:center;border-radius:8px;justify-self:center;" />
       <div style="text-align: center; min-width:0; overflow-wrap:anywhere;">
         <span style="display: inline-block; max-width:100%; white-space:normal; overflow-wrap:anywhere; background-color: #1e3a8a; color: #ffffff; padding: 7px 16px; border-radius: 8px; font-size: 16px; line-height:1.5; font-weight: bold;">
           فاتورة ومطالبة حساب عميل / سائق
@@ -303,14 +323,10 @@ export async function exportCustomerStatementPdf(
     </div>
 
     <!-- Customer Info Card -->
-    <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 12px;">
+    <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 12px;">
       <div>
         <span style="color: #64748b; font-size: 10px; font-weight: bold; display: block;">اسم العميل / السائق:</span>
         <strong style="font-size: 14px; color: #0f172a;">${escapeHtml(customerName)}</strong>
-      </div>
-      <div>
-        <span style="color: #64748b; font-size: 10px; font-weight: bold; display: block;">الشاحنات المنفذة:</span>
-        <span style="color: #334155; font-size: 11px;">${escapeHtml(truckPlates || 'غير محدد')}</span>
       </div>
       <div>
         <span style="color: #64748b; font-size: 10px; font-weight: bold; display: block;">حالة الحساب:</span>
@@ -391,15 +407,6 @@ export async function exportCustomerStatementPdf(
       </div>
     </div>
 
-    <!-- Signatures and Stamp Footer -->
-    <div style="margin-top: 30px; display: flex; justify-content: center; align-items: flex-end; padding-top: 15px; border-top: 1px dashed #cbd5e1; font-size: 11px; color: #475569;">
-      <div style="text-align: center;">
-        <p style="margin: 0; font-weight: bold;">ختم مكتب النقل</p>
-        <div style="margin: 8px auto 0; width: 145px; height: 78px; border: 1.5px dashed #64748b; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; font-weight:bold;">
-          ختم مكتب النقل
-        </div>
-      </div>
-    </div>
   `;
 
   document.body.appendChild(container);
@@ -425,7 +432,7 @@ export async function exportCustomerStatementPdf(
       format: 'a4',
     });
 
-    addCanvasAsPdfPages(pdf, canvas);
+    addCanvasAsPdfPages(pdf, canvas, 5, true);
 
     const safeName = customerName.replace(/[^ء-يa-zA-Z0-9_-]/g, '_');
     pdf.save(`فاتورة_حساب_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`);
