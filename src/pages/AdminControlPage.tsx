@@ -290,7 +290,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     setNewFullName('');
     setNewUserPassword('');
     setIsAddUserOpen(false);
-    alert('تم إنشاء الحساب وإرسال دعوة تأكيد إلى البريد الإلكتروني. بعد تأكيد البريد يمكن للمستخدم تسجيل الدخول.');
+    alert('تم إعداد الحساب وكلمة المرور. يمكن للمستخدم تسجيل الدخول بالبريد أو اسم الدخول وكلمة المرور التي أدخلتها، ثم تغييرها من داخل النظام.');
   };
 
   const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[0];

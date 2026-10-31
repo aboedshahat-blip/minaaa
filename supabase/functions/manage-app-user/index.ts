@@ -59,24 +59,49 @@ Deno.serve(async (request) => {
       .select('user_id').eq('username_normalized', normalizedUsername).limit(1).maybeSingle();
     if (usernameLookupError) return respond({ error: 'تعذر التحقق من اسم المستخدم.' }, 400);
     if (usernameMatch) return respond({ error: 'اسم المستخدم مستخدم بالفعل. اختر اسمًا آخر.' }, 409);
-    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-      data: { username, display_name: displayName },
-    });
-    if (inviteError || !invited.user) return respond({ error: inviteError?.message || 'تعذر إرسال دعوة المستخدم.' }, 400);
-    const { error: passwordError } = await admin.auth.admin.updateUserById(invited.user.id, { password });
-    if (passwordError) {
-      await admin.auth.admin.deleteUser(invited.user.id);
-      return respond({ error: 'تعذر إعداد كلمة المرور للحساب الجديد.' }, 400);
+    const { data: existingProfile, error: existingProfileError } = await admin.from('app_user_profiles')
+      .select('user_id').eq('email', email).maybeSingle();
+    if (existingProfileError) return respond({ error: 'تعذر التحقق من البريد في ملفات المستخدمين.' }, 400);
+    if (existingProfile) return respond({ error: 'هذا البريد مسجل بالفعل في النظام. اختر حسابه من قائمة المستخدمين لتغيير دوره أو كلمة مروره.' }, 409);
+
+    let authUser: { id: string } | null = null;
+    let createdAuthUser = false;
+    for (let page = 1; page <= 100; page += 1) {
+      const { data: authUsers, error: listError } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+      if (listError) return respond({ error: `تعذر التحقق من حساب الدخول: ${listError.message}` }, 400);
+      const match = authUsers.users.find((user) => user.email?.toLowerCase() === email);
+      if (match) { authUser = { id: match.id }; break; }
+      if (authUsers.users.length < 1000) break;
     }
+
+    if (authUser) {
+      const { error } = await admin.auth.admin.updateUserById(authUser.id, {
+        password,
+        email_confirm: true,
+        user_metadata: { username, display_name: displayName },
+      });
+      if (error) return respond({ error: `هذا البريد له حساب دخول موجود، لكن تعذر تهيئته: ${error.message}` }, 400);
+    } else {
+      const { data: created, error } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { username, display_name: displayName },
+      });
+      if (error || !created.user) return respond({ error: `تعذر إنشاء حساب الدخول: ${error?.message || 'لم تُرجع الخدمة حسابًا جديدًا.'}` }, 400);
+      authUser = { id: created.user.id };
+      createdAuthUser = true;
+    }
+
     const { error: profileError } = await admin.from('app_user_profiles').upsert({
-      user_id: invited.user.id, email, username, display_name: displayName, role,
+      user_id: authUser.id, email, username, display_name: displayName, role,
       permissions, is_active: true,
     });
     if (profileError) {
-      await admin.auth.admin.deleteUser(invited.user.id);
-      return respond({ error: 'تعذر حفظ صلاحيات الحساب الجديد.' }, 400);
+      if (createdAuthUser) await admin.auth.admin.deleteUser(authUser.id);
+      return respond({ error: `تم تجهيز بيانات الدخول، لكن تعذر حفظ ملف المستخدم: ${profileError.message}` }, 400);
     }
-    return respond({ success: true, invite_sent: true });
+    return respond({ success: true, invite_sent: false });
   }
 
   if (!targetId) return respond({ error: 'معرّف المستخدم مطلوب.' }, 400);

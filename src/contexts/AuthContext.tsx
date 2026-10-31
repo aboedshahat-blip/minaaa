@@ -292,7 +292,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const invokeUserAdmin = async (action: string, fields: Record<string, unknown>) => {
     if (!supabase || currentUser.role !== 'admin') throw new Error('إدارة المستخدمين متاحة للمدير العام فقط.');
     const { data, error } = await supabase.functions.invoke('manage-app-user', { body: { action, ...fields } });
-    if (error) throw new Error(error.message || 'تعذر تنفيذ إدارة المستخدم.');
+    if (error) {
+      let message = error.message || 'تعذر تنفيذ إدارة المستخدم.';
+      const response = (error as { context?: unknown }).context;
+      if (response instanceof Response) {
+        try {
+          const body = await response.clone().json() as { error?: string; message?: string };
+          message = body.error || body.message || message;
+        } catch { /* retain the transport error when no structured response is available */ }
+      }
+      throw new Error(message);
+    }
     if (data?.error) throw new Error(String(data.error));
     await refreshUsers(supabase);
   };
