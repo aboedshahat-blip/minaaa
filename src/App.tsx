@@ -964,8 +964,6 @@ const AppContent: React.FC = () => {
             onDeleteMovement={handleDeleteMovement}
             onDeleteImportBatch={handleDeleteImportBatch}
             onRemoveCashierReceipt={handleRemoveCashierReceipt}
-            onUndoLatestDeletion={handleUndoLatestDeletion}
-            canUndoLatestDeletion={safetyBackups.length > 0}
             onOpenPaymentModal={(cId) => {
               setPaymentCustomerId(cId);
               setIsPaymentModalOpen(true);

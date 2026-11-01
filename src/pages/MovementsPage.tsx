@@ -46,8 +46,6 @@ interface MovementsPageProps {
   onDeleteImportBatch?: (movements: Movement[]) => Promise<void>;
   onRemoveCashierReceipt?: (movementId: string, receiptNo: string) => Promise<void>;
   onOpenPaymentModal?: (customerId?: string) => void;
-  onUndoLatestDeletion?: () => Promise<void>;
-  canUndoLatestDeletion?: boolean;
   onBatchUpdateMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
   onRepairZeroFinancialMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
   isCloudDataReady?: boolean;
@@ -102,8 +100,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onDeleteImportBatch,
   onRemoveCashierReceipt,
   onOpenPaymentModal,
-  onUndoLatestDeletion,
-  canUndoLatestDeletion = false,
   onBatchUpdateMovements,
   onRepairZeroFinancialMovements,
   isCloudDataReady = true,
@@ -173,18 +169,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const openManifestPrint = (scope: 'selected' | 'all' | 'picked') => {
     setManifestPrintScope(scope);
     setIsOfficialSheetModalOpen(true);
-  };
-
-  const runUndoLatestDeletion = async () => {
-    if (!canUndoLatestDeletion || !onUndoLatestDeletion) return;
-    const confirmed = await confirmAction('سيتم إرجاع البيانات كما كانت قبل آخر حذف، وقد تُستبدل أي تغييرات أُدخلت بعده. هل تريد التراجع؟', 'نعم، تراجع');
-    if (!confirmed) return;
-    try {
-      await onUndoLatestDeletion();
-      window.alert('تم التراجع عن آخر حذف واستعادة البيانات.');
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'تعذر التراجع عن الحذف.');
-    }
   };
 
   const getEntryDateTime = (movement: Movement) => {
@@ -632,7 +616,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-xl font-black text-slate-900">حركات اليوم</h2><p className="mt-1 text-xs text-slate-500">أحدث الحركات أولًا. ابحث بالعميل أو السائق أو رقم المركبة.</p></div>
-            {canUndoLatestDeletion && <button onClick={() => void runUndoLatestDeletion()} className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900"><RotateCcw className="h-4 w-4"/>تراجع عن آخر حذف</button>}
           </div>
 
           <div className={`grid grid-cols-2 gap-3 ${canViewFinancials ? 'lg:grid-cols-4' : 'lg:grid-cols-1'}`}>
