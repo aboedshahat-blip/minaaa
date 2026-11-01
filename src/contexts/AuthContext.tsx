@@ -52,6 +52,14 @@ const anonymousUser: ManagedUser = {
   created_at: '', permissions: emptyPermissions,
 };
 
+const hasPasswordRecoveryCallback = () => {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  return [query, hash].some((params) =>
+    params.get('type') === 'recovery' || params.get('flow') === 'password-recovery',
+  );
+};
+
 const fromProfile = (row: Record<string, unknown>): ManagedUser => ({
   id: String(row.user_id || ''),
   email: String(row.email || ''),
@@ -68,7 +76,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  // Supabase can process a recovery URL before React subscribes to auth events.
+  // Detect the callback marker on first render so the recovery link never looks like a normal login.
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(hasPasswordRecoveryCallback);
   const [sessionNotice, setSessionNotice] = useState('');
 
   const supabase = useMemo(() => {
