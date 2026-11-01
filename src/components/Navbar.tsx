@@ -5,12 +5,10 @@ import { vibLogoUrl } from '../lib/branding';
 
 interface NavbarProps {
   onOpenQuickAdd: () => void;
-  onExportTemplate: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenQuickAdd,
-  onExportTemplate,
 }) => {
   const { currentUser, canViewFinancials, logout } = useAuth();
 
@@ -35,14 +33,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="inline-flex items-center gap-1 sm:gap-1.5 bg-blue-600 hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 text-white text-[11px] sm:text-xs font-semibold px-2.5 sm:px-3.5 py-2.5 rounded-lg shadow-sm transition min-h-11"
           >
             <Plus className="w-4 h-4" /><span>إدخال يدوي</span>
-          </button>
-
-          <button
-            onClick={onExportTemplate}
-            className="hidden sm:inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition"
-            title="تصدير الشيت بالاسطمبة الرسمية"
-          >
-            <span>تصدير الاسطمبة</span>
           </button>
 
           {/* Current Logged in User Badge & Logout */}

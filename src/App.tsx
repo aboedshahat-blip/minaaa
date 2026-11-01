@@ -49,7 +49,6 @@ import {
   uploadOfficeExpenseReceipt,
 } from './lib/storage';
 import { getSupabaseClient } from './lib/supabase';
-import { exportTemplateToExcel } from './lib/excelUtils';
 import { Navbar } from './components/Navbar';
 import { NavigationTabs, TabType } from './components/NavigationTabs';
 const MovementsPage = lazy(() => import('./pages/MovementsPage').then((module) => ({ default: module.MovementsPage })));
@@ -925,7 +924,6 @@ const AppContent: React.FC = () => {
           setEditingMovement(null);
           setIsMovementModalOpen(true);
         }}
-        onExportTemplate={() => exportTemplateToExcel(movements)}
       />
 
       {/* Navigation Tabs */}
