@@ -255,7 +255,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل.' };
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail.includes('@')) return { success: false, message: 'اكتب البريد الإلكتروني للحساب أولاً.' };
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail);
+    const redirectUrl = new URL(window.location.pathname, window.location.origin);
+    redirectUrl.searchParams.set('flow', 'password-recovery');
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: redirectUrl.toString(),
+    });
     if (error) return { success: false, message: error.message || 'تعذر إرسال رابط استعادة كلمة المرور.' };
     return { success: true };
   };
