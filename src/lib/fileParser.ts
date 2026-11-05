@@ -496,9 +496,20 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
           if (name && /[\u0600-\u06ff]/.test(name)) {
             const recognizedName = joinArabicNameFragments(name);
             if (rowToVerify?.sourceName) {
-              if (normalizeArabicNameForComparison(recognizedName) !== rowToVerify.sourceName || confidence < 70) {
+              const recognizedComparisonName = normalizeArabicNameForComparison(recognizedName);
+              const textLayerIsDifferent = recognizedComparisonName !== rowToVerify.sourceName;
+              if (textLayerIsDifferent || confidence < 80) {
                 needsDriverReview = true;
                 movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
+              }
+              // Some Word-generated PDFs have a broken Arabic font map: the
+              // selectable text can say "اسالم الكوم" while the rendered page
+              // clearly says "اسلام الكومي". Prefer OCR only when confidence is
+              // high, and keep every affected row highlighted for human review.
+              if (textLayerIsDifferent && confidence >= 80 && recognizedName.trim()) {
+                movementIndexes.forEach((movementIndex) => {
+                  allMovements[movementIndex].driver_name = recognizedName;
+                });
               }
             } else {
               movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = recognizedName; });
