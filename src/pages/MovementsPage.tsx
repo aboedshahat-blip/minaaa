@@ -1272,7 +1272,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white">
                   {filteredMovements.length > 0 ? filteredMovements.map((m, index) => (
-                    <tr key={m.id} className="hover:bg-blue-50/40 transition">
+                    <tr key={m.id} className="hover:bg-blue-50/40">
                       <td className="p-2 border border-slate-200 text-center font-bold text-blue-900 bg-slate-50/50">{m.seq || index + 1}</td>
                       <td className="p-2 border border-slate-200 font-bold text-slate-900 whitespace-nowrap">
                         {m.truck_no}
@@ -1291,7 +1291,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                       <td className="p-2 border border-slate-200 text-slate-600 whitespace-nowrap">{getEntryDateTime(m)?.toLocaleString('ar-EG') || 'غير مسجل'}</td>
                       {canViewFinancials && (
                         <>
-                          <td className="p-2 border border-slate-200 text-center font-mono font-bold no-print">
+                          <td className="p-2 border border-slate-200 text-center font-mono font-bold tabular-nums no-print">
                             <div>{(m.cashier_invoice || 0).toLocaleString()}</div>
                             {m.cashier_receipt_no ? (
                               <span className="inline-block mt-0.5 text-[9.5px] font-mono bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded border border-indigo-200">#{m.cashier_receipt_no}</span>
@@ -1299,9 +1299,9 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                               <span className="inline-block mt-0.5 text-[9px] text-slate-400">غير مربوط</span>
                             )}
                           </td>
-                          <td className="p-2 border border-slate-200 text-center font-mono font-bold text-blue-700 no-print">{(m.system_commission ?? settings?.default_system_commission ?? 200).toLocaleString()}</td>
-                          <td className="p-2 border border-slate-200 text-center font-mono font-bold text-indigo-700 no-print">{(m.nafez_commission || 0).toLocaleString()}</td>
-                          <td className="p-2 border border-slate-200 text-center font-mono font-black text-slate-900 bg-slate-50 no-print">{(m.total_amount || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-bold tabular-nums text-blue-700 no-print">{(m.system_commission ?? settings?.default_system_commission ?? 200).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-bold tabular-nums text-indigo-700 no-print">{(m.nafez_commission || 0).toLocaleString()}</td>
+                          <td className="p-2 border border-slate-200 text-center font-mono font-black tabular-nums text-slate-900 bg-slate-50 no-print">{(m.total_amount || 0).toLocaleString()}</td>
                           <td className="p-2 border border-slate-200 text-center whitespace-nowrap no-print">
                             {m.payment_status === 'paid' && <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full"><CheckCircle className="w-3 h-3" />خالص</span>}
                             {m.payment_status === 'partial' && <span className="inline-flex flex-col items-center text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full"><span>جزئي (متبقي {m.remaining_amount} ج)</span></span>}

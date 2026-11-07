@@ -101,6 +101,18 @@ const getStoredActiveTab = (): TabType => {
   }
 };
 
+const setRowsIfChanged = <T extends { id: string }>(
+  setter: React.Dispatch<React.SetStateAction<T[]>>,
+  nextRows: T[],
+) => {
+  setter((currentRows) => {
+    if (currentRows.length === nextRows.length && currentRows.every((row, index) =>
+      row.id === nextRows[index]?.id && JSON.stringify(row) === JSON.stringify(nextRows[index])
+    )) return currentRows;
+    return nextRows;
+  });
+};
+
 const AppContent: React.FC = () => {
   const confirmAction = useConfirmAction();
   const {
@@ -314,15 +326,15 @@ const AppContent: React.FC = () => {
         const paymentsFinal = allocation.payments;
         allocation.changedMovementIds.forEach((id) => reconciledCashierMovementIds.add(id));
 
-        setMovements(movementsToUse);
+        setRowsIfChanged(setMovements, movementsToUse);
         saveMovements(movementsToUse);
-        setCustomers(customersToUse);
+        setRowsIfChanged(setCustomers, customersToUse);
         saveCustomers(customersToUse);
-        setBerths(berthsToUse);
+        setRowsIfChanged(setBerths, berthsToUse);
         saveBerths(berthsToUse);
-        setPayments(paymentsFinal);
+        setRowsIfChanged(setPayments, paymentsFinal);
         savePayments(paymentsFinal);
-        setExpenses(expensesToUse);
+        setRowsIfChanged(setExpenses, expensesToUse);
         saveOfficeExpenses(expensesToUse);
 
         // Retry queued edits/deletes before reporting sync complete.
