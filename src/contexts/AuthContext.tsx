@@ -40,6 +40,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const OFFLINE_PROFILE_KEY = 'pls_offline_verified_profile_v1';
+const OFFLINE_PROFILE_MAX_AGE_MS = 4 * 60 * 1000;
 const emptyPermissions: RolePermissions = {
   can_view_financials: false, can_view_system_revenue: false,
   can_add_movements: false, can_edit_movements: false, can_delete_movements: false,
@@ -70,6 +72,33 @@ const fromProfile = (row: Record<string, unknown>): ManagedUser => ({
   created_at: String(row.created_at || ''),
   permissions: { ...emptyPermissions, ...((row.permissions || {}) as Partial<RolePermissions>) },
 });
+
+const readOfflineProfile = (userId: string): ManagedUser | null => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(OFFLINE_PROFILE_KEY) || 'null') as {
+      userId?: string;
+      verifiedAt?: number;
+      profile?: ManagedUser;
+    } | null;
+    if (!cached || cached.userId !== userId || !cached.profile?.is_active || !cached.verifiedAt) return null;
+    if (Date.now() - cached.verifiedAt > OFFLINE_PROFILE_MAX_AGE_MS || Date.now() < cached.verifiedAt) return null;
+    return cached.profile;
+  } catch {
+    return null;
+  }
+};
+
+const saveOfflineProfile = (profile: ManagedUser) => {
+  try {
+    localStorage.setItem(OFFLINE_PROFILE_KEY, JSON.stringify({
+      userId: profile.id,
+      verifiedAt: Date.now(),
+      profile,
+    }));
+  } catch (error) {
+    console.warn('Could not cache the short-lived offline profile:', error);
+  }
+};
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<ManagedUser>(anonymousUser);
@@ -114,6 +143,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!supabase) { setIsLoading(false); return; }
     let active = true;
     let revision = 0;
+    let restoredOfflineSession = false;
+
+    const restoreOfflineSession = (userId: string) => {
+      const profile = readOfflineProfile(userId);
+      if (!profile) return false;
+      restoredOfflineSession = true;
+      setCurrentUser(profile);
+      setUsers([profile]);
+      setIsAuthenticated(true);
+      setIsLoading(false);
+      setSessionNotice('تعمل الجلسة المحفوظة على هذا الجهاز مؤقتًا دون إنترنت. أعد الاتصال خلال دقائق لتأكيد الجلسة ومزامنة البيانات.');
+      return true;
+    };
 
     const acceptSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) => {
       const currentRevision = ++revision;
@@ -125,9 +167,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(false);
         return;
       }
+      if (!navigator.onLine && restoreOfflineSession(session.user.id)) return;
       const { data, error } = await supabase.from('app_user_profiles').select('*').eq('user_id', session.user.id).maybeSingle();
       if (!active || currentRevision !== revision) return;
       if (error || !data) {
+        if (!navigator.onLine && restoreOfflineSession(session.user.id)) return;
         console.error('Could not load the authenticated user profile:', error);
         setCurrentUser(anonymousUser);
         setIsAuthenticated(false);
@@ -146,6 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: sessionClaimed, error: sessionClaimError } = await supabase.rpc('claim_app_user_session');
       if (!active || currentRevision !== revision) return;
       if (sessionClaimError || sessionClaimed !== true) {
+        try { localStorage.removeItem(OFFLINE_PROFILE_KEY); } catch { /* ignore unavailable storage */ }
         setCurrentUser(anonymousUser);
         setUsers([]);
         setIsAuthenticated(false);
@@ -156,6 +201,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         void supabase.auth.signOut({ scope: 'local' });
         return;
       }
+      saveOfflineProfile(profile);
+      restoredOfflineSession = false;
       setSessionNotice('');
       setCurrentUser(profile);
       setIsAuthenticated(true);
@@ -175,11 +222,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Defer Supabase queries until after the auth callback releases its internal lock.
       window.setTimeout(() => { void acceptSession(session); }, 0);
     });
+    const handleOnline = () => {
+      if (!restoredOfflineSession) return;
+      void supabase.auth.getSession().then(({ data }) => acceptSession(data.session));
+    };
+    window.addEventListener('online', handleOnline);
     void supabase.auth.getSession().then(({ data }) => acceptSession(data.session));
 
     return () => {
       active = false;
       listener.subscription.unsubscribe();
+      window.removeEventListener('online', handleOnline);
     };
   }, [supabase]);
 
@@ -279,6 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     if (!supabase) return;
+    try { localStorage.removeItem(OFFLINE_PROFILE_KEY); } catch { /* ignore unavailable storage */ }
     void (async () => {
       await supabase.rpc('release_app_user_session');
       await supabase.auth.signOut({ scope: 'local' });

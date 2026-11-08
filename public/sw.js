@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vib-offline-v2';
+const CACHE_NAME = 'vib-offline-v3';
 const APP_URL = new URL('/', self.location.origin).toString();
 
 self.addEventListener('install', (event) => {
@@ -19,19 +19,23 @@ self.addEventListener('install', (event) => {
 
     // Include lazy-loaded pages, document parsers and the PDF worker in the
     // offline install. They are emitted as separate hashed files by Vite.
-    try {
-      const manifestResponse = await fetch('/offline-assets.json', { cache: 'reload' });
-      if (manifestResponse.ok) {
-        const assets = await manifestResponse.json();
-        await Promise.allSettled(assets.map(async (path) => {
-          const url = new URL(path, APP_URL).toString();
-          if (new URL(url).origin !== self.location.origin) return;
-          const asset = await fetch(url, { cache: 'reload' });
-          if (asset.ok) await cache.put(url, asset);
-        }));
-      }
-    } catch (error) {
-      console.warn('Some offline assets could not be cached during install.', error);
+    const manifestResponse = await fetch('/offline-assets.json', { cache: 'reload' });
+    if (!manifestResponse.ok) throw new Error('Could not load offline asset list');
+    const assets = await manifestResponse.json();
+    if (!Array.isArray(assets) || assets.length === 0) throw new Error('Offline asset list is empty');
+
+    // Keep the number of parallel downloads modest for mobile and slower links.
+    for (let start = 0; start < assets.length; start += 6) {
+      const batch = assets.slice(start, start + 6);
+      const results = await Promise.all(batch.map(async (path) => {
+        const url = new URL(path, APP_URL).toString();
+        if (new URL(url).origin !== self.location.origin) return false;
+        const asset = await fetch(url, { cache: 'reload' });
+        if (!asset.ok) return false;
+        await cache.put(url, asset);
+        return true;
+      }));
+      if (results.some((cached) => !cached)) throw new Error('A required offline file could not be cached');
     }
   })());
   self.skipWaiting();
@@ -60,7 +64,13 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       } catch {
-        return (await caches.match(APP_URL)) || Response.error();
+        const cachedPage = (await caches.match(request, { ignoreSearch: true })) ||
+          (await caches.match(APP_URL, { ignoreSearch: true }));
+        if (cachedPage) return cachedPage;
+        return new Response('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>لا يوجد اتصال</title><body style="font-family:Arial,sans-serif;padding:2rem;color:#101a31"><h2>تعذر فتح التطبيق دون اتصال</h2><p>اتصل بالإنترنت وافتح التطبيق مرة واحدة حتى يكتمل حفظ ملفات التشغيل على هذا الجهاز.</p></body></html>', {
+          status: 503,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
       }
     })());
     return;
