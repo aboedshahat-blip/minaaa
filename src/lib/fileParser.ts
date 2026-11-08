@@ -82,6 +82,18 @@ export const STANDARD_HEADERS = [
   'م',
 ];
 
+const normalizeVehiclePlateDigits = (value?: string) => (value || '')
+  .normalize('NFKC')
+  .replace(/[٠-٩۰-۹]/g, (digit) => {
+    const index = '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'.indexOf(digit);
+    return String(index < 10 ? index : index - 10);
+  })
+  // Plate digits are a single 3- or 4-digit block; OCR sometimes inserts
+  // spaces inside that block (for example, "82 39").
+  .replace(/(\d)\s+(?=\d)/g, '$1')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 const extractContainerNumbers = (text: string): string[] => {
   const matches = text.match(/[A-Z]{3,4}\s*[UJZ]?\s*\d{6,7}/gi) || [];
   return Array.from(new Set(matches.map((value) => value.replace(/\s+/g, '').toUpperCase())));
@@ -836,18 +848,27 @@ export const parseExcelDocument = async (file: File): Promise<ParsedDocumentResu
  */
 export const parseAnyDocument = async (file: File): Promise<ParsedDocumentResult> => {
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
-
+  let parsed: ParsedDocumentResult;
   if (['xlsx', 'xls', 'csv'].includes(ext)) {
-    return parseExcelDocument(file);
+    parsed = await parseExcelDocument(file);
   } else if (['docx', 'doc'].includes(ext)) {
-    return parseWordDocument(file);
+    parsed = await parseWordDocument(file);
   } else if (['pdf'].includes(ext)) {
-    return parsePdfDocument(file);
+    parsed = await parsePdfDocument(file);
   } else {
     try {
-      return await parseExcelDocument(file);
+      parsed = await parseExcelDocument(file);
     } catch {
       throw new Error(`صيغة الملف غير مدعومة (.${ext}). يرجى رفع ملف Excel أو Word أو PDF.`);
     }
   }
+
+  return {
+    ...parsed,
+    rows: parsed.rows.map((row) => ({
+      ...row,
+      truck_no: normalizeVehiclePlateDigits(row.truck_no),
+      trailer_no: normalizeVehiclePlateDigits(row.trailer_no),
+    })),
+  };
 };
