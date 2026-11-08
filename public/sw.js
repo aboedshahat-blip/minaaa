@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vib-offline-v1';
+const CACHE_NAME = 'vib-offline-v2';
 const APP_URL = new URL('/', self.location.origin).toString();
 
 self.addEventListener('install', (event) => {
@@ -16,6 +16,23 @@ self.addEventListener('install', (event) => {
       const asset = await fetch(url, { cache: 'reload' });
       if (asset.ok) await cache.put(url, asset);
     }));
+
+    // Include lazy-loaded pages, document parsers and the PDF worker in the
+    // offline install. They are emitted as separate hashed files by Vite.
+    try {
+      const manifestResponse = await fetch('/offline-assets.json', { cache: 'reload' });
+      if (manifestResponse.ok) {
+        const assets = await manifestResponse.json();
+        await Promise.allSettled(assets.map(async (path) => {
+          const url = new URL(path, APP_URL).toString();
+          if (new URL(url).origin !== self.location.origin) return;
+          const asset = await fetch(url, { cache: 'reload' });
+          if (asset.ok) await cache.put(url, asset);
+        }));
+      }
+    } catch (error) {
+      console.warn('Some offline assets could not be cached during install.', error);
+    }
   })());
   self.skipWaiting();
 });
@@ -49,7 +66,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/assets/') || /\.(?:js|css|png|jpe?g|svg|webmanifest|woff2?)$/i.test(url.pathname)) {
+  if (url.pathname.startsWith('/assets/') || /\.(?:js|css|mjs|wasm|png|jpe?g|svg|webmanifest|woff2?)$/i.test(url.pathname)) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       try {

@@ -473,7 +473,7 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
       return [];
     });
 
-    if (rowsToVerify.length > 0 && driverColumnWidth > 0 && !ocrUnavailable) {
+    if (rowsToVerify.length > 0 && driverColumnWidth > 0 && !ocrUnavailable && navigator.onLine) {
       try {
         if (!ocrWorker) {
           const { createWorker, PSM } = await import('tesseract.js');
@@ -542,6 +542,10 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
     if (movement.driver_name?.trim()) driverNameReviewRows.add(movementIndex);
   });
   if (driverNameReviewRows.size > 0) needsDriverReview = true;
+
+  if (allMovements.length === 0 && !navigator.onLine) {
+    throw new Error('هذا الـ PDF لا يحتوي نصًا قابلًا للاستخراج، ويحتاج إلى اتصال بالإنترنت لقراءة الصورة. اتصل بالإنترنت ثم أعد رفعه.');
+  }
 
   return {
     rows: allMovements,
