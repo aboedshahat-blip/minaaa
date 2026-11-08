@@ -30,6 +30,7 @@ interface SheetProcessingPageProps {
   settings: SystemSettings;
   currentMaxSeq: number;
   isCloudDataReady?: boolean;
+  isOnline?: boolean;
   onImportMovements: (movements: Movement[], newCustomers?: Customer[]) => Promise<boolean>;
 }
 
@@ -39,6 +40,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   settings,
   currentMaxSeq,
   isCloudDataReady = true,
+  isOnline = true,
   onImportMovements,
 }) => {
   const confirmAction = useConfirmAction();
@@ -115,7 +117,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
   };
 
   const handleSaveToSystem = async () => {
-    if (!isCloudDataReady) {
+    if (!isCloudDataReady && isOnline) {
       alert('انتظر اكتمال تحميل أحدث البيانات من السحابة قبل اعتماد الشيت، ثم أعد المحاولة.');
       return;
     }
@@ -132,7 +134,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       return;
     }
     if (!await confirmAction(`هل راجعت بيانات الشيت وجاهز لإنهاء المعاملة؟ عدد الحركات: ${rows.length}.`, 'نعم، راجعت البيانات')) return;
-    if (!await confirmAction(`هل تريد رفع ${rows.length} حركة إلى السيستم ومزامنتها مع الأجهزة الأخرى؟`, 'نعم، ارفع الشيت')) return;
+    if (!await confirmAction(
+      isOnline
+        ? `هل تريد رفع ${rows.length} حركة إلى السيستم ومزامنتها مع الأجهزة الأخرى؟`
+        : `هل تريد حفظ ${rows.length} حركة على هذا الجهاز لمزامنتها مع السيستم عند عودة الإنترنت؟`,
+      isOnline ? 'نعم، ارفع الشيت' : 'نعم، احفظ على الجهاز',
+    )) return;
 
     const targetBerth = berths.find((b) => b.id === selectedBerthId);
 
@@ -422,12 +429,12 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
 
               <button
                 onClick={handleSaveToSystem}
-                disabled={!isCloudDataReady}
-                title={!isCloudDataReady ? 'انتظر اكتمال مزامنة البيانات قبل اعتماد الشيت' : undefined}
+                disabled={!isCloudDataReady && isOnline}
+                title={!isCloudDataReady && isOnline ? 'انتظر اكتمال مزامنة البيانات قبل اعتماد الشيت' : !isOnline ? 'سيُحفظ الشيت على هذا الجهاز ويُزامن عند عودة الإنترنت' : undefined}
                 className="bg-emerald-600 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
-                <span>{isCloudDataReady ? 'حفظ في السيستم واعتماد الحركات' : 'جارٍ مزامنة البيانات…'}</span>
+                <span>{isCloudDataReady ? 'حفظ في السيستم واعتماد الحركات' : !isOnline ? 'حفظ على الجهاز ومزامنة لاحقًا' : 'جارٍ مزامنة البيانات…'}</span>
               </button>
             </div>
           </div>

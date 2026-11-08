@@ -147,6 +147,7 @@ const AppContent: React.FC = () => {
   const [settings, setSettings] = useState<SystemSettings>(getStoredSettings);
   const [cloudFeedback, setCloudFeedback] = useState<string | null>(null);
   const [cloudSyncState, setCloudSyncState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
   const hasLoadedCloudSnapshotRef = useRef(false);
   const movementImportRevisionRef = useRef(0);
   const cloudRefreshRequestRef = useRef(0);
@@ -168,6 +169,10 @@ const AppContent: React.FC = () => {
       await operation;
       setCloudFeedback('تم حفظ التغيير في قاعدة البيانات السحابية.');
     } catch (error) {
+      if (!navigator.onLine) {
+        setCloudFeedback('تم حفظ التغيير على هذا الجهاز، وستتم مزامنته تلقائيًا عند عودة الإنترنت.');
+        return;
+      }
       const message = error instanceof Error ? error.message : 'تعذر حفظ التغيير في قاعدة البيانات السحابية.';
       setCloudFeedback(message);
     }
@@ -391,6 +396,10 @@ const AppContent: React.FC = () => {
       if (refreshRequestId !== cloudRefreshRequestRef.current ||
           importRevisionAtStart !== movementImportRevisionRef.current) return;
       if (!hasLoadedCloudSnapshotRef.current) setCloudSyncState('error');
+      if (!navigator.onLine) {
+        setCloudFeedback(null);
+        return;
+      }
       console.warn('Cloud sync error:', e);
       const message = e instanceof Error ? e.message : 'تعذر الاتصال بقاعدة البيانات السحابية.';
       setCloudFeedback(`${message} احتفظنا بالبيانات المحلية كما هي.`);
@@ -427,17 +436,26 @@ const AppContent: React.FC = () => {
     // Realtime is supplemented by a quiet refresh for devices where database
     // change feeds are unavailable, and whenever the app returns to the screen.
     const pollId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
+      if (navigator.onLine && document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
     }, 30_000);
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
+      if (navigator.onLine && document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
     };
+    const handleOnline = () => {
+      setIsOnline(true);
+      void refreshDataFromCloud(false, true);
+    };
+    const handleOffline = () => setIsOnline(false);
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     return () => {
       window.clearInterval(pollId);
       if (debounceTimer) window.clearTimeout(debounceTimer);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       if (channel) void supabase?.removeChannel(channel);
     };
   }, [isAuthLoading, isAuthenticated, canViewFinancials, canManagePayments, canEditCommissions]);
@@ -741,6 +759,10 @@ const AppContent: React.FC = () => {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تأكيد مزامنة الشيت.';
+      if (!navigator.onLine) {
+        setCloudFeedback('تم حفظ الشيت على هذا الجهاز. ستتم مزامنته تلقائيًا عند عودة الإنترنت.');
+        return true;
+      }
       setCloudFeedback(`${message} حُفظت البيانات محليًا وستتم إعادة المزامنة عند عودة ا��اتصال.`);
       return false;
     } finally {
@@ -949,7 +971,12 @@ const AppContent: React.FC = () => {
           {cloudFeedback}
         </div>
       )}
-      {cloudSyncState !== 'ready' && (
+      {!isOnline && (
+        <div className="flex flex-wrap items-center justify-center gap-2 bg-amber-50 px-4 py-2 text-center text-xs font-semibold text-amber-900" role="status" aria-live="polite">
+          <span>تعمل الآن دون إنترنت. تُحفظ التغييرات على هذا الجهاز وتُزامن تلقائيًا عند عودة الاتصال.</span>
+        </div>
+      )}
+      {isOnline && cloudSyncState !== 'ready' && (
         <div className={`flex flex-wrap items-center justify-center gap-2 px-4 py-2 text-center text-xs font-semibold ${cloudSyncState === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800'}`} role="status" aria-live="polite">
           <span>{cloudSyncState === 'error' ? 'تعذر تحديث البيانات من السحابة. لن نبدأ مطابقة الفواتير على بيانات قديمة.' : 'جارٍ تحميل أحدث الحركات من قاعدة البيانات؛ انتظر قليلًا قبل مطابقة الفواتير.'}</span>
           {cloudSyncState === 'error' && <button type="button" onClick={() => void refreshDataFromCloud(false)} className="rounded-md border border-rose-300 bg-white px-2.5 py-1 font-bold hover:bg-rose-100">إعادة المحاولة</button>}
@@ -981,6 +1008,7 @@ const AppContent: React.FC = () => {
             onBatchUpdateMovements={handleBatchUpdateMovements}
             onRepairZeroFinancialMovements={handleRepairZeroFinancialMovements}
             isCloudDataReady={cloudSyncState === 'ready'}
+            isOnline={isOnline}
           />
         )}
 

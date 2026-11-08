@@ -49,6 +49,7 @@ interface MovementsPageProps {
   onBatchUpdateMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
   onRepairZeroFinancialMovements?: (updatedMovements: Movement[]) => Promise<boolean>;
   isCloudDataReady?: boolean;
+  isOnline?: boolean;
 }
 
 const getMovementBatch = (movement: Movement) => {
@@ -103,6 +104,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   onBatchUpdateMovements,
   onRepairZeroFinancialMovements,
   isCloudDataReady = true,
+  isOnline = true,
 }) => {
   const confirmAction = useConfirmAction();
   const { canViewFinancials, canAddMovements, canUploadSheets, canDeleteMovements, canManagePayments, canEditCommissions, currentUser } = useAuth();
@@ -587,9 +589,9 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
 
   return (
     <div className="space-y-6">
-      <nav className="no-print flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-2" aria-label="أقسام الحركات">
+      <nav className="no-print grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200 bg-white p-2 sm:flex sm:flex-wrap sm:justify-end sm:gap-2" aria-label="أقسام الحركات">
         {stageTabs.map((tab) => (
-          <button key={tab.key} onClick={() => setActiveStage(tab.key)} className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${activeStage === tab.key ? 'bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
+          <button key={tab.key} onClick={() => setActiveStage(tab.key)} className={`inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg px-2.5 py-2 text-[11px] sm:px-3 sm:text-xs font-bold transition-colors ${activeStage === tab.key ? 'bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}>
             {tab.label}
           </button>
         ))}
@@ -603,6 +605,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           settings={settings}
           currentMaxSeq={currentMaxSeq}
           isCloudDataReady={isCloudDataReady}
+          isOnline={isOnline}
           onImportMovements={async (importedMovements, newCustomers) => {
             const synced = await onImportMovements(importedMovements, newCustomers);
             setActiveStage('stage1_manifest');
@@ -746,8 +749,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
                 <select value={selectedManifestBatch} onChange={(e)=>setSelectedManifestBatch(e.target.value)} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
                   <option value="latest">آخر شيت مرفوع</option><option value="picked">الشيتات المحددة ({selectedManifestBatchIds.length})</option><option value="all">كل الشيتات</option>
                 </select>
-                <button onClick={()=>openManifestPrint('selected')} disabled={!manifestMovements.length} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة المعروض ({manifestMovements.length})</button>
-                <button onClick={()=>openManifestPrint('all')} disabled={!manifestFilteredMovements.length} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة نتائج البحث ({manifestFilteredMovements.length})</button>
+                <button onClick={()=>openManifestPrint(selectedManifestBatch === 'all' ? 'all' : selectedManifestBatch === 'picked' ? 'picked' : 'selected')} disabled={!manifestMovements.length} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50"><Printer className="h-3.5 w-3.5"/>طباعة الشيتات المعروضة ({manifestMovements.length})</button>
               </div>
             </div>
             {importBatches.length > 0 && <>
@@ -768,7 +770,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               </div>
               <div className="grid grid-cols-1 gap-2 rounded-xl border border-rose-100 bg-rose-50 p-3 sm:grid-cols-2 xl:grid-cols-4 sm:items-center">
                 <span className="text-xs font-bold text-slate-700 sm:col-span-2 xl:col-span-1">المحدد: {selectedManifestBatchIds.length} شيت — {pickedBatchMovements.length} حركة</span>
-                <button onClick={()=>openManifestPrint('picked')} disabled={!pickedBatchMovements.length} className="rounded-lg bg-rose-600 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Printer className="inline h-3.5 w-3.5 ml-1"/>طباعة المحدد ({pickedBatchMovements.length})</button>
                 <button onClick={downloadPickedBatchesPdf} disabled={!pickedBatchMovements.length || isExportingPickedPdf} className="rounded-lg bg-indigo-700 px-3 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Download className="inline h-3.5 w-3.5 ml-1"/>{isExportingPickedPdf?'جاري تجهيز PDF...':'تنزيل PDF للمحدد'}</button>
                 <button onClick={()=>{setSelectedManifestBatchIds([]);setSelectedManifestBatch('latest');}} disabled={!selectedManifestBatchIds.length} className="rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50">إلغاء التحديد</button>
               </div>
@@ -1184,12 +1185,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => setIsOfficialSheetModalOpen(true)} className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Printer className="w-4 h-4" /><span>طباعة كشف الميناء</span></button>
                 <button onClick={handleExportExcel} className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Download className="w-4 h-4" /><span>Excel</span></button>
-                {canViewFinancials && onBatchUpdateMovements && (
-                  <button onClick={() => setIsCashierReportModalOpen(true)} disabled={!isCloudDataReady} title={!isCloudDataReady ? 'انتظر اكتمال مزامنة البيانات قبل المطابقة' : undefined} className="bg-amber-600 hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Receipt className="w-4 h-4" /><span>{isCloudDataReady ? 'رفع تقرير كاشير' : 'جارٍ المزامنة'}</span></button>
-                )}
-                {canViewFinancials && (
-                  <button onClick={() => { setLinkingMovement(null); setIsCashierModalOpen(true); }} className="bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><Link2 className="w-4 h-4" /><span>ربط يدوي</span></button>
-                )}
                 {canViewFinancials && filteredMovements.length > 0 && (
                   <button onClick={() => setIsInvoiceModalOpen(true)} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 transition"><FileText className="w-4 h-4" /><span>فاتورة ({filteredMovements.length})</span></button>
                 )}
