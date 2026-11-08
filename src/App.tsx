@@ -433,11 +433,8 @@ const AppContent: React.FC = () => {
       channel.subscribe();
     }
 
-    // Realtime is supplemented by a quiet refresh for devices where database
-    // change feeds are unavailable, and whenever the app returns to the screen.
-    const pollId = window.setInterval(() => {
-      if (navigator.onLine && document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
-    }, 30_000);
+    // Avoid downloading every row on a timer. Realtime keeps active tabs fresh;
+    // returning to the app or reconnecting performs a full reconciliation.
     const handleVisibility = () => {
       if (navigator.onLine && document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
     };
@@ -451,7 +448,6 @@ const AppContent: React.FC = () => {
     window.addEventListener('offline', handleOffline);
 
     return () => {
-      window.clearInterval(pollId);
       if (debounceTimer) window.clearTimeout(debounceTimer);
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('online', handleOnline);
