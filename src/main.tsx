@@ -15,12 +15,20 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initializeLargeLocalDataStore } from './lib/storage'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+const renderApp = () => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+// Hydrate IndexedDB and migrate any old localStorage data before App reads it.
+void initializeLargeLocalDataStore().catch((error) => {
+  console.error('تعذر تجهيز التخزين المحلي الموسع:', error)
+}).finally(renderApp)
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

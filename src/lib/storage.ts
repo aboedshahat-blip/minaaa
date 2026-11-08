@@ -18,6 +18,119 @@ const KEYS = {
 const SYSTEM_CUSTOMER_IDS = new Set(['__SYSTEM_USERS_CONFIG__', '__SYSTEM_HANDOFF_RESET__']);
 const isSystemCustomer = (customer: Pick<Customer, 'id'>) => SYSTEM_CUSTOMER_IDS.has(customer.id);
 
+const LARGE_LOCAL_DATA_KEYS = [
+  KEYS.MOVEMENTS,
+  KEYS.CUSTOMERS,
+  KEYS.BERTHS,
+  KEYS.PAYMENTS,
+  KEYS.OFFICE_EXPENSES,
+  KEYS.PENDING_SYNC,
+  KEYS.SAFETY_BACKUPS,
+] as const;
+const LOCAL_DB_NAME = 'vib-operational-data';
+const LOCAL_DB_VERSION = 1;
+let localDatabase: IDBDatabase | null = null;
+let localDatabaseReady = false;
+const localDataCache = new Map<string, unknown>();
+
+const readLegacyLocalData = (key: string) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw == null ? undefined : JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
+};
+
+const openLocalDatabase = () => new Promise<IDBDatabase>((resolve, reject) => {
+  const request = indexedDB.open(LOCAL_DB_NAME, LOCAL_DB_VERSION);
+  request.onupgradeneeded = () => {
+    const database = request.result;
+    if (!database.objectStoreNames.contains('datasets')) database.createObjectStore('datasets', { keyPath: 'key' });
+  };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error || new Error('تعذر فتح التخزين المحلي الموسع.'));
+  request.onblocked = () => reject(new Error('أغلق نوافذ البرنامج الأخرى لإكمال تجهيز التخزين المحلي.'));
+});
+
+const readLocalDatabaseValue = (database: IDBDatabase, key: string) => new Promise<unknown>((resolve, reject) => {
+  const request = database.transaction('datasets', 'readonly').objectStore('datasets').get(key);
+  request.onsuccess = () => resolve((request.result as { value?: unknown } | undefined)?.value);
+  request.onerror = () => reject(request.error || new Error('تعذر قراءة البيانات المحلية.'));
+});
+
+const writeLocalDatabaseValue = (key: string, value: unknown) => {
+  if (!localDatabase) return Promise.reject(new Error('التخزين المحلي الموسع غير جاهز.'));
+  return new Promise<void>((resolve, reject) => {
+    const transaction = localDatabase!.transaction('datasets', 'readwrite');
+    transaction.objectStore('datasets').put({ key, value, saved_at: new Date().toISOString() });
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error('تعذر حفظ البيانات محليًا.'));
+    transaction.onabort = () => reject(transaction.error || new Error('أُلغي حفظ البيانات محليًا.'));
+  });
+};
+
+/** Move large operational snapshots out of localStorage before the app renders. */
+export const initializeLargeLocalDataStore = async () => {
+  if (localDatabaseReady) return true;
+  if (typeof indexedDB === 'undefined') {
+    for (const key of LARGE_LOCAL_DATA_KEYS) {
+      const value = readLegacyLocalData(key);
+      if (value !== undefined) localDataCache.set(key, value);
+    }
+    localDatabaseReady = true;
+    return false;
+  }
+
+  try {
+    localDatabase = await openLocalDatabase();
+    localDatabase.onversionchange = () => localDatabase?.close();
+    for (const key of LARGE_LOCAL_DATA_KEYS) {
+      let value = await readLocalDatabaseValue(localDatabase, key);
+      if (value === undefined) {
+        value = readLegacyLocalData(key);
+        if (value !== undefined) {
+          await writeLocalDatabaseValue(key, value);
+          try { localStorage.removeItem(key); } catch { /* the IndexedDB copy is authoritative */ }
+        }
+      }
+      if (value !== undefined) localDataCache.set(key, value);
+    }
+    localDatabaseReady = true;
+    return true;
+  } catch (error) {
+    console.warn('Using browser storage fallback for operational data:', error);
+    localDatabase?.close();
+    localDatabase = null;
+    for (const key of LARGE_LOCAL_DATA_KEYS) {
+      const value = readLegacyLocalData(key);
+      if (value !== undefined) localDataCache.set(key, value);
+    }
+    localDatabaseReady = true;
+    return false;
+  }
+};
+
+const getLargeLocalData = <T,>(key: string): T | undefined => {
+  if (localDataCache.has(key)) return localDataCache.get(key) as T;
+  return readLegacyLocalData(key) as T | undefined;
+};
+
+const saveLargeLocalData = (key: string, value: unknown) => {
+  localDataCache.set(key, value);
+  if (localDatabaseReady && localDatabase) {
+    void writeLocalDatabaseValue(key, value).catch((error) => {
+      console.error('تعذر حفظ نسخة البيانات المحلية في التخزين الموسع:', error);
+    });
+    return;
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error('تعذر حفظ البيانات في تخزين المتصفح:', error);
+  }
+};
+
 export interface OperationalSafetyBackup {
   id: string;
   label: string;
@@ -30,18 +143,13 @@ export interface OperationalSafetyBackup {
 }
 
 export const getSafetyBackups = (): OperationalSafetyBackup[] => {
-  try {
-    const raw = localStorage.getItem(KEYS.SAFETY_BACKUPS);
-    return raw ? JSON.parse(raw) as OperationalSafetyBackup[] : [];
-  } catch {
-    return [];
-  }
+  return getLargeLocalData<OperationalSafetyBackup[]>(KEYS.SAFETY_BACKUPS) || [];
 };
 
 export const saveSafetyBackup = (data: Omit<OperationalSafetyBackup, 'id' | 'created_at'>) => {
   const backup: OperationalSafetyBackup = { ...data, id: crypto.randomUUID(), created_at: new Date().toISOString() };
   const backups = [backup, ...getSafetyBackups()].slice(0, 10);
-  localStorage.setItem(KEYS.SAFETY_BACKUPS, JSON.stringify(backups));
+  saveLargeLocalData(KEYS.SAFETY_BACKUPS, backups);
   return backup;
 };
 
@@ -267,8 +375,7 @@ type PendingSync = {
 
 const getPendingSync = (): PendingSync => {
   try {
-    const raw = localStorage.getItem(KEYS.PENDING_SYNC);
-    const pending = raw ? JSON.parse(raw) as PendingSync : { upserts: {}, deletes: {} };
+    const pending = getLargeLocalData<PendingSync>(KEYS.PENDING_SYNC) || { upserts: {}, deletes: {} };
     pending.upserts ||= {};
     pending.deletes ||= {};
     const customerUpserts = pending.upserts.customers || {};
@@ -284,7 +391,7 @@ const getPendingSync = (): PendingSync => {
     if (safeCustomerDeletes.length !== customerDeletes.length) removedLegacyCustomer = true;
     pending.upserts.customers = customerUpserts;
     pending.deletes.customers = safeCustomerDeletes;
-    if (removedLegacyCustomer) localStorage.setItem(KEYS.PENDING_SYNC, JSON.stringify(pending));
+    if (removedLegacyCustomer) saveLargeLocalData(KEYS.PENDING_SYNC, pending);
     return pending;
   } catch {
     return { upserts: {}, deletes: {} };
@@ -292,7 +399,7 @@ const getPendingSync = (): PendingSync => {
 };
 
 const savePendingSync = (pending: PendingSync) => {
-  localStorage.setItem(KEYS.PENDING_SYNC, JSON.stringify(pending));
+  saveLargeLocalData(KEYS.PENDING_SYNC, pending);
 };
 
 const setPendingUpsert = <T extends { id: string }>(table: SyncTable, row: T) => {
@@ -505,73 +612,52 @@ export const saveSettings = (settings: SystemSettings) => {
 };
 
 export const getStoredBerths = (): Berth[] => {
-  try {
-    const raw = localStorage.getItem(KEYS.BERTHS);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error(e);
-  }
-  localStorage.setItem(KEYS.BERTHS, JSON.stringify(initialBerths));
+  const stored = getLargeLocalData<Berth[]>(KEYS.BERTHS);
+  if (stored) return stored;
+  saveLargeLocalData(KEYS.BERTHS, initialBerths);
   return initialBerths;
 };
 
 export const saveBerths = (berths: Berth[]) => {
-  localStorage.setItem(KEYS.BERTHS, JSON.stringify(berths));
+  saveLargeLocalData(KEYS.BERTHS, berths);
 };
 
 export const getStoredCustomers = (): Customer[] => {
-  try {
-    const raw = localStorage.getItem(KEYS.CUSTOMERS);
-    if (raw) return (JSON.parse(raw) as Customer[]).filter((customer) => !isSystemCustomer(customer)).map(customerForApp);
-  } catch (e) {
-    console.error(e);
-  }
-  localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(initialCustomers));
+  const stored = getLargeLocalData<Customer[]>(KEYS.CUSTOMERS);
+  if (stored) return stored.filter((customer) => !isSystemCustomer(customer)).map(customerForApp);
+  saveLargeLocalData(KEYS.CUSTOMERS, initialCustomers);
   return initialCustomers;
 };
 
 export const saveCustomers = (customers: Customer[]) => {
-  localStorage.setItem(KEYS.CUSTOMERS, JSON.stringify(customers.filter((customer) => !isSystemCustomer(customer)).map(customerForApp)));
+  saveLargeLocalData(KEYS.CUSTOMERS, customers.filter((customer) => !isSystemCustomer(customer)).map(customerForApp));
 };
 
 export const getStoredMovements = (): Movement[] => {
-  try {
-    const raw = localStorage.getItem(KEYS.MOVEMENTS);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error(e);
-  }
-  localStorage.setItem(KEYS.MOVEMENTS, JSON.stringify(initialMovements));
+  const stored = getLargeLocalData<Movement[]>(KEYS.MOVEMENTS);
+  if (stored) return stored;
+  saveLargeLocalData(KEYS.MOVEMENTS, initialMovements);
   return initialMovements;
 };
 
 export const saveMovements = (movements: Movement[]) => {
-  localStorage.setItem(KEYS.MOVEMENTS, JSON.stringify(movements));
+  saveLargeLocalData(KEYS.MOVEMENTS, movements);
 };
 
 export const getStoredPayments = (): PaymentReceipt[] => {
-  try {
-    const raw = localStorage.getItem(KEYS.PAYMENTS);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error(e);
-  }
-  return [];
+  return getLargeLocalData<PaymentReceipt[]>(KEYS.PAYMENTS) || [];
 };
 
 export const savePayments = (payments: PaymentReceipt[]) => {
-  localStorage.setItem(KEYS.PAYMENTS, JSON.stringify(payments));
+  saveLargeLocalData(KEYS.PAYMENTS, payments);
 };
 
 export const getStoredOfficeExpenses = (): OfficeExpense[] => {
-  try {
-    const raw = localStorage.getItem(KEYS.OFFICE_EXPENSES);
-    return raw ? JSON.parse(raw) as OfficeExpense[] : [];
-  } catch { return []; }
+  return getLargeLocalData<OfficeExpense[]>(KEYS.OFFICE_EXPENSES) || [];
 };
 
 export const saveOfficeExpenses = (expenses: OfficeExpense[]) => {
-  localStorage.setItem(KEYS.OFFICE_EXPENSES, JSON.stringify(expenses));
+  saveLargeLocalData(KEYS.OFFICE_EXPENSES, expenses);
 };
 
 // ---------------- LIVE SUPABASE SYNC ENGINE ----------------
