@@ -514,15 +514,9 @@ export const parsePdfDocument = async (file: File): Promise<ParsedDocumentResult
                 needsDriverReview = true;
                 movementIndexes.forEach((movementIndex) => driverNameReviewRows.add(movementIndex));
               }
-              // Some Word-generated PDFs have a broken Arabic font map: the
-              // selectable text can say "اسالم الكوم" while the rendered page
-              // clearly says "اسلام الكومي". Prefer OCR only when confidence is
-              // high, and keep every affected row highlighted for human review.
-              if (textLayerIsDifferent && confidence >= 80 && recognizedName.trim()) {
-                movementIndexes.forEach((movementIndex) => {
-                  allMovements[movementIndex].driver_name = recognizedName;
-                });
-              }
+              // OCR may suggest a correction, but never replace the source name
+              // automatically: even high-confidence OCR can create a different
+              // customer. Keep the source text and require review in the preview.
             } else {
               movementIndexes.forEach((movementIndex) => { allMovements[movementIndex].driver_name = recognizedName; });
               needsDriverReview = true;
