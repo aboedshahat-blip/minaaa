@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getCurrentIsoTimestamp, getLocalDateInputValue } from '../lib/dateUtils';
 import { Customer, Movement, PaymentReceipt } from '../types';
-import { X, Receipt, Check, CreditCard, AlertCircle } from 'lucide-react';
+import { X, Receipt, Check, CreditCard } from 'lucide-react';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -30,15 +31,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [notes, setNotes] = useState('');
   const [selectedMovementIds, setSelectedMovementIds] = useState<string[]>([]);
 
+  // Clear old payment inputs whenever the modal opens or its selected customer set changes.
   useEffect(() => {
     if (!isOpen) return;
     const customerId = initialCustomerId && customers.some((customer) => customer.id === initialCustomerId)
       ? initialCustomerId
       : customers[0]?.id || '';
+    // eslint-disable-next-line react/set-state-in-effect
     setSelectedCustomerId(customerId);
+    // eslint-disable-next-line react/set-state-in-effect
     setAmount(0);
+    // eslint-disable-next-line react/set-state-in-effect
     setSelectedMovementIds([]);
+    // eslint-disable-next-line react/set-state-in-effect
     setPaymentMethod('cash');
+    // eslint-disable-next-line react/set-state-in-effect
     setNotes('');
   }, [initialCustomerId, customers, isOpen]);
 
@@ -148,8 +155,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     const paymentReceipt: PaymentReceipt = {
       id: `rec-${crypto.randomUUID()}`,
-      receipt_no: `REC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-      date: new Date().toISOString().split('T')[0],
+      receipt_no: `REC-${getLocalDateInputValue().replace(/-/g, '')}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      date: getLocalDateInputValue(),
       customer_id: currentCustomer.id,
       customer_name: currentCustomer.name,
       amount: amountCents / 100,
@@ -158,7 +165,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       unallocated_amount: 0,
       notes: notes.trim(),
       movement_ids: appliedMovementIds,
-      created_at: new Date().toISOString(),
+      created_at: getCurrentIsoTimestamp(),
     };
 
     if (!await confirmAction(`سيتم تسجيل سند قبض بقيمة ${amount.toLocaleString()} ج.م وتوزيعه على ${appliedMovementIds.length} حركة. هل تريد المتابعة؟`, 'نعم، سجّل السند')) return;

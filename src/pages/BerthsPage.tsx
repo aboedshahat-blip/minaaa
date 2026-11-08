@@ -16,7 +16,7 @@ export const BerthsPage: React.FC<BerthsPageProps> = ({
   movements,
   onOpenAddModal,
   onEditBerth,
-  onDeleteBerth,
+  onDeleteBerth: _onDeleteBerth,
 }) => {
   const [search, setSearch] = useState('');
   const filteredBerths = useMemo(() => {

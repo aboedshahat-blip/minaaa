@@ -244,9 +244,11 @@ const movementForCloud = (row: Movement): Record<string, unknown> => {
   const movement = movementForApp(row);
   const {
     import_batch_id, import_batch_name, import_batch_at, customer_paid_amount,
-    cashier_invoice, cashier_receipt_no, system_commission, nafez_commission, discount,
-    cashier_receipt_details,
-    total_amount, payment_status, paid_amount, remaining_amount,
+    cashier_invoice: _cashier_invoice, cashier_receipt_no: _cashier_receipt_no,
+    system_commission: _system_commission, nafez_commission: _nafez_commission, discount: _discount,
+    cashier_receipt_details: _cashier_receipt_details,
+    total_amount: _total_amount, payment_status: _payment_status,
+    paid_amount: _paid_amount, remaining_amount: _remaining_amount,
     ...cloudRow
   } = movement;
   if (!import_batch_id && customer_paid_amount === undefined) return cloudRow;

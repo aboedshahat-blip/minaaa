@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, CustomerTruck } from '../types';
 import { X, Users, Plus, Truck, Check } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useAuth } from '../contexts/useAuth';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -39,24 +39,41 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   const [newTrailerNo, setNewTrailerNo] = useState('');
   const [newDriverName, setNewDriverName] = useState('');
 
+  // The editor is driven by the selected customer prop; reset all fields together on selection changes.
   useEffect(() => {
     if (editingCustomer) {
+      // eslint-disable-next-line react/set-state-in-effect
       setCode(editingCustomer.code);
+      // eslint-disable-next-line react/set-state-in-effect
       setName(editingCustomer.name);
+      // eslint-disable-next-line react/set-state-in-effect
       setPhone(editingCustomer.phone);
+      // eslint-disable-next-line react/set-state-in-effect
       setEmail(editingCustomer.email || '');
+      // eslint-disable-next-line react/set-state-in-effect
       setNotes(editingCustomer.notes || '');
+      // eslint-disable-next-line react/set-state-in-effect
       setTrucks(editingCustomer.trucks || []);
+      // eslint-disable-next-line react/set-state-in-effect
       setSystemCommission(editingCustomer.system_commission ?? defaultSystemCommission);
+      // eslint-disable-next-line react/set-state-in-effect
       setNafezCommission(editingCustomer.nafez_commission ?? defaultNafezCommission);
     } else {
+      // eslint-disable-next-line react/set-state-in-effect
       setCode(`C-${100 + existingCount + 1}`);
+      // eslint-disable-next-line react/set-state-in-effect
       setName('');
+      // eslint-disable-next-line react/set-state-in-effect
       setPhone('');
+      // eslint-disable-next-line react/set-state-in-effect
       setEmail('');
+      // eslint-disable-next-line react/set-state-in-effect
       setNotes('');
+      // eslint-disable-next-line react/set-state-in-effect
       setTrucks([]);
+      // eslint-disable-next-line react/set-state-in-effect
       setSystemCommission(defaultSystemCommission);
+      // eslint-disable-next-line react/set-state-in-effect
       setNafezCommission(defaultNafezCommission);
     }
   }, [editingCustomer, isOpen, existingCount, defaultSystemCommission, defaultNafezCommission]);
@@ -79,10 +96,6 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     setNewTruckNo('');
     setNewTrailerNo('');
     setNewDriverName('');
-  };
-
-  const handleRemoveTruck = (index: number) => {
-    setTrucks(trucks.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

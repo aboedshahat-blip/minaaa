@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { SystemSettings } from '../types';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 import {
-  Settings,
   DollarSign,
   Truck,
   Save,

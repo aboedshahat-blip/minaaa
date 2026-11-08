@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Berth } from '../types';
 import { X, Anchor, Check } from 'lucide-react';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 
 interface BerthModalProps {
   isOpen: boolean;
@@ -24,16 +24,25 @@ export const BerthModal: React.FC<BerthModalProps> = ({
   const [description, setDescription] = useState('');
   const [isActive, setIsActive] = useState(true);
 
+  // The edit form must reload its fields when the selected berth changes.
   useEffect(() => {
     if (editingBerth) {
+      // eslint-disable-next-line react/set-state-in-effect
       setCode(editingBerth.code);
+      // eslint-disable-next-line react/set-state-in-effect
       setName(editingBerth.name);
+      // eslint-disable-next-line react/set-state-in-effect
       setDescription(editingBerth.description || '');
+      // eslint-disable-next-line react/set-state-in-effect
       setIsActive(editingBerth.is_active);
     } else {
+      // eslint-disable-next-line react/set-state-in-effect
       setCode(`B-0${existingCount + 1}`);
+      // eslint-disable-next-line react/set-state-in-effect
       setName('');
+      // eslint-disable-next-line react/set-state-in-effect
       setDescription('');
+      // eslint-disable-next-line react/set-state-in-effect
       setIsActive(true);
     }
   }, [editingBerth, isOpen, existingCount]);

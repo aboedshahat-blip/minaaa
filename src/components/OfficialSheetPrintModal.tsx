@@ -1,9 +1,10 @@
 import React from 'react';
 import { Movement } from '../types';
-import { X, Printer, Download, FileSpreadsheet, Check } from 'lucide-react';
+import { X, Printer, Download, FileSpreadsheet } from 'lucide-react';
 import { exportTemplateToExcel } from '../lib/excelUtils';
 import { vibLogoUrl } from '../lib/branding';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getArabicCurrentDate } from '../lib/dateUtils';
 
 interface OfficialSheetPrintModalProps {
   isOpen: boolean;
@@ -153,7 +154,7 @@ export const OfficialSheetPrintModal: React.FC<OfficialSheetPrintModalProps> = (
                   )}
                 </div>
                 <div className="manifest-meta text-left text-xs text-slate-600 min-w-[30mm]">
-                  <p>تاريخ الاستخراج: {new Date().toLocaleDateString('ar-EG')}</p>
+                  <p>تاريخ الاستخراج: {getArabicCurrentDate()}</p>
                   <p className="font-bold text-slate-900">إجمالي الحركات: {movements.length} حركة</p>
                 </div>
               </div>

@@ -1,6 +1,6 @@
-import React, { Suspense, lazy, useState, useMemo, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useMemo, useEffect, useCallback } from 'react';
 import { Berth, Customer, Movement } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { exportTemplateToExcel } from '../lib/excelUtils';
 import {
   Download,
@@ -8,7 +8,6 @@ import {
   Edit2,
   CheckCircle,
   Clock,
-  Truck,
   RotateCcw,
   FileText,
   FileDown,
@@ -16,9 +15,7 @@ import {
   Receipt,
   User,
   Percent,
-  ArrowLeft,
   Layers,
-  CalendarDays,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
@@ -28,7 +25,8 @@ import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { SystemSettings } from '../types';
 import { getMovementService, getServiceCommission, type MovementService } from '../lib/serviceFees';
 import { normalizeCustomerName } from '../lib/customerName';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getArabicCurrentDate, getLocalDateInputValue } from '../lib/dateUtils';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 import { SheetProcessingPage } from './SheetProcessingPage';
 
@@ -127,8 +125,8 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
   const [selectedServiceType, setSelectedServiceType] = useState<MovementService | ''>('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [entryDateFrom, setEntryDateFrom] = useState(new Date().toLocaleDateString('en-CA'));
-  const [entryDateTo, setEntryDateTo] = useState(new Date().toLocaleDateString('en-CA'));
+  const [entryDateFrom, setEntryDateFrom] = useState(getLocalDateInputValue);
+  const [entryDateTo, setEntryDateTo] = useState(getLocalDateInputValue);
   const [entryTimeFrom, setEntryTimeFrom] = useState('');
   const [entryTimeTo, setEntryTimeTo] = useState('');
   const [dailyPage, setDailyPage] = useState(1);
@@ -162,9 +160,12 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     return Array.from(batches.values()).sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   }, [movements]);
   const latestBatchId = (importBatches.find((batch) => batch.id !== 'legacy-unassigned') || importBatches[0])?.id || '';
+  // Adopt the newest imported sheet as the default, keeping selection controls in sync with cloud refreshes.
   useEffect(() => {
     if (latestBatchId) {
+      // eslint-disable-next-line react/set-state-in-effect
       setSelectedManifestBatch('latest');
+      // eslint-disable-next-line react/set-state-in-effect
       setSelectedManifestBatchIds([latestBatchId]);
     }
   }, [latestBatchId]);
@@ -391,7 +392,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     });
   }, [filteredMovements, customerById, customerByNormalizedName]);
 
-  const getConfiguredMovementFees = (movement: Movement) => {
+  const getConfiguredMovementFees = useCallback((movement: Movement) => {
     const customer = customerById.get(movement.customer_id || '')
       || customerByNormalizedName.get(normalizeCustomerName(movement.customer_name || movement.driver_name || ''));
     const service = getMovementService(movement.booking_category, movement.container_path)
@@ -402,7 +403,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
         : customer?.system_commission ?? settings.default_system_commission ?? 200,
       nafez: customer?.nafez_commission ?? settings.default_nafez_commission ?? 0,
     };
-  };
+  }, [customerById, customerByNormalizedName, settings]);
 
   const zeroFinancialMovements = useMemo(() => filteredMovements.filter((movement) => {
     const allFinancialValuesAreZero = Number(movement.cashier_invoice || 0) === 0
@@ -417,7 +418,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
     if (!allFinancialValuesAreZero) return false;
     const fees = getConfiguredMovementFees(movement);
     return fees.commission + fees.nafez > 0;
-  }), [filteredMovements, customerById, settings]);
+  }), [filteredMovements, getConfiguredMovementFees]);
 
   const unlinkedCashierMovementCount = useMemo(() => filteredMovements.filter((movement) => !movement.cashier_receipt_no).length, [filteredMovements]);
 
@@ -667,7 +668,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
               return <article key={m.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
                   <div className="flex min-w-0 items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-800">{m.seq}</span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-black text-slate-900">{m.customer_name || m.driver_name || 'عميل عام'}</h3><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.payment_status==='paid'?'bg-emerald-100 text-emerald-700':m.payment_status==='partial'?'bg-amber-100 text-amber-700':'bg-rose-100 text-rose-700'}`}>{canViewFinancials?statusLabel:'حركة مسجلة'}</span></div><p className="mt-1 truncate text-sm text-slate-600">الشاحنة: {m.truck_no || '—'} <span className="px-1 text-slate-300">|</span> المقطورة: {m.trailer_no || '—'} <span className="px-1 text-slate-300">|</span> الحاوية: {m.container_no || '—'}</p><p className="mt-1 text-xs text-slate-500">السائق: {m.driver_name || '—'} · {created ? created.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : 'وقت غير مسجل'}{m.movement_date ? ` · تاريخ الحركة: ${m.movement_date}` : ''}</p></div></div>
-                  <div className="flex flex-wrap items-center gap-2 md:justify-end">{canViewFinancials && <div className="me-2 text-sm"><span className="text-slate-500">المتبقي </span><strong className={Number(m.remaining_amount)>0?'text-rose-700':'text-emerald-700'}>{Number(m.remaining_amount||0).toLocaleString()} ج.م</strong></div>}{canManagePayments && Number(m.remaining_amount)>0 && <button onClick={()=>onOpenPaymentModal?.(m.customer_id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">تسجيل تحصيل</button>}<button onClick={()=>onEditMovement(m)} className="rounded-lg border border-blue-200 p-2 text-blue-700" title="تعديل"><Edit2 className="h-4 w-4"/></button><button onClick={()=>setExpandedMovementIds((old)=>{const next=new Set(old);expanded?next.delete(m.id):next.add(m.id);return next;})} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{expanded?'إخفاء التفاصيل':'تفاصيل الحركة'}{expanded?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}</button></div>
+                  <div className="flex flex-wrap items-center gap-2 md:justify-end">{canViewFinancials && <div className="me-2 text-sm"><span className="text-slate-500">المتبقي </span><strong className={Number(m.remaining_amount)>0?'text-rose-700':'text-emerald-700'}>{Number(m.remaining_amount||0).toLocaleString()} ج.م</strong></div>}{canManagePayments && Number(m.remaining_amount)>0 && <button onClick={()=>onOpenPaymentModal?.(m.customer_id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">تسجيل تحصيل</button>}<button onClick={()=>onEditMovement(m)} className="rounded-lg border border-blue-200 p-2 text-blue-700" title="تعديل"><Edit2 className="h-4 w-4"/></button><button onClick={()=>setExpandedMovementIds((old)=>{const next=new Set(old);if(expanded) next.delete(m.id); else next.add(m.id);return next;})} className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{expanded?'إخفاء التفاصيل':'تفاصيل الحركة'}{expanded?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}</button></div>
                 </div>
                 {expanded && <div className="grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-5">{[["العميل",m.customer_name],['السائق',m.driver_name],['رقم الشاحنة',m.truck_no],['رقم المقطورة',m.trailer_no],['رقم الحاوية',m.container_no],['رقم الإقرار',m.declaration_no],['الرصيف',m.berth_name],['مسار الحاوية',m.container_path],['وصف الحاوية',m.container_desc],['تاريخ الحركة',m.movement_date],...(canViewFinancials?[["فاتورة الكاشير",`${Number(m.cashier_invoice||0).toLocaleString()} ج.م`],['إيصال الكاشير',m.cashier_receipt_no],['عمولة المنظومة',`${Number(m.system_commission||0).toLocaleString()} ج.م`],['عمولة نافذ',`${Number(m.nafez_commission||0).toLocaleString()} ج.م`],['الإجمالي',`${Number(m.total_amount||0).toLocaleString()} ج.م`],['المدفوع',`${Number(m.paid_amount||0).toLocaleString()} ج.م`],['المتبقي',`${Number(m.remaining_amount||0).toLocaleString()} ج.م`]]:[]),['ملاحظات',m.notes]].map(([label,value])=><div key={label} className="bg-white p-3"><span className="block text-[10px] text-slate-500">{label}</span><strong className="mt-1 block break-words text-xs text-slate-800">{value || '—'}</strong></div>)}</div>}
               </article>;
@@ -1232,7 +1233,7 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="hidden print:block p-4 text-center border-b border-black">
               <h1 className="text-xl font-bold">كشف حركات الشاحنات والحاويات - ميناء التفريغ والشحن</h1>
-              <p className="text-xs text-gray-600 mt-1">تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</p>
+              <p className="text-xs text-gray-600 mt-1">تاريخ الطباعة: {getArabicCurrentDate()}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] text-[11px] text-right border-collapse">

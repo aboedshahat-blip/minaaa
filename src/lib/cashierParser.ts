@@ -247,7 +247,7 @@ export const parseCashierTextLines = (lines: string[], pdfRtlPlateOrder = false)
   const entries: CashierInvoiceEntry[] = [];
 
   // Regex pattern for RSCT receipt number like: 0047-01-1/01-261021 or 0103-03-1/01-261021
-  const receiptRegex = /\b\d{4}-\d{2}-\d+[\/\-][\d\-]+\b/;
+  const receiptRegex = /\b\d{4}-\d{2}-\d+[/-][\d-]+\b/;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];

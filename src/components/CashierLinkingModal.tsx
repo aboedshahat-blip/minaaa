@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
-import { X, Link2, Check, DollarSign, Search, FileText, Truck, AlertCircle } from 'lucide-react';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { X, Link2, Check, Search, FileText, AlertCircle } from 'lucide-react';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 
 interface CashierLinkingModalProps {
   isOpen: boolean;

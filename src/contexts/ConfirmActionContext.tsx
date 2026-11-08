@@ -1,9 +1,8 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ConfirmActionContext } from './ConfirmActionValue';
 
 interface ConfirmRequest { message: string; confirmLabel: string; }
 type ConfirmAction = (message: string, confirmLabel?: string) => Promise<boolean>;
-const ConfirmActionContext = createContext<ConfirmAction | null>(null);
-
 export const ConfirmActionProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [request, setRequest] = useState<ConfirmRequest | null>(null);
   const resolveRef = useRef<((confirmed: boolean) => void) | null>(null);
@@ -38,10 +37,4 @@ export const ConfirmActionProvider: React.FC<React.PropsWithChildren> = ({ child
       </div>}
     </ConfirmActionContext.Provider>
   );
-};
-
-export const useConfirmAction = (): ConfirmAction => {
-  const confirmAction = useContext(ConfirmActionContext);
-  if (!confirmAction) throw new Error('useConfirmAction must be used within ConfirmActionProvider');
-  return confirmAction;
 };

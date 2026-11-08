@@ -1,6 +1,5 @@
 import { Movement, PaymentReceipt } from '../types';
 import { vibLogoUrl } from './branding';
-import type jsPDF from 'jspdf';
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;',
@@ -19,62 +18,6 @@ const centerTableCells = (root: ParentNode) => {
     cell.style.wordBreak = 'normal';
     cell.style.lineHeight = '1.45';
   });
-};
-
-const addCanvasAsPdfPages = (pdf: jsPDF, canvas: HTMLCanvasElement, margin = 5, repeatTransportStamp = false) => {
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const contentWidth = pageWidth - margin * 2;
-  const stampHeight = repeatTransportStamp ? 22 : 0;
-  const contentHeight = pageHeight - margin * 2 - stampHeight;
-  const pixelsPerMm = canvas.width / contentWidth;
-  const pagePixelHeight = Math.max(1, Math.floor(contentHeight * pixelsPerMm));
-  const stampPixelHeight = Math.floor(stampHeight * pixelsPerMm);
-
-  for (let top = 0; top < canvas.height; top += pagePixelHeight) {
-    const sliceHeight = Math.min(pagePixelHeight, canvas.height - top);
-    const pageCanvas = document.createElement('canvas');
-    pageCanvas.width = canvas.width;
-    pageCanvas.height = sliceHeight + stampPixelHeight;
-    const context = pageCanvas.getContext('2d');
-    if (!context) throw new Error('تعذر تجهيز صفحة PDF في المتصفح.');
-
-    // JPEG has no transparency channel. Fill the unused part of a short final
-    // page before encoding so transparent pixels cannot turn into a black band.
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-    context.drawImage(canvas, 0, top, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
-    if (repeatTransportStamp) {
-      const stampTop = sliceHeight + 2 * pixelsPerMm;
-      const boxWidth = 48 * pixelsPerMm;
-      const boxHeight = 12 * pixelsPerMm;
-      const boxX = (pageCanvas.width - boxWidth) / 2;
-      const boxY = stampTop + 5 * pixelsPerMm;
-      context.save();
-      context.direction = 'rtl';
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      context.fillStyle = '#475569';
-      context.font = `700 ${Math.max(12, Math.round(2.6 * pixelsPerMm))}px Tahoma, Arial, sans-serif`;
-      context.fillText('ختم مكتب النقل', pageCanvas.width / 2, stampTop + 1.5 * pixelsPerMm);
-      context.strokeStyle = '#64748b';
-      context.lineWidth = Math.max(1, 0.35 * pixelsPerMm);
-      context.setLineDash([1.5 * pixelsPerMm, 1 * pixelsPerMm]);
-      context.strokeRect(boxX, boxY, boxWidth, boxHeight);
-      context.restore();
-    }
-    if (top > 0) pdf.addPage();
-    pdf.addImage(
-      pageCanvas.toDataURL('image/jpeg', 0.92),
-      'JPEG',
-      margin,
-      margin,
-      contentWidth,
-      pageCanvas.height / pixelsPerMm,
-      undefined,
-      'FAST',
-    );
-  }
 };
 
 /**

@@ -582,7 +582,7 @@ export const matrixToMovements = (matrix: unknown[][]): {
   // This preserves container description and path exactly, regardless of
   // column order or whether both cells happen to contain the same word.
   const normalizeHeader = (value: string) => value
-    .replace(/[\s\u0640_\-]/g, '')
+    .replace(/[\s\u0640_-]/g, '')
     .replace(/[أإآ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .toLowerCase();

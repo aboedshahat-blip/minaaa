@@ -4,6 +4,26 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /node_modules[\\/]react(?:-dom)?[\\/]/,
+              priority: 20,
+            },
+            {
+              name: 'supabase-vendor',
+              test: /node_modules[\\/]@supabase[\\/]/,
+              priority: 15,
+            },
+          ],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

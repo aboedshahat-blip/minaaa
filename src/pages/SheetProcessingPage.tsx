@@ -1,22 +1,19 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { OfficialSheetPrintModal } from '../components/OfficialSheetPrintModal';
 import { normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getLocalDateInputValue } from '../lib/dateUtils';
 import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import {
-  FileSpreadsheet,
   Upload,
   Download,
   CheckCircle2,
   Check,
-  Eye,
-  Plus,
   Printer,
   RefreshCw,
-  FileDown,
 } from 'lucide-react';
 
 const getLocalDateTimeInputValue = (date = new Date()) => {
@@ -256,7 +253,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
       ...r,
       id: `temp-${i}`,
       seq: i + 1,
-      movement_date: r.movement_date || new Date().toISOString().split('T')[0],
+      movement_date: r.movement_date || getLocalDateInputValue(),
       berth_id: targetBerth?.id || '',
       berth_name: targetBerth?.name || 'رصيف الميناء',
       customer_name: r.driver_name || '',
@@ -282,7 +279,7 @@ export const SheetProcessingPage: React.FC<SheetProcessingPageProps> = ({
     }));
   }, [rows, selectedBerthId, berths]);
 
-  const handleExportProcessedPdf = async () => {
+  const _handleExportProcessedPdf = async () => {
     if (rows.length === 0) return;
     setIsOfficialSheetModalOpen(true);
   };

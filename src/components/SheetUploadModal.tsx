@@ -1,21 +1,18 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { parseUploadedSheet, exportTemplateToExcel, downloadEmptyTemplate } from '../lib/excelUtils';
 import { Customer, Berth, Movement, SystemSettings } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { OfficialSheetPrintModal } from './OfficialSheetPrintModal';
 import { findCloseCustomerName, normalizeCustomerName, summarizeImportedCustomers } from '../lib/customerName';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getLocalDateInputValue } from '../lib/dateUtils';
 import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import {
   Upload,
-  FileSpreadsheet,
   CheckCircle2,
-  AlertCircle,
   Download,
   X,
-  ArrowRight,
   Filter,
-  FileDown,
   Printer,
   LoaderCircle,
 } from 'lucide-react';
@@ -44,14 +41,14 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const savingLockRef = useRef(false);
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [fileName, setFileName] = useState('');
   const [parsedRows, setParsedRows] = useState<Partial<Movement>[]>([]);
   const [driverNameReviewRows, setDriverNameReviewRows] = useState<number[]>([]);
   const [driverNamesReviewed, setDriverNamesReviewed] = useState(true);
   const [showAllPreviewRows, setShowAllPreviewRows] = useState(false);
-  const [originalHeaders, setOriginalHeaders] = useState<string[]>([]);
+  const [, setOriginalHeaders] = useState<string[]>([]);
   const [selectedBerthId, setSelectedBerthId] = useState<string>(berths[0]?.id || '');
   const [defaultCashierInvoice, setDefaultCashierInvoice] = useState<number>(0);
   const [applyDefaultCommissions, setApplyDefaultCommissions] = useState<boolean>(true);
@@ -63,7 +60,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
       ...r,
       id: `temp-${i}`,
       seq: i + 1,
-      movement_date: r.movement_date || new Date().toISOString().split('T')[0],
+      movement_date: r.movement_date || getLocalDateInputValue(),
       berth_id: targetBerth?.id || '',
       berth_name: targetBerth?.name || 'رصيف الميناء',
       customer_name: r.driver_name || '',
@@ -276,7 +273,7 @@ export const SheetUploadModal: React.FC<SheetUploadModalProps> = ({
     }
   };
 
-  const handleExportPdfDirectly = async () => {
+  const _handleExportPdfDirectly = async () => {
     if (parsedRows.length === 0) return;
     const tempMovements: Movement[] = parsedRows.map((r, i) => ({
       ...r,

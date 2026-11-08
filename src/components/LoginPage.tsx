@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import {
   ShieldCheck,
   Lock,
@@ -9,6 +9,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { vibLogoUrl } from '../lib/branding';
+import { getCurrentYear } from '../lib/dateUtils';
 
 export const LoginPage: React.FC = () => {
   const { login, requestPasswordRecovery, sessionNotice } = useAuth();
@@ -179,7 +180,7 @@ export const LoginPage: React.FC = () => {
 
         {/* Footer info */}
         <div className="text-center text-xs text-slate-500">
-          VIB للنقل وتجارة الحاويات © {new Date().getFullYear()} - جميع الحقوق محفوظة
+          VIB للنقل وتجارة الحاويات © {getCurrentYear()} - جميع الحقوق محفوظة
         </div>
       </div>
     </div>

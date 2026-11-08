@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Movement } from '../types';
-import { X, Printer, Building2, Truck, Calendar, Hash, FileText, CheckCircle2, Download } from 'lucide-react';
+import { X, Printer, Building2, FileText, Download } from 'lucide-react';
 import { vibLogoUrl } from '../lib/branding';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getCurrentYear, getLocalDateInputValue } from '../lib/dateUtils';
 
 interface DriverInvoiceModalProps {
   isOpen: boolean;
@@ -21,9 +22,9 @@ export const DriverInvoiceModal: React.FC<DriverInvoiceModalProps> = ({
 }) => {
   const confirmAction = useConfirmAction();
   const [placeName, setPlaceName] = useState(defaultPlaceName);
-  const [invoiceNo] = useState(`INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`);
-  const [invoiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [notes, setNotes] = useState('المبلغ المستحق عن الشحنات الموضحة بالجدول أعلاه.');
+  const [invoiceNo] = useState(() => `INV-${getCurrentYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`);
+  const [invoiceDate] = useState(getLocalDateInputValue);
+  const [notes, _setNotes] = useState('المبلغ المستحق عن الشحنات الموضحة بالجدول أعلاه.');
 
   if (!isOpen) return null;
 

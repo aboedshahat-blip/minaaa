@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
-import { ActivityLog, ManagedUser, RolePermissions, SystemSettings, UserRole } from '../types';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../contexts/useAuth';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { ActivityLog, RolePermissions, SystemSettings, UserRole } from '../types';
 import { fetchRecentActivityLogs, OperationalSafetyBackup } from '../lib/storage';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 import {
@@ -13,16 +13,13 @@ import {
   Key,
   Plus,
   Save,
-  CheckCircle2,
   RefreshCw,
   Users,
   Eye,
   EyeOff,
-  Briefcase,
   Truck,
   Building2,
   DollarSign,
-  FileSpreadsheet,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -44,8 +41,8 @@ interface AdminControlPageProps {
 }
 
 export const AdminControlPage: React.FC<AdminControlPageProps> = ({
-  settings,
-  onSaveSettings,
+  settings: _settings,
+  onSaveSettings: _onSaveSettings,
   movementCount,
   customerCount,
   berthCount,
@@ -103,22 +100,21 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   const [clearOperationalDataError, setClearOperationalDataError] = useState<string | null>(null);
   const [isDeletingUser, setIsDeletingUser] = useState(false);
 
-  const refreshActivity = async () => {
-    setIsLoadingActivity(true);
+  const refreshActivity = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoadingActivity(true);
     try { setActivityLogs(await fetchRecentActivityLogs(150)); setActivityError(null); }
     catch (error) { setActivityError(error instanceof Error ? error.message : 'تعذر تحميل سجل النشاط.'); }
     finally { setIsLoadingActivity(false); }
-  };
-  useEffect(() => { if (isActivityExpanded && !activityLogs.length) void refreshActivity(); }, [isActivityExpanded]);
+  }, []);
 
-  const openLatestUndo = () => {
+  const openLatestUndo = useCallback(() => {
     const latestBackup = safetyBackups[0];
     if (!latestBackup) return;
     setSelectedBackupId(latestBackup.id);
     setRestorePassword('');
     setRestoreError(null);
     setIsRestoreDialogOpen(true);
-  };
+  }, [safetyBackups]);
 
   useEffect(() => {
     if (!isUnlocked || !safetyBackups.length) return;
@@ -132,7 +128,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     };
     window.addEventListener('keydown', handleUndoShortcut);
     return () => window.removeEventListener('keydown', handleUndoShortcut);
-  }, [isUnlocked, safetyBackups]);
+  }, [isUnlocked, safetyBackups, openLatestUndo]);
 
   // Active selected user for permissions/password management
   const [activeEditingUserId, setActiveEditingUserId] = useState<string>(users[0]?.id || 'u-admin');
@@ -154,7 +150,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
     try {
       await onRefreshDataFromCloud();
       setSyncFeedback('تمت مزامنة وتحديث كافة البيانات بنجاح تام! 🟢');
-    } catch (e) {
+    } catch  {
       setSyncFeedback('حدث خطأ أثناء الاتصال السحابي، جاري إعادة المحاولة...');
     } finally {
       setIsSyncing(false);
@@ -300,7 +296,6 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
   };
 
   const selectedUser = users.find((u) => u.id === activeEditingUserId) || users[0];
-  useEffect(() => { if (selectedUser) setRoleToAssign(selectedUser.role); }, [selectedUser?.id, selectedUser?.role]);
   const filteredUsers = users.filter((user) => [user.name, user.username, user.email, user.role].some((value) => (value || '').toLocaleLowerCase('ar-EG').includes(userSearch.trim().toLocaleLowerCase('ar-EG'))));
 
   const handleChangeSelectedUserRole = async () => {
@@ -323,6 +318,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
       await deleteUser(selectedUser.id);
       const nextUser = users.find((user) => user.id !== selectedUser.id);
       setActiveEditingUserId(nextUser?.id || '');
+      if (nextUser) setRoleToAssign(nextUser.role);
       setEditingPassword('');
       alert('تمت إزالة المستخدم. بقي سجل نشاطه السابق محفوظًا للمدير.');
     } catch (error) {
@@ -491,7 +487,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
-          <button type="button" aria-expanded={isActivityExpanded} onClick={() => setIsActivityExpanded((open) => !open)} className="flex min-w-0 items-center gap-2 text-right">
+          <button type="button" aria-expanded={isActivityExpanded} onClick={() => { const opening = !isActivityExpanded; setIsActivityExpanded(opening); if (opening && !activityLogs.length) void refreshActivity(); }} className="flex min-w-0 items-center gap-2 text-right">
             <Activity className="h-5 w-5 shrink-0 text-blue-700" />
             <span className="font-black text-slate-900">سجل رفع وتعديل البيانات</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{activityLogs.length}</span>
@@ -545,7 +541,7 @@ export const AdminControlPage: React.FC<AdminControlPageProps> = ({
             return (
               <button
                 key={u.id}
-                onClick={() => setActiveEditingUserId(u.id)}
+                onClick={() => { setActiveEditingUserId(u.id); setRoleToAssign(u.role); }}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition ${
                   isSelected
                     ? 'bg-blue-900 text-white border-blue-900 shadow'

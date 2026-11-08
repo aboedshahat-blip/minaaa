@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/useAuth';
 import {
   Berth,
   Customer,
@@ -67,7 +68,8 @@ const BerthModal = lazy(() => import('./components/BerthModal').then((module) =>
 const PaymentModal = lazy(() => import('./components/PaymentModal').then((module) => ({ default: module.PaymentModal })));
 import { applyUnallocatedCustomerAdvances } from './lib/paymentUtils';
 import { getMovementService, getServiceCommission } from './lib/serviceFees';
-import { ConfirmActionProvider, useConfirmAction } from './contexts/ConfirmActionContext';
+import { ConfirmActionProvider } from './contexts/ConfirmActionContext';
+import { useConfirmAction } from './contexts/useConfirmAction';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
 const getLocalOnlyRows = <T extends { id: string },>(cloudRows: T[], localRows: T[]) => {
@@ -154,13 +156,17 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (isAuthLoading || !isAuthenticated || canViewFinancials) return;
+    // Strip finance data as soon as a user loses finance permission.
+    // eslint-disable-next-line react/set-state-in-effect
     setMovements((current) => {
       const operationalOnly = current.map(withoutFinancialDetails);
       saveMovements(operationalOnly);
       return operationalOnly;
     });
+    // eslint-disable-next-line react/set-state-in-effect
     setPayments([]);
     savePayments([]);
+    // eslint-disable-next-line react/set-state-in-effect
     setSafetyBackups((current) => current.map((backup) => ({ ...backup, movements: backup.movements.map(withoutFinancialDetails), payments: [] })));
   }, [isAuthLoading, isAuthenticated, canViewFinancials]);
 
@@ -406,6 +412,12 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const refreshDataFromCloudRef = useRef(refreshDataFromCloud);
+  // Keep long-lived realtime handlers pointed at the latest render's refresh function.
+  useEffect(() => {
+    refreshDataFromCloudRef.current = refreshDataFromCloud;
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
@@ -416,14 +428,14 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (isAuthLoading || !isAuthenticated) return;
-    void refreshDataFromCloud(true);
+    void refreshDataFromCloudRef.current(true);
 
     const storedSettings = getStoredSettings();
     const supabase = getSupabaseClient(storedSettings.supabase_url, storedSettings.supabase_anon_key);
     let debounceTimer: number | undefined;
     const requestRefresh = () => {
       if (debounceTimer) window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(() => void refreshDataFromCloud(false, true), 800);
+      debounceTimer = window.setTimeout(() => void refreshDataFromCloudRef.current(false, true), 800);
     };
     let channel = supabase?.channel(`pls-live-sync-${Math.random().toString(36).slice(2)}`);
     if (channel) {
@@ -436,11 +448,11 @@ const AppContent: React.FC = () => {
     // Avoid downloading every row on a timer. Realtime keeps active tabs fresh;
     // returning to the app or reconnecting performs a full reconciliation.
     const handleVisibility = () => {
-      if (navigator.onLine && document.visibilityState === 'visible') void refreshDataFromCloud(false, true);
+      if (navigator.onLine && document.visibilityState === 'visible') void refreshDataFromCloudRef.current(false, true);
     };
     const handleOnline = () => {
       setIsOnline(true);
-      void refreshDataFromCloud(false, true);
+      void refreshDataFromCloudRef.current(false, true);
     };
     const handleOffline = () => setIsOnline(false);
     document.addEventListener('visibilitychange', handleVisibility);
@@ -468,10 +480,11 @@ const AppContent: React.FC = () => {
   // Security guard: If non-admin user lands on admin_control, redirect to movements
   useEffect(() => {
     if (activeTab === 'admin_control' && !isAdmin) {
+      // Deny continued access immediately after the user's admin role is removed.
+      // eslint-disable-next-line react/set-state-in-effect
       setActiveTab('movements');
     }
   }, [activeTab, isAdmin]);
-
   // Modals state
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [editingMovement, setEditingMovement] = useState<Movement | null>(null);
@@ -489,10 +502,11 @@ const AppContent: React.FC = () => {
   // Auto-switch away from restricted tabs
   useEffect(() => {
     if (!canViewFinancials && (activeTab === 'accounts' || activeTab === 'reports')) {
+      // Deny continued access immediately after financial permission is removed.
+      // eslint-disable-next-line react/set-state-in-effect
       setActiveTab('movements');
     }
   }, [canViewFinancials, activeTab]);
-
   // Max seq calculation
   const currentMaxSeq = movements.reduce((max, m) => Math.max(max, m.seq || 0), 0);
 

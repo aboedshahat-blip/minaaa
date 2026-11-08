@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Berth, Customer, Movement, SystemSettings } from '../types';
-import { useAuth } from '../contexts/AuthContext';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useAuth } from '../contexts/useAuth';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 import { getMovementService, getMovementServiceLabel, getServiceCommission } from '../lib/serviceFees';
 import { X, Calculator, Truck, FileText, Check } from 'lucide-react';
 
@@ -102,7 +102,7 @@ interface ContainerNumberInputProps {
 }
 
 const ContainerNumberInput: React.FC<ContainerNumberInputProps> = ({ value, onChange }) => {
-  const containers = value.split(/[\/,،؛\n]+/).map((item) => item.trim()).slice(0, 2);
+  const containers = value.split(/[/,،؛\n]+/).map((item) => item.trim()).slice(0, 2);
   const updateContainer = (index: number, nextValue: string) => {
     const next = [...containers];
     next[index] = nextValue;
@@ -163,73 +163,6 @@ const ContainerNumberField: React.FC<ContainerNumberFieldProps> = ({ value, onCh
   />;
 };
 
-interface SegmentedCodeInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  letterCount: number;
-  digitCount: number;
-  label: string;
-  required?: boolean;
-}
-
-const SegmentedCodeInput: React.FC<SegmentedCodeInputProps> = ({ value, onChange, letterCount, digitCount, label, required = false }) => {
-  const refs = useRef<Array<HTMLInputElement | null>>([]);
-  const letters = (value.match(/\p{L}/gu) || []).slice(0, letterCount);
-  const digits = normalizePlateDigits(value).replace(/\D/g, '').slice(0, digitCount);
-  const slots = [...letters, ...digits.split('')];
-  const commitSlots = (next: string[]) => {
-    onChange(`${next.slice(0, letterCount).filter(Boolean).join('')}${next.slice(letterCount).filter(Boolean).join('')}`);
-  };
-  return (
-    <div dir="ltr" className="flex min-w-0 flex-1 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100" aria-label={label}>
-      {Array.from({ length: letterCount + digitCount }, (_, index) => {
-        const isLetter = index < letterCount;
-        const slotIndex = isLetter ? index : index - letterCount;
-        return <input
-          key={index}
-          ref={(element) => { refs.current[index] = element; }}
-          type="text"
-          inputMode={isLetter ? 'text' : 'numeric'}
-          maxLength={isLetter ? letterCount : digitCount}
-          value={slots[index] || ''}
-          onChange={(event) => {
-            const raw = event.target.value;
-            const pasted = raw.match(/[\p{L}0-9٠-٩۰-۹]/gu) || [];
-            if (pasted.length > 1) {
-              const next = [...slots];
-              let target = index;
-              pasted.forEach((character) => {
-                const isCharacterLetter = /\p{L}/u.test(character);
-                while (target < next.length && (target < letterCount) !== isCharacterLetter) target += 1;
-                if (target < next.length) next[target++] = isCharacterLetter ? character.toLocaleUpperCase() : normalizePlateDigits(character);
-              });
-              commitSlots(next);
-              refs.current[Math.min(target, next.length - 1)]?.focus();
-              return;
-            }
-            const entered = isLetter
-              ? (raw.match(/\p{L}/gu) || []).map((character) => character.toLocaleUpperCase())
-              : normalizePlateDigits(raw).replace(/\D/g, '').split('');
-            const next = [...slots];
-            next[index] = entered[0] || '';
-            commitSlots(next);
-            if (entered[0] && index < next.length - 1) refs.current[index + 1]?.focus();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Backspace' && !slots[index] && index > 0) refs.current[index - 1]?.focus();
-            if (event.key === 'ArrowLeft' && index > 0) refs.current[index - 1]?.focus();
-            if (event.key === 'ArrowRight' && index < refs.current.length - 1) refs.current[index + 1]?.focus();
-          }}
-          placeholder={isLetter ? 'ح' : '•'}
-          aria-label={isLetter ? `حرف ${slotIndex + 1} من ${label}` : `رقم ${slotIndex + 1} من ${label}`}
-          className={`h-10 min-w-0 flex-1 border-0 bg-white p-0 text-center text-base font-semibold text-slate-800 outline-none placeholder:text-slate-300 focus:bg-blue-50 ${index > 0 ? 'border-l border-slate-200' : ''} ${index === letterCount ? 'border-l-2 border-l-slate-300' : ''}`}
-          required={required && index === 0}
-        />;
-      })}
-    </div>
-  );
-};
-
 export const MovementModal: React.FC<MovementModalProps> = ({
   isOpen,
   onClose,
@@ -251,7 +184,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
   };
   const containerNumberMessage = (value: string) => {
     if (!value.trim()) return '';
-    const entries = value.split(/[\/,،؛\n]+/).map((part) => part.trim()).filter(Boolean);
+    const entries = value.split(/[/,،؛\n]+/).map((part) => part.trim()).filter(Boolean);
     const valid = entries.every((entry) => {
       const normalized = normalizeDigits(entry).replace(/[\s-]/g, '').toUpperCase();
       return /^[A-Z]{4}\d{7}$/.test(normalized);
@@ -384,7 +317,7 @@ export const MovementModal: React.FC<MovementModalProps> = ({
       remaining_amount: remaining,
       payment_status: status,
     }));
-  }, [formData.cashier_invoice, formData.system_commission, formData.nafez_commission, formData.discount, formData.paid_amount]);
+  }, [formData.cashier_invoice, formData.system_commission, formData.nafez_commission, formData.discount, formData.paid_amount, formData.payment_status]);
 
   if (!isOpen) return null;
 

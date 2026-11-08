@@ -1,45 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AuthContext } from './AuthContextValue';
 import { createClient } from '@supabase/supabase-js';
 import { ManagedUser, RolePermissions, UserRole } from '../types';
 import { getStoredSettings } from '../lib/storage';
 import { getSupabaseClient } from '../lib/supabase';
 
-interface AuthContextType {
-  currentUser: ManagedUser;
-  users: ManagedUser[];
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  isPasswordRecovery: boolean;
-  sessionNotice: string;
-  login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  requestPasswordRecovery: (email: string) => Promise<{ success: boolean; message?: string }>;
-  completePasswordRecovery: (password: string) => Promise<{ success: boolean; message?: string }>;
-  finishPasswordRecovery: () => void;
-  logout: () => void;
-  setCurrentUserId: (id: string) => void;
-  verifyCurrentPassword: (password: string) => Promise<boolean>;
-  updateUserPermissions: (userId: string, permissions: RolePermissions) => Promise<void>;
-  updateUserRole: (userId: string, role: UserRole) => Promise<void>;
-  updateUserStatus: (userId: string, isActive: boolean) => Promise<void>;
-  updateUserPassword: (userId: string, newPassword: string) => Promise<void>;
-  addNewUser: (user: Omit<ManagedUser, 'id' | 'created_at'> & { password: string }) => Promise<void>;
-  deleteUser: (userId: string) => Promise<void>;
-  canViewFinancials: boolean;
-  canViewSystemRevenue: boolean;
-  canAddMovements: boolean;
-  canEditMovements: boolean;
-  canDeleteMovements: boolean;
-  canUploadSheets: boolean;
-  canExportExcel: boolean;
-  canManageCustomers: boolean;
-  canDeleteCustomers: boolean;
-  canManagePayments: boolean;
-  canManageBerths: boolean;
-  canEditCommissions: boolean;
-  isAdmin: boolean;
-}
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const OFFLINE_PROFILE_KEY = 'pls_offline_verified_profile_v1';
 const OFFLINE_PROFILE_MAX_AGE_MS = 4 * 60 * 1000;
 const emptyPermissions: RolePermissions = {
@@ -101,19 +67,19 @@ const saveOfflineProfile = (profile: ManagedUser) => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<ManagedUser>(anonymousUser);
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  // Supabase can process a recovery URL before React subscribes to auth events.
-  // Detect the callback marker on first render so the recovery link never looks like a normal login.
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(hasPasswordRecoveryCallback);
-  const [sessionNotice, setSessionNotice] = useState('');
-
   const supabase = useMemo(() => {
     const settings = getStoredSettings();
     return getSupabaseClient(settings.supabase_url, settings.supabase_anon_key);
   }, []);
+
+  const [currentUser, setCurrentUser] = useState<ManagedUser>(anonymousUser);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(Boolean(supabase));
+  // Supabase can process a recovery URL before React subscribes to auth events.
+  // Detect the callback marker on first render so the recovery link never looks like a normal login.
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(hasPasswordRecoveryCallback);
+  const [sessionNotice, setSessionNotice] = useState('');
 
   const refreshUsers = async (adminClient = supabase) => {
     if (!adminClient) return;
@@ -140,7 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    if (!supabase) { setIsLoading(false); return; }
+    if (!supabase) return;
     let active = true;
     let revision = 0;
     let restoredOfflineSession = false;
@@ -407,10 +373,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     canEditCommissions: isAdmin || perms.can_edit_commissions,
     isAdmin,
   }}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
 };

@@ -1,17 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { Customer, Movement, PaymentReceipt } from '../types';
 import {
-  Wallet,
-  TrendingUp,
   Receipt,
   CreditCard,
   Download,
-  Printer,
-  CheckCircle,
-  Clock,
-  ArrowUpRight,
   ShieldCheck,
-  Building2,
   User,
   Truck,
   FileText,
@@ -19,7 +12,7 @@ import {
 } from 'lucide-react';
 import { DriverInvoiceModal } from '../components/DriverInvoiceModal';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 
 type AccountsSubTab = 'clients' | 'system_revenue' | 'receipts' | 'drivers';
 const ACCOUNTS_SUB_TAB_KEY = 'pls_accounts_sub_tab';

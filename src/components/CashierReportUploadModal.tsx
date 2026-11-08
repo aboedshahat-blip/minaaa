@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 import { Movement, SystemSettings } from '../types';
 import type {
   CashierEntryCandidateSet,
@@ -9,12 +9,9 @@ import type {
 import { getMovementService, matchesMovementService } from '../lib/serviceFees';
 import {
   Upload,
-  FileText,
   CheckCircle2,
-  AlertCircle,
   X,
   RefreshCw,
-  ArrowRight,
   Receipt,
   FileCheck,
   Check,
@@ -62,7 +59,9 @@ export const CashierReportUploadModal: React.FC<CashierReportUploadModalProps> =
   const [manualCategory, setManualCategory] = useState('وارد حاويات');
   const [imageSearchTerm, setImageSearchTerm] = useState('');
 
-  movementsRef.current = movements;
+  useEffect(() => {
+    movementsRef.current = movements;
+  }, [movements]);
 
   // Keep a cashier preview aligned with cloud updates that arrive while the
   // modal is open. Preserve a valid explicit choice; otherwise only apply a

@@ -1,18 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
+import { getArabicCurrentDate } from '../lib/dateUtils';
 import { Customer, Movement, Berth } from '../types';
 import {
-  BarChart3,
-  FileText,
   Printer,
   Download,
-  Users,
   PieChart,
   Truck,
-  TrendingUp,
-  CheckCircle,
-  AlertCircle,
-  Clock,
 } from 'lucide-react';
 
 interface ReportsPageProps {
@@ -296,7 +290,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 <div className="text-left">
                   <span className="text-xs text-slate-400">تاريخ إصدار التقرير</span>
                   <div className="text-sm font-bold text-slate-800">
-                    {new Date().toLocaleDateString('ar-EG')}
+                    {getArabicCurrentDate()}
                   </div>
                 </div>
               </div>

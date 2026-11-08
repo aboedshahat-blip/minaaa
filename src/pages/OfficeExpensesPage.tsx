@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Download, FileText, Paperclip, Plus, Pencil, X, CalendarDays, Wallet } from 'lucide-react';
 import { OfficeExpense, PaymentReceipt } from '../types';
 import { getOfficeExpenseReceiptUrl } from '../lib/storage';
-import { useConfirmAction } from '../contexts/ConfirmActionContext';
+import { useConfirmAction } from '../contexts/useConfirmAction';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
 
 type ExpenseFormData = Omit<OfficeExpense, 'id' | 'created_at' | 'created_by' | 'created_by_name' | 'receipt_path' | 'receipt_name'>;
@@ -24,7 +24,7 @@ const emptyForm = (): ExpenseFormData => ({
   expense_date: today(), amount: 0, category: '', payee: '', payment_method: 'cash', description: '',
 });
 
-export const OfficeExpensesPage: React.FC<OfficeExpensesPageProps> = ({ expenses, cloudReady, onSave, onDelete }) => {
+export const OfficeExpensesPage: React.FC<OfficeExpensesPageProps> = ({ expenses, cloudReady, onSave, onDelete: _onDelete }) => {
   const confirmAction = useConfirmAction();
   const [form, setForm] = useState<ExpenseFormData>(emptyForm);
   const [editing, setEditing] = useState<OfficeExpense | undefined>();

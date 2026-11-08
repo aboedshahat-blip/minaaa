@@ -1,9 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Customer, Movement } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { normalizeCustomerName } from '../lib/customerName';
 import {
-  Users,
   Plus,
   Truck,
   Phone,
@@ -29,7 +28,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({
   movements,
   onOpenAddModal,
   onEditCustomer,
-  onDeleteCustomer,
+  onDeleteCustomer: _onDeleteCustomer,
   onOpenPaymentModal,
 }) => {
   const { canViewFinancials } = useAuth();

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 import { ShieldCheck, UserCheck, Lock, LogOut, Plus } from 'lucide-react';
 import { vibLogoUrl } from '../lib/branding';
 
