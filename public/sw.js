@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vib-offline-v3';
+const CACHE_NAME = 'vib-offline-v4';
 const APP_URL = new URL('/', self.location.origin).toString();
 
 self.addEventListener('install', (event) => {
@@ -79,12 +79,18 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/assets/') || /\.(?:js|css|mjs|wasm|png|jpe?g|svg|webmanifest|woff2?)$/i.test(url.pathname)) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
+      const cached = (await cache.match(request)) || (await cache.match(url.pathname));
+      // Vite asset names are content-hashed, so a cached bundle never needs a
+      // network round-trip. This also prevents an offline lazy import from
+      // hanging while the browser waits for a failed network request.
+      if (url.pathname.startsWith('/assets/') && cached) return cached;
+      if (!navigator.onLine) return cached || Response.error();
       try {
         const response = await fetch(request);
         if (response.ok) await cache.put(request, response.clone());
         return response;
       } catch {
-        return (await cache.match(request)) || (await cache.match(url.pathname)) || Response.error();
+        return cached || Response.error();
       }
     })());
   }

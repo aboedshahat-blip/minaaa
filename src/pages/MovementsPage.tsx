@@ -30,8 +30,8 @@ import { getMovementService, getServiceCommission, type MovementService } from '
 import { normalizeCustomerName } from '../lib/customerName';
 import { useConfirmAction } from '../contexts/ConfirmActionContext';
 import { ProfessionalSearchField } from '../components/ProfessionalSearchField';
+import { SheetProcessingPage } from './SheetProcessingPage';
 
-const SheetProcessingPage = lazy(() => import('./SheetProcessingPage').then((module) => ({ default: module.SheetProcessingPage })));
 const CashierReportUploadModal = lazy(() => import('../components/CashierReportUploadModal').then((module) => ({ default: module.CashierReportUploadModal })));
 
 interface MovementsPageProps {
@@ -598,7 +598,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
       </nav>
 
       {activeStage === 'stage0_import' && (
-        <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500" role="status" aria-live="polite">جارٍ تحميل أدوات رفع الشيت…</div>}>
         <SheetProcessingPage
           customers={customers}
           berths={berths}
@@ -612,7 +611,6 @@ export const MovementsPage: React.FC<MovementsPageProps> = ({
             return synced;
           }}
         />
-        </Suspense>
       )}
 
       {activeStage === 'daily' && (

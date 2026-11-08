@@ -265,6 +265,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (username: string, password: string) => {
     if (!supabase) return { success: false, message: 'إعداد الاتصال الآمن غير مكتمل. تواصل مع مدير النظام.' };
+    if (!navigator.onLine) return { success: false, message: 'لا يمكن التحقق من كلمة المرور دون إنترنت. أعد الاتصال وحاول مرة أخرى؛ لا يعني هذا أن بيانات الدخول خاطئة.' };
     const cleanUsername = username.trim().normalize('NFKC').toLowerCase();
     let session: { access_token: string; refresh_token: string } | null = null;
     if (cleanUsername.includes('@')) {
