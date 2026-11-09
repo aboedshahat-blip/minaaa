@@ -48,6 +48,6 @@ jobs:
       - name: Apply database migrations
         run: supabase db push --db-url "$SUPABASE_DB_URL"
       - name: Deploy username login endpoint
-        run: supabase functions deploy username-login --project-ref "$PROJECT_REF" --no-verify-jwt
+        run: supabase functions deploy username-login --remote="$PROJECT_REF" --no-verify-jwt --yes
       - name: Deploy user management endpoint
-        run: supabase functions deploy manage-app-user --project-ref "$PROJECT_REF"
+        run: supabase functions deploy manage-app-user --remote="$PROJECT_REF" --yes
