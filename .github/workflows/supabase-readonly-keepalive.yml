@@ -24,11 +24,10 @@ jobs:
           status="$(curl --silent --show-error \
             --output "$response_file" \
             --write-out '%{http_code}' \
-            --get "$SUPABASE_URL/rest/v1/berths" \
-            --data-urlencode 'select=id' \
-            --data-urlencode 'limit=1' \
+            --request POST "$SUPABASE_URL/rest/v1/rpc/keepalive_ping" \
             --header "apikey: $SUPABASE_ANON_KEY" \
-            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --data '{}' \
             --max-time 30 || true)"
 
           if [[ "$status" =~ ^2[0-9][0-9]$ ]]; then
